@@ -1,3 +1,4 @@
+use crate::storage::{FileStorage, Storage};
 use anyhow::{Context, Result};
 use rand_chacha::ChaCha20Rng;
 use schnorr_fun::binonce::NonceKeyPair;
@@ -7,7 +8,6 @@ use secp256kfun::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::collections::BTreeMap;
-use crate::storage::{Storage, FileStorage};
 
 // Import the parser from keygen module
 use crate::keygen::parse_space_separated_json;
@@ -69,7 +69,8 @@ pub fn generate_nonce_core(session: &str, storage: &dyn Storage) -> Result<Strin
     out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n");
 
     // Load paired secret share
-    let paired_share_bytes = storage.read("paired_secret_share.bin")
+    let paired_share_bytes = storage
+        .read("paired_secret_share.bin")
         .context("Failed to load secret share. Did you run keygen-finalize?")?;
     let paired_share: PairedSecretShare<EvenY> = bincode::deserialize(&paired_share_bytes)?;
 
@@ -152,13 +153,19 @@ pub fn generate_nonce(session: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn create_signature_share_core(session: &str, message: &str, data: &str, storage: &dyn Storage) -> Result<String> {
+pub fn create_signature_share_core(
+    session: &str,
+    message: &str,
+    data: &str,
+    storage: &dyn Storage,
+) -> Result<String> {
     let mut out = String::new();
 
     out.push_str("🔐 FROST Signing - Create Signature Share\n\n");
 
     // Load nonce
-    let nonce_bytes = storage.read(&format!("nonce_{}.bin", session))
+    let nonce_bytes = storage
+        .read(&format!("nonce_{}.bin", session))
         .context("Failed to load nonce. Did you run sign-nonce?")?;
     let nonce: NonceKeyPair = bincode::deserialize(&nonce_bytes)?;
 
@@ -226,7 +233,7 @@ pub fn create_signature_share_core(session: &str, message: &str, data: &str, sto
     out.push_str("   Computing challenge = H(R || PubKey || message)\n\n");
 
     // Create message
-    let msg = Message::new("yushan", message.as_bytes());
+    let msg = Message::new("frostsnap-yushan", message.as_bytes());
 
     // Create coordinator session
     let coord_session = frost.coordinator_sign_session(&shared_key, nonces_map.clone(), msg);
@@ -252,28 +259,52 @@ pub fn create_signature_share_core(session: &str, message: &str, data: &str, sto
 
     out.push_str("⚙️  Computing Lagrange coefficient...\n");
     out.push_str("🧠 Why Lagrange coefficients?\n");
-    out.push_str(&format!("   During keygen, you received a share for index {}\n", party_index));
-    out.push_str(&format!("   But only {} parties are signing in this session!\n", num_signers));
+    out.push_str(&format!(
+        "   During keygen, you received a share for index {}\n",
+        party_index
+    ));
+    out.push_str(&format!(
+        "   But only {} parties are signing in this session!\n",
+        num_signers
+    ));
     out.push_str("   \n");
     out.push_str("   Lagrange interpolation adjusts your share to work with\n");
     out.push_str("   ANY threshold subset of signers (not just all parties).\n");
     out.push_str("   \n");
-    out.push_str(&format!("   λ{} = the coefficient that makes YOUR share compatible\n", party_index));
-    out.push_str(&format!("   with this specific group of {} signers.\n\n", num_signers));
+    out.push_str(&format!(
+        "   λ{} = the coefficient that makes YOUR share compatible\n",
+        party_index
+    ));
+    out.push_str(&format!(
+        "   with this specific group of {} signers.\n\n",
+        num_signers
+    ));
     out.push_str("❓ Think about it:\n");
-    out.push_str(&format!("   You've selected a specific group of {} signers for this signature.\n", num_signers));
+    out.push_str(&format!(
+        "   You've selected a specific group of {} signers for this signature.\n",
+        num_signers
+    ));
     out.push_str("   What downstream implication does this have?\n");
     out.push_str("   (Hint: How does this differ from Bitcoin script multisig,\n");
     out.push_str("   where ANY threshold combination can spend?)\n\n");
 
     out.push_str("⚙️  Creating signature share...\n");
     out.push_str("🧠 Schnorr signature math:\n");
-    out.push_str(&format!("   s{} = k{} + λ{} × c × secret_share{}\n", party_index, party_index, party_index, party_index));
+    out.push_str(&format!(
+        "   s{} = k{} + λ{} × c × secret_share{}\n",
+        party_index, party_index, party_index, party_index
+    ));
     out.push_str("   where:\n");
     out.push_str(&format!("   • k{} = your secret nonce\n", party_index));
-    out.push_str(&format!("   • λ{} = your Lagrange coefficient\n", party_index));
+    out.push_str(&format!(
+        "   • λ{} = your Lagrange coefficient\n",
+        party_index
+    ));
     out.push_str("   • c = challenge = Hash(R || PubKey || message)\n");
-    out.push_str(&format!("   • secret_share{} = your piece of the private key\n\n", party_index));
+    out.push_str(&format!(
+        "   • secret_share{} = your piece of the private key\n\n",
+        party_index
+    ));
 
     // Sign
     let sig_share = sign_session.sign(&paired_share, nonce);
@@ -288,7 +319,10 @@ pub fn create_signature_share_core(session: &str, message: &str, data: &str, sto
 
     // Save nonces map for coordinator session recreation
     let nonces_json = serde_json::to_string(&input.nonces)?;
-    storage.write(&format!("session_nonces_{}.json", session), nonces_json.as_bytes())?;
+    storage.write(
+        &format!("session_nonces_{}.json", session),
+        nonces_json.as_bytes(),
+    )?;
 
     out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
     out.push_str("✓ Your signature share (copy this JSON):\n\n");
@@ -359,7 +393,10 @@ pub fn combine_signatures_core(data: &str, storage: &dyn Storage) -> Result<Stri
         final_nonce: final_nonce_hex,
     };
 
-    out.push_str(&format!("✓ Received {} signature shares\n", input.shares.len()));
+    out.push_str(&format!(
+        "✓ Received {} signature shares\n",
+        input.shares.len()
+    ));
     out.push_str(&format!("  Message: \"{}\"\n\n", message));
 
     out.push_str("⚙️  Using schnorr_fun's FROST coordinator API\n");
@@ -393,7 +430,7 @@ pub fn combine_signatures_core(data: &str, storage: &dyn Storage) -> Result<Stri
     let frost = frost::new_with_synthetic_nonces::<Sha256, rand::rngs::ThreadRng>();
 
     // Create message
-    let msg = Message::new("yushan", message.as_bytes());
+    let msg = Message::new("frostsnap-yushan", message.as_bytes());
 
     // Recreate coordinator session
     let coord_session = frost.coordinator_sign_session(&shared_key, nonces_map, msg);
@@ -416,7 +453,10 @@ pub fn combine_signatures_core(data: &str, storage: &dyn Storage) -> Result<Stri
             .expect("index should be nonzero")
             .public();
         sig_shares.insert(share_index, sig_share);
-        out.push_str(&format!("   Verifying Party {}'s share...\n", share_data.index));
+        out.push_str(&format!(
+            "   Verifying Party {}'s share...\n",
+            share_data.index
+        ));
     }
 
     // Use coordinator API to verify and combine

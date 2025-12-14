@@ -1,5 +1,4 @@
 use wasm_bindgen::prelude::*;
-use crate::{keygen, signing};
 
 /// Initialize panic hook for better error messages in browser
 #[wasm_bindgen(start)]
