@@ -17,13 +17,7 @@
           />
         </a>
       </div>
-      <div class="header-links">
-        <a href="https://github.com/nickfarrow/yushan" target="_blank"
-          >Get the CLI tool</a
-        >
-        <a href="/bulletin-board.html">Bulletin Board</a>
-      </div>
-      <h1><a href="/">Frostsnap - BTC++ Workshop</a></h1>
+      <h1><a href="/">Frostsnap - BTC++ Workshop Web Tools</a></h1>
       <div class="subtitle">
         No installation required - runs entirely in your browser!
       </div>
@@ -176,19 +170,22 @@
 
           // Educational output section
           html += '<div class="educational-output">';
-          html += '<pre>' + response.output + '</pre>';
-          html += '</div>';
+          html += "<pre>" + response.output + "</pre>";
+          html += "</div>";
 
           // Result section with copy button
           if (response.result && response.result.trim()) {
             html += '<div class="result-section">';
             html += '<div class="result-header">📋 Copy this:</div>';
-            html += '<div class="result-box">' + response.result + '</div>';
-            html += '<button class="copy-btn" onclick="copyResult(\'' + elementId + '\')">Copy to Clipboard</button>';
-            html += '</div>';
+            html += '<div class="result-box">' + response.result + "</div>";
+            html +=
+              '<button class="copy-btn" onclick="copyResult(\'' +
+              elementId +
+              "')\">Copy to Clipboard</button>";
+            html += "</div>";
           }
 
-          html += '</div>';
+          html += "</div>";
           elem.innerHTML = html;
         } catch (e) {
           // Fallback for non-JSON responses (errors, etc.)
@@ -198,14 +195,14 @@
         elem.classList.remove("hidden");
       }
 
-      window.copyResult = function(elementId) {
+      window.copyResult = function (elementId) {
         const elem = document.getElementById(elementId);
-        const resultBox = elem.querySelector('.result-box');
+        const resultBox = elem.querySelector(".result-box");
         if (resultBox) {
           navigator.clipboard.writeText(resultBox.textContent).then(() => {
-            const btn = elem.querySelector('.copy-btn');
+            const btn = elem.querySelector(".copy-btn");
             const originalText = btn.textContent;
-            btn.textContent = '✅ Copied!';
+            btn.textContent = "✅ Copied!";
             setTimeout(() => {
               btn.textContent = originalText;
             }, 2000);

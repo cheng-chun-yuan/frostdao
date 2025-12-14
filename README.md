@@ -14,8 +14,8 @@ cargo install --path .
 yushan keygen-round1 --threshold 2 --n-parties 3 --my-index 1
 # Copy output, paste into bulletin board or share via terminal
 # Then copy space-separated JSON objects from all parties:
-yushan keygen-round2 --my-index 1 --data '{"party_index":1,...} {"party_index":2,...} {"party_index":3,...}'
-yushan keygen-finalize --my-index 1 --data '<space-separated shares JSON>'
+yushan keygen-round2 --data '{"party_index":1,...} {"party_index":2,...} {"party_index":3,...}'
+yushan keygen-finalize --data '<space-separated shares JSON>'
 
 # Signing (2 parties collaborate)
 yushan generate-nonce --session "msg1"

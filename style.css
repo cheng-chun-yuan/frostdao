@@ -89,7 +89,7 @@ h2 {
 }
 
 .header-links {
-  text-align: center;
+  /* text-align: center; */
   margin: 1em 0;
   display: flex;
   flex-direction: column;
@@ -394,6 +394,11 @@ label {
 .educational-output pre {
   margin: 0;
   font-family: "Monaco", monospace;
+}
+
+code {
+  font-size: 1.5em;
+  color: var(--secondary);
 }
 
 .result-section {

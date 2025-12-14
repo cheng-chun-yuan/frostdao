@@ -96,7 +96,7 @@ Each phase outputs compact JSON that can be copy-pasted:
 **CLI accepts space-separated input:** Multiple JSON objects separated by spaces, e.g.:
 
 ```
-yushan keygen-round2 --my-index 1 --data '{"party_index":1,...} {"party_index":2,...} {"party_index":3,...}'
+yushan keygen-round2 --data '{"party_index":1,...} {"party_index":2,...} {"party_index":3,...}'
 ```
 
 This makes the bulletin board **optional** - you can coordinate via terminal copy-paste alone!
@@ -163,7 +163,7 @@ Copy JSON → paste into bulletin board → wait for all 3
 Bulletin board shows "Copy all commitments" button → click → get JSON
 
 ```bash
-yushan keygen-round2 --my-index <N> --data '<JSON>'
+yushan keygen-round2 --data '<JSON>'
 ```
 
 Paste shares into grid on bulletin board
@@ -172,7 +172,7 @@ Paste shares into grid on bulletin board
 Bulletin board aggregates shares for each party → "Copy shares for Party N"
 
 ```bash
-yushan keygen-finalize --my-index <N> --data '<JSON>'
+yushan keygen-finalize --data '<JSON>'
 ```
 
 Everyone sees their secret share + shared public key (should match!)

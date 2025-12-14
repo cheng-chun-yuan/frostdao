@@ -9,7 +9,7 @@
   <body>
     <div class="container">
       <div class="logo-box">
-        <a href="/">
+        <a href="https://frostsnap.com" target="_blank">
           <img
             src="https://frostsnap.com/assets/frostsnap-logo.svg"
             alt="Frostsnap Logo"
@@ -37,14 +37,60 @@
                   >Workshop CLI Tool</a
                 >
               </b>
+              <code>
+                <pre>
+git clone https://github.com/nickfarrow/yushan
+cd yushan
+cargo install --path .
+</pre
+                >
+              </code>
+              or,
               <a href="/cli.html"
-                >(or im allergic to crustaceans 🦀 (use browser tools))</a
+                >im allergic to crab shells (use browser tools)</a
               >
             </div>
           </li>
-          <li>Check out the tools available</li>
+          <li>
+            Check out the commands available by running
+            <code>yushan --help</code>
+          </li>
+          <li>
+            Find one or more people to partner up with (N) and agree upon a
+            threshold (T).
+          </li>
+          <li>
+            Choose a unique room ID (enter below) which will be used to share
+            messages.
+          </li>
+          <li>
+            Run the first command (keygen-round1) and share your contribution
+            with your group.
+          </li>
+          <li>
+            After receiving input from all parties, use this data as input for
+            the next round, e.g.
+            <code>
+              <pre>
+yushan keygen-round2 --data '{PARTY1_JSON} {PARTY2_JSON} ...'
+</pre
+              >
+            </code>
+          </li>
+          <li>
+            Repeat the same with the following steps. Look at console output,
+            ask questions.
+          </li>
+          <li>Finish creating your FROST key, sign things!</li>
+          <li style="color: var(--bg-secondary)">
+            8. cry to nick if things are broken
+          </li>
         </ol>
+        <b> Challenge: can you sign a nostr event? </b>
       </div>
+
+      <h1>Extremely Public Bulletin Board</h1>
+      <br />
 
       <!-- Config Section -->
       <div class="config-section">
@@ -103,7 +149,7 @@
         protocol to work!
       </div>
 
-      <h1>Distributed Key Generation</h1>
+      <h1>Part I: Distributed Key Generation</h1>
 
       <!-- Keygen Round 1 -->
       <div class="phase-section">
@@ -162,10 +208,7 @@
         <div class="post-box">
           <div class="post-label">
             Run:
-            <code
-              >yushan keygen-round2 --my-index &lt;your-index&gt; --data
-              '&lt;all-commitments&gt;'</code
-            >
+            <code>yushan keygen-round2 --data '&lt;all-commitments&gt;'</code>
           </div>
           <textarea
             class="post-textarea"
@@ -197,7 +240,7 @@
         </div>
       </div>
 
-      <h1>Signing</h1>
+      <h1>Part II: Signing</h1>
 
       <!-- Signing Nonces -->
       <div class="phase-section">
@@ -343,6 +386,14 @@
           src="https://frostsnap.com/assets/small-stay-frosty.svg"
           alt="Stay Frosty"
         />
+      </div>
+
+      <div class="header-links" style="text-align: center">
+        <p>
+          PS: limited time 15% off
+          <a href="https://frostsnap.com">FROST hardware wallets</a> with promo
+          code TAIWAN ❄️
+        </p>
       </div>
     </div>
 
