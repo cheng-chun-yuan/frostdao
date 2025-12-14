@@ -1,0 +1,15 @@
+{
+  "name": "yushan",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "yushan_bg.wasm",
+    "yushan.js",
+    "yushan.d.ts"
+  ],
+  "main": "yushan.js",
+  "types": "yushan.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
