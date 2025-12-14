@@ -7,7 +7,7 @@ use secp256kfun::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::collections::BTreeMap;
-use std::fs;
+use crate::storage::{Storage, FileStorage};
 
 // Import the parser from keygen module
 use crate::keygen::parse_space_separated_json;
@@ -58,16 +58,18 @@ pub struct SignatureShareData {
     pub share: String,
 }
 
-pub fn generate_nonce(session: &str) -> Result<()> {
-    println!("FROST Signing - Nonce Generation\n");
-    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("Session ID: {}", session);
-    println!("⚠  NEVER reuse a nonce as it will leak your secret share!");
-    println!("    Each signature needs fresh nonces!");
-    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+pub fn generate_nonce_core(session: &str, storage: &dyn Storage) -> Result<String> {
+    let mut out = String::new();
+
+    out.push_str("FROST Signing - Nonce Generation\n\n");
+    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str(&format!("Session ID: {}\n", session));
+    out.push_str("⚠  NEVER reuse a nonce as it will leak your secret share!\n");
+    out.push_str("    Each signature needs fresh nonces!\n");
+    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n");
 
     // Load paired secret share
-    let paired_share_bytes = fs::read(format!("{}/paired_secret_share.bin", STATE_DIR))
+    let paired_share_bytes = storage.read("paired_secret_share.bin")
         .context("Failed to load secret share. Did you run keygen-finalize?")?;
     let paired_share: PairedSecretShare<EvenY> = bincode::deserialize(&paired_share_bytes)?;
 
@@ -79,8 +81,8 @@ pub fn generate_nonce(session: &str) -> Result<()> {
         u32_index
     };
 
-    println!("⚙️  Using schnorr_fun's FROST nonce generation");
-    println!("   Calling: frost.seed_nonce_rng() and frost.gen_nonce()\n");
+    out.push_str("⚙️  Using schnorr_fun's FROST nonce generation\n");
+    out.push_str("   Calling: frost.seed_nonce_rng() and frost.gen_nonce()\n\n");
 
     // Create FROST instance with deterministic nonces
     let frost = frost::new_with_synthetic_nonces::<Sha256, rand::rngs::ThreadRng>();
@@ -91,34 +93,34 @@ pub fn generate_nonce(session: &str) -> Result<()> {
     // Generate nonce
     let nonce = frost.gen_nonce(&mut nonce_rng);
 
-    println!("❄️  Generated NonceKeyPair:");
-    println!("   - Secret nonces: (k₁, k₂) - kept private");
-    println!("   - Public nonces: (R₁, R₂) where R₁ = k₁*G, R₂ = k₂*G\n");
-    println!("🧠 Why do we need nonces?");
-    println!("   Schnorr signatures require randomness to be secure!");
-    println!("   If you ever reuse a nonce with the same key, an attacker");
-    println!("   can solve for your secret share and steal your key.");
-    println!("   ");
-    println!("   FROST uses TWO nonces (k₁, k₂) for extra security:");
-    println!("   • k₁ is the primary nonce");
-    println!("   • k₂ protects against rogue-key attacks in multi-party signing\n");
-    println!("❓ Think about it:");
-    println!("   Notice: We can generate nonces BEFORE knowing the message!");
-    println!("   Current flow: share nonces → then sign (2 rounds)");
-    println!("   How could we optimize FROST to sign in just 1 round?");
-    println!("   (Hint: What if we pre-shared nonces?)\n");
+    out.push_str("❄️  Generated NonceKeyPair:\n");
+    out.push_str("   - Secret nonces: (k₁, k₂) - kept private\n");
+    out.push_str("   - Public nonces: (R₁, R₂) where R₁ = k₁*G, R₂ = k₂*G\n\n");
+    out.push_str("🧠 Why do we need nonces?\n");
+    out.push_str("   Schnorr signatures require randomness to be secure!\n");
+    out.push_str("   If you ever reuse a nonce with the same key, an attacker\n");
+    out.push_str("   can solve for your secret share and steal your key.\n");
+    out.push_str("   \n");
+    out.push_str("   FROST uses TWO nonces (k₁, k₂) for extra security:\n");
+    out.push_str("   • k₁ is the primary nonce\n");
+    out.push_str("   • k₂ protects against rogue-key attacks in multi-party signing\n\n");
+    out.push_str("❓ Think about it:\n");
+    out.push_str("   Notice: We can generate nonces BEFORE knowing the message!\n");
+    out.push_str("   Current flow: share nonces → then sign (2 rounds)\n");
+    out.push_str("   How could we optimize FROST to sign in just 1 round?\n");
+    out.push_str("   (Hint: What if we pre-shared nonces?)\n\n");
 
     // Serialize nonce keypair for later use
     let nonce_bytes = bincode::serialize(&nonce)?;
-    fs::write(format!("{}/nonce_{}.bin", STATE_DIR, session), &nonce_bytes)?;
+    storage.write(&format!("nonce_{}.bin", session), &nonce_bytes)?;
 
     // Serialize public nonce for sharing
     let public_nonce = nonce.public();
     let public_nonce_bytes = bincode::serialize(&public_nonce)?;
     let public_nonce_hex = hex::encode(&public_nonce_bytes);
 
-    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("✉️  Your public nonce (copy this JSON):\n");
+    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str("✉️  Your public nonce (copy this JSON):\n\n");
 
     let output = NonceOutput {
         party_index: party_index,
@@ -127,32 +129,41 @@ pub fn generate_nonce(session: &str) -> Result<()> {
         event_type: "signing_nonce".to_string(),
     };
 
-    println!("{}\n", serde_json::to_string_pretty(&output)?);
-    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("\n➜ Paste this JSON into the webpage");
-    println!("➜ Wait for threshold number of signers to post nonces");
-    println!(
-        "➜ Copy the \"nonces for session {}\" JSON from webpage",
+    out.push_str(&format!("{}\n\n", serde_json::to_string_pretty(&output)?));
+    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str("\n➜ Paste this JSON into the webpage\n");
+    out.push_str("➜ Wait for threshold number of signers to post nonces\n");
+    out.push_str(&format!(
+        "➜ Copy the \"nonces for session {}\" JSON from webpage\n",
         session
-    );
-    println!(
-        "➜ Run: cargo run -- sign --session {} --message \"<msg>\" --data '<JSON>'",
+    ));
+    out.push_str(&format!(
+        "➜ Run: cargo run -- sign --session {} --message \"<msg>\" --data '<JSON>'\n",
         session
-    );
+    ));
 
+    Ok(out)
+}
+
+pub fn generate_nonce(session: &str) -> Result<()> {
+    let storage = FileStorage::new(STATE_DIR)?;
+    let output = generate_nonce_core(session, &storage)?;
+    print!("{}", output);
     Ok(())
 }
 
-pub fn create_signature_share(session: &str, message: &str, data: &str) -> Result<()> {
-    println!("🔐 FROST Signing - Create Signature Share\n");
+pub fn create_signature_share_core(session: &str, message: &str, data: &str, storage: &dyn Storage) -> Result<String> {
+    let mut out = String::new();
+
+    out.push_str("🔐 FROST Signing - Create Signature Share\n\n");
 
     // Load nonce
-    let nonce_bytes = fs::read(format!("{}/nonce_{}.bin", STATE_DIR, session))
+    let nonce_bytes = storage.read(&format!("nonce_{}.bin", session))
         .context("Failed to load nonce. Did you run sign-nonce?")?;
     let nonce: NonceKeyPair = bincode::deserialize(&nonce_bytes)?;
 
     // Load paired secret share
-    let paired_share_bytes = fs::read(format!("{}/paired_secret_share.bin", STATE_DIR))?;
+    let paired_share_bytes = storage.read("paired_secret_share.bin")?;
     let paired_share: PairedSecretShare<EvenY> = bincode::deserialize(&paired_share_bytes)?;
 
     let party_index = {
@@ -164,7 +175,7 @@ pub fn create_signature_share(session: &str, message: &str, data: &str) -> Resul
     };
 
     // Load shared key
-    let shared_key_bytes = fs::read(format!("{}/shared_key.bin", STATE_DIR))?;
+    let shared_key_bytes = storage.read("shared_key.bin")?;
     let shared_key: SharedKey<EvenY> = bincode::deserialize(&shared_key_bytes)?;
 
     // Parse input - space-separated NonceOutput objects
@@ -187,11 +198,11 @@ pub fn create_signature_share(session: &str, message: &str, data: &str) -> Resul
         public_key: public_key_hex,
     };
 
-    println!(" Signing with {} parties", num_signers);
-    println!("  Message: \"{}\"\n", message);
+    out.push_str(&format!(" Signing with {} parties\n", num_signers));
+    out.push_str(&format!("  Message: \"{}\"\n\n", message));
 
-    println!("📐 Using schnorr_fun's FROST signing");
-    println!("   Calling: frost.party_sign_session()\n");
+    out.push_str("📐 Using schnorr_fun's FROST signing\n");
+    out.push_str("   Calling: frost.party_sign_session()\n\n");
 
     // Reconstruct nonces map
     let mut nonces_map = BTreeMap::new();
@@ -209,60 +220,60 @@ pub fn create_signature_share(session: &str, message: &str, data: &str) -> Resul
     // Create FROST instance
     let frost = frost::new_with_deterministic_nonces::<Sha256>();
 
-    println!("🔢 Creating coordinator sign session...");
-    println!("   Aggregating all nonces");
-    println!("   Computing binding coefficient");
-    println!("   Computing challenge = H(R || PubKey || message)\n");
+    out.push_str("🔢 Creating coordinator sign session...\n");
+    out.push_str("   Aggregating all nonces\n");
+    out.push_str("   Computing binding coefficient\n");
+    out.push_str("   Computing challenge = H(R || PubKey || message)\n\n");
 
     // Create message
-    let msg = Message::new("frosty-taipei", message.as_bytes());
+    let msg = Message::new("yushan", message.as_bytes());
 
     // Create coordinator session
     let coord_session = frost.coordinator_sign_session(&shared_key, nonces_map.clone(), msg);
 
-    println!("✓ Coordinator session created:");
-    println!("   - Aggregated nonce: R = R1 + R2 + ...");
-    println!("   - Challenge: c = H(R || PK || msg)");
-    println!(
-        "   - Parties: {:?}\n",
+    out.push_str("✓ Coordinator session created:\n");
+    out.push_str("   - Aggregated nonce: R = R1 + R2 + ...\n");
+    out.push_str("   - Challenge: c = H(R || PK || msg)\n");
+    out.push_str(&format!(
+        "   - Parties: {:?}\n\n",
         coord_session
             .parties()
             .iter()
             .map(|s| s.to_bytes()[0] as u32)
             .collect::<Vec<_>>()
-    );
+    ));
 
-    println!("📝 Creating party sign session...");
+    out.push_str("📝 Creating party sign session...\n");
     let agg_binonce = coord_session.agg_binonce();
     let parties = coord_session.parties();
 
     let sign_session =
         frost.party_sign_session(shared_key.public_key(), parties.clone(), agg_binonce, msg);
 
-    println!("⚙️  Computing Lagrange coefficient...");
-    println!("🧠 Why Lagrange coefficients?");
-    println!("   During keygen, you received a share for index {}", party_index);
-    println!("   But only {} parties are signing in this session!", num_signers);
-    println!("   ");
-    println!("   Lagrange interpolation adjusts your share to work with");
-    println!("   ANY threshold subset of signers (not just all parties).");
-    println!("   ");
-    println!("   λ{} = the coefficient that makes YOUR share compatible", party_index);
-    println!("   with this specific group of {} signers.\n", num_signers);
-    println!("❓ Think about it:");
-    println!("   You've selected a specific group of {} signers for this signature.", num_signers);
-    println!("   What downstream implication does this have?");
-    println!("   (Hint: How does this differ from Bitcoin script multisig,");
-    println!("   where ANY threshold combination can spend?)\n");
+    out.push_str("⚙️  Computing Lagrange coefficient...\n");
+    out.push_str("🧠 Why Lagrange coefficients?\n");
+    out.push_str(&format!("   During keygen, you received a share for index {}\n", party_index));
+    out.push_str(&format!("   But only {} parties are signing in this session!\n", num_signers));
+    out.push_str("   \n");
+    out.push_str("   Lagrange interpolation adjusts your share to work with\n");
+    out.push_str("   ANY threshold subset of signers (not just all parties).\n");
+    out.push_str("   \n");
+    out.push_str(&format!("   λ{} = the coefficient that makes YOUR share compatible\n", party_index));
+    out.push_str(&format!("   with this specific group of {} signers.\n\n", num_signers));
+    out.push_str("❓ Think about it:\n");
+    out.push_str(&format!("   You've selected a specific group of {} signers for this signature.\n", num_signers));
+    out.push_str("   What downstream implication does this have?\n");
+    out.push_str("   (Hint: How does this differ from Bitcoin script multisig,\n");
+    out.push_str("   where ANY threshold combination can spend?)\n\n");
 
-    println!("⚙️  Creating signature share...");
-    println!("🧠 Schnorr signature math:");
-    println!("   s{} = k{} + λ{} × c × secret_share{}", party_index, party_index, party_index, party_index);
-    println!("   where:");
-    println!("   • k{} = your secret nonce", party_index);
-    println!("   • λ{} = your Lagrange coefficient", party_index);
-    println!("   • c = challenge = Hash(R || PubKey || message)");
-    println!("   • secret_share{} = your piece of the private key\n", party_index);
+    out.push_str("⚙️  Creating signature share...\n");
+    out.push_str("🧠 Schnorr signature math:\n");
+    out.push_str(&format!("   s{} = k{} + λ{} × c × secret_share{}\n", party_index, party_index, party_index, party_index));
+    out.push_str("   where:\n");
+    out.push_str(&format!("   • k{} = your secret nonce\n", party_index));
+    out.push_str(&format!("   • λ{} = your Lagrange coefficient\n", party_index));
+    out.push_str("   • c = challenge = Hash(R || PubKey || message)\n");
+    out.push_str(&format!("   • secret_share{} = your piece of the private key\n\n", party_index));
 
     // Sign
     let sig_share = sign_session.sign(&paired_share, nonce);
@@ -273,20 +284,14 @@ pub fn create_signature_share(session: &str, message: &str, data: &str) -> Resul
     // Save the final nonce and nonces map for combine step
     let final_nonce = coord_session.final_nonce();
     let final_nonce_bytes = bincode::serialize(&final_nonce)?;
-    fs::write(
-        format!("{}/final_nonce_{}.bin", STATE_DIR, session),
-        &final_nonce_bytes,
-    )?;
+    storage.write(&format!("final_nonce_{}.bin", session), &final_nonce_bytes)?;
 
     // Save nonces map for coordinator session recreation
     let nonces_json = serde_json::to_string(&input.nonces)?;
-    fs::write(
-        format!("{}/session_nonces_{}.json", STATE_DIR, session),
-        nonces_json,
-    )?;
+    storage.write(&format!("session_nonces_{}.json", session), nonces_json.as_bytes())?;
 
-    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("✓ Your signature share (copy this JSON):\n");
+    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str("✓ Your signature share (copy this JSON):\n\n");
 
     let output = SignatureShareOutput {
         party_index,
@@ -296,20 +301,29 @@ pub fn create_signature_share(session: &str, message: &str, data: &str) -> Resul
         event_type: "signing_share".to_string(),
     };
 
-    println!("{}\n", serde_json::to_string_pretty(&output)?);
-    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("\n➜ Paste this JSON into the webpage");
-    println!("➜ Once all signers post shares, anyone can combine them");
-    println!(
-        "➜ Run: cargo run -- combine --message \"{}\" --data '<shares JSON>'",
+    out.push_str(&format!("{}\n\n", serde_json::to_string_pretty(&output)?));
+    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str("\n➜ Paste this JSON into the webpage\n");
+    out.push_str("➜ Once all signers post shares, anyone can combine them\n");
+    out.push_str(&format!(
+        "➜ Run: cargo run -- combine --message \"{}\" --data '<shares JSON>'\n",
         message
-    );
+    ));
 
+    Ok(out)
+}
+
+pub fn create_signature_share(session: &str, message: &str, data: &str) -> Result<()> {
+    let storage = FileStorage::new(STATE_DIR)?;
+    let output = create_signature_share_core(session, message, data, &storage)?;
+    print!("{}", output);
     Ok(())
 }
 
-pub fn combine_signatures(data: &str) -> Result<()> {
-    println!("🔐 FROST Signing - Combine Signature Shares\n");
+pub fn combine_signatures_core(data: &str, storage: &dyn Storage) -> Result<String> {
+    let mut out = String::new();
+
+    out.push_str("🔐 FROST Signing - Combine Signature Shares\n\n");
 
     // Parse input - space-separated SignatureShareOutput objects
     let sig_outputs: Vec<SignatureShareOutput> = parse_space_separated_json(data)?;
@@ -332,10 +346,10 @@ pub fn combine_signatures(data: &str) -> Result<()> {
         .collect();
 
     // Get shared key to compute public key and final nonce
-    let shared_key_bytes = fs::read(format!("{}/shared_key.bin", STATE_DIR))?;
+    let shared_key_bytes = storage.read("shared_key.bin")?;
     let shared_key: SharedKey<EvenY> = bincode::deserialize(&shared_key_bytes)?;
 
-    let final_nonce_bytes = fs::read(format!("{}/final_nonce_{}.bin", STATE_DIR, session))?;
+    let final_nonce_bytes = storage.read(&format!("final_nonce_{}.bin", session))?;
     let final_nonce_hex = hex::encode(&final_nonce_bytes);
     let public_key_hex = hex::encode(bincode::serialize(&shared_key)?);
 
@@ -345,22 +359,22 @@ pub fn combine_signatures(data: &str) -> Result<()> {
         final_nonce: final_nonce_hex,
     };
 
-    println!("✓ Received {} signature shares", input.shares.len());
-    println!("  Message: \"{}\"\n", message);
+    out.push_str(&format!("✓ Received {} signature shares\n", input.shares.len()));
+    out.push_str(&format!("  Message: \"{}\"\n\n", message));
 
-    println!("⚙️  Using schnorr_fun's FROST coordinator API");
-    println!("   Calling: coord_session.verify_and_combine_signature_shares()\n");
+    out.push_str("⚙️  Using schnorr_fun's FROST coordinator API\n");
+    out.push_str("   Calling: coord_session.verify_and_combine_signature_shares()\n\n");
 
     // Load saved nonces for this session
-    let nonces_json = fs::read_to_string(format!("{}/session_nonces_{}.json", STATE_DIR, session))
+    let nonces_json = String::from_utf8(storage.read(&format!("session_nonces_{}.json", session))?)
         .context("Failed to load session nonces. Did a signer run the sign command?")?;
     let nonces_data: Vec<NonceData> = serde_json::from_str(&nonces_json)?;
 
-    println!("⚙️  Recreating coordinator session...");
-    println!("🧠 Why? The coordinator needs the same context that was used during signing:");
-    println!("   - All participant nonces");
-    println!("   - The message being signed");
-    println!("   - The shared public key\n");
+    out.push_str("⚙️  Recreating coordinator session...\n");
+    out.push_str("🧠 Why? The coordinator needs the same context that was used during signing:\n");
+    out.push_str("   - All participant nonces\n");
+    out.push_str("   - The message being signed\n");
+    out.push_str("   - The shared public key\n\n");
 
     // Reconstruct nonces map
     let mut nonces_map = BTreeMap::new();
@@ -379,17 +393,17 @@ pub fn combine_signatures(data: &str) -> Result<()> {
     let frost = frost::new_with_synthetic_nonces::<Sha256, rand::rngs::ThreadRng>();
 
     // Create message
-    let msg = Message::new("frosty-taipei", message.as_bytes());
+    let msg = Message::new("yushan", message.as_bytes());
 
     // Recreate coordinator session
     let coord_session = frost.coordinator_sign_session(&shared_key, nonces_map, msg);
 
-    println!("⚙️  Verifying and combining signature shares...");
-    println!("🧠 What the coordinator does:");
-    println!("   1. Verifies each signature share is valid");
-    println!("   2. Checks: sig_share = k + λ × c × secret_share");
-    println!("   3. Combines all shares: final_s = Σ sig_shares");
-    println!("   4. Creates final signature (R, s)\n");
+    out.push_str("⚙️  Verifying and combining signature shares...\n");
+    out.push_str("🧠 What the coordinator does:\n");
+    out.push_str("   1. Verifies each signature share is valid\n");
+    out.push_str("   2. Checks: sig_share = k + λ × c × secret_share\n");
+    out.push_str("   3. Combines all shares: final_s = Σ sig_shares\n");
+    out.push_str("   4. Creates final signature (R, s)\n\n");
 
     // Parse signature shares into the format the coordinator expects
     let mut sig_shares = BTreeMap::new();
@@ -402,7 +416,7 @@ pub fn combine_signatures(data: &str) -> Result<()> {
             .expect("index should be nonzero")
             .public();
         sig_shares.insert(share_index, sig_share);
-        println!("   Verifying Party {}'s share...", share_data.index);
+        out.push_str(&format!("   Verifying Party {}'s share...\n", share_data.index));
     }
 
     // Use coordinator API to verify and combine
@@ -413,9 +427,9 @@ pub fn combine_signatures(data: &str) -> Result<()> {
     let valid = true; // If we got here, verification passed
 
     if valid {
-        println!("  ✓ Signature is VALID!\n");
+        out.push_str("  ✓ Signature is VALID!\n\n");
     } else {
-        println!("  ✗ Signature verification FAILED!\n");
+        out.push_str("  ✗ Signature verification FAILED!\n\n");
         anyhow::bail!("Signature verification failed");
     }
 
@@ -425,26 +439,33 @@ pub fn combine_signatures(data: &str) -> Result<()> {
     let pubkey_bytes = bincode::serialize(&shared_key.public_key())?;
     let pubkey_hex = hex::encode(&pubkey_bytes);
 
-    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("🎉 FROST SIGNATURE VALID!\n");
-    println!("Signature:");
-    println!("  {}\n", sig_hex);
-    println!("Public key:");
-    println!("  {}\n", pubkey_hex);
-    println!("Message:");
-    println!("  \"{}\"\n", message);
-    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("\n✨ You just created a threshold signature using schnorr_fun's FROST!");
-    println!("   - Used real cryptographic API from production library");
-    println!("   - Signature is valid under the shared public key");
-    println!("   - No single party knew the full secret key!\n");
-    println!("❓ Challenge:");
-    println!("   This signature can be used anywhere Schnorr signatures are valid!");
-    println!("   Try signing:");
-    println!("   • A Nostr event (kind 1 message)");
-    println!("   • A Bitcoin transaction (taproot spend)");
-    println!("   • Git commits");
-    println!("   The same FROST key works for all of them!\n");
+    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str("🎉 FROST SIGNATURE VALID!\n\n");
+    out.push_str("Signature:\n");
+    out.push_str(&format!("  {}\n\n", sig_hex));
+    out.push_str("Public key:\n");
+    out.push_str(&format!("  {}\n\n", pubkey_hex));
+    out.push_str("Message:\n");
+    out.push_str(&format!("  \"{}\"\n\n", message));
+    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str("\n✨ You just created a threshold signature using schnorr_fun's FROST!\n");
+    out.push_str("   - Used real cryptographic API from production library\n");
+    out.push_str("   - Signature is valid under the shared public key\n");
+    out.push_str("   - No single party knew the full secret key!\n\n");
+    out.push_str("❓ Challenge:\n");
+    out.push_str("   This signature can be used anywhere Schnorr signatures are valid!\n");
+    out.push_str("   Try signing:\n");
+    out.push_str("   • A Nostr event (kind 1 message)\n");
+    out.push_str("   • A Bitcoin transaction (taproot spend)\n");
+    out.push_str("   • Git commits\n");
+    out.push_str("   The same FROST key works for all of them!\n\n");
 
+    Ok(out)
+}
+
+pub fn combine_signatures(data: &str) -> Result<()> {
+    let storage = FileStorage::new(STATE_DIR)?;
+    let output = combine_signatures_core(data, &storage)?;
+    print!("{}", output);
     Ok(())
 }

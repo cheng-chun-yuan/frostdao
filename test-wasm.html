@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FROST WASM Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #112d31;
+            color: #7cb3d5;
+        }
+        #output {
+            background: #1a3d44;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>FROST WASM Test</h1>
+    <button onclick="testWasm()">Test WASM</button>
+    <div id="output"></div>
+
+    <script type="module">
+        import init, { test_wasm } from './pkg/frosty_taipei.js';
+
+        async function loadWasm() {
+            await init();
+            console.log('WASM loaded successfully!');
+            document.getElementById('output').innerHTML = '<p>✅ WASM module loaded!</p>';
+        }
+
+        window.testWasm = async function() {
+            try {
+                const result = test_wasm();
+                document.getElementById('output').innerHTML += `<p>✅ ${result}</p>`;
+            } catch (e) {
+                document.getElementById('output').innerHTML += `<p>❌ Error: ${e}</p>`;
+            }
+        };
+
+        loadWasm();
+    </script>
+</body>
+</html>

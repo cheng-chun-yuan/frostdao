@@ -1,11 +1,12 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
+mod storage;
 mod keygen;
 mod signing;
 
 #[derive(Parser)]
-#[command(name = "frosty-taipei")]
+#[command(name = "yushan")]
 #[command(about = "Educational FROST threshold signature workshop", long_about = None)]
 struct Cli {
     #[command(subcommand)]

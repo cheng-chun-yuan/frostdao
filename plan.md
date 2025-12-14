@@ -8,6 +8,7 @@ A learning-focused FROST threshold signature workshop for a Bitcoin conference. 
 
 - **CLI** (✅ DONE) - Does all crypto, verbose educational output, uses schnorr_fun FROST API
 - **HTML bulletin board** (✅ DONE) - Copy-paste interface with Nostr for coordination, space-separated JSON format
+- **WASM Web CLI** (✅ DONE) - Full FROST implementation in browser, no installation required
 - **Workshop guide** (TODO) - Teaching script with learning objectives
 
 ---
@@ -29,6 +30,54 @@ The keygen flow uses these utility functions:
 - SimplePedPop returns `SharedKey<Normal, Zero>` and `PairedSecretShare<Normal, Zero>`
 - For BIP340 signing, convert with `.non_zero().into_xonly()` to get `EvenY` types
 - Do this AFTER validation, save xonly versions for signing
+
+### WASM Architecture
+
+**Storage Abstraction Pattern:**
+```rust
+// Trait for storage operations
+trait Storage {
+    fn read(&self, key: &str) -> Result<Vec<u8>>;
+    fn write(&self, key: &str, data: &[u8]) -> Result<()>;
+}
+
+// Implementations
+FileStorage       // Uses std::fs for CLI
+LocalStorageImpl  // Uses web_sys::Storage for WASM
+```
+
+**Function Structure:**
+```rust
+// Core logic - storage and I/O agnostic
+pub fn round1_core(args..., storage: &dyn Storage) -> Result<String> {
+    let mut out = String::new();
+    out.push_str("output...");  // Build output string
+    storage.write("state.json", data)?;  // Use injected storage
+    Ok(out)  // Return output
+}
+
+// CLI wrapper
+pub fn round1(args...) -> Result<()> {
+    let storage = FileStorage::new(STATE_DIR)?;
+    let output = round1_core(args..., &storage)?;
+    print!("{}", output);  // Print to stdout
+    Ok(())
+}
+
+// WASM wrapper
+#[wasm_bindgen]
+pub fn wasm_round1(args...) -> Result<String, JsValue> {
+    let storage = LocalStorageImpl;
+    round1_core(args..., &storage)  // Return string to JS
+        .map_err(|e| JsValue::from_str(&format!("Error: {}", e)))
+}
+```
+
+**Benefits:**
+- Zero code duplication between CLI and WASM
+- Core functions are testable in isolation
+- Educational output identical in both environments
+- Storage backend easily swappable
 
 ### JSON Interface
 
@@ -94,7 +143,7 @@ This makes the bulletin board **optional** - you can coordinate via terminal cop
 - Form tables of 3 people
 - Open bulletin board: `http://192.168.1.X:8000`
 - Create table, get table ID
-- Everyone: `git clone && cd frosty-taipei && cargo build`
+- Everyone: `git clone && cd yushan && cargo build`
 
 ### Keygen (25 min)
 
@@ -191,75 +240,46 @@ Participants leave understanding:
 
 **Most important: They had fun and built something real together!**
 
-### Important TODOs:
+### Completed Enhancements (✅)
 
-Some structure for the session:
+**Educational Output:**
+- ✅ Enhanced explanations throughout all commands (polynomials, commitments, nonces, Lagrange coefficients)
+- ✅ Added "🧠 What/Why" sections explaining the cryptographic concepts
+- ✅ Educational questions added to each phase:
+  - Round 1: Why verify Proofs-of-Possession?
+  - Round 2: **Updated** - Nostr broadcasting security mistake (instead of generic encryption warning)
+  - Nonce: Round optimization possibilities (pre-sharing nonces)
+  - Signing: Signer selection implications
+  - Combine: Challenge to sign Nostr/Bitcoin/Git
+- ✅ Consistent emoji design (⚙️ computing, 🧠 learning, ❄️ success, ✉️ sending)
+- ✅ Removed all green tick emojis
 
+**Technical Improvements:**
+- ✅ Using FROST coordinator API (`verify_and_combine_signature_shares`) for signature combination
+- ✅ Clean hex output for display (raw bytes) vs bincode for storage
+- ✅ Space-separated JSON format explained in CLI output
+- ✅ Message embedded in signature share data (removed from combine command args)
+- ✅ Renamed "Secret Shares" to "Keygen Shares" in Round 2 for clarity
+
+**WASM Implementation (✅ COMPLETE):**
+- ✅ All 6 CLI commands callable from browser (`/cli.html`)
+- ✅ Storage abstraction (FileStorage for CLI, LocalStorage for WASM)
+- ✅ Zero code duplication (core functions shared between CLI and WASM)
+- ✅ Educational output preserved in browser
+- ✅ No installation required - runs entirely in browser
+- ✅ Compiles to ~15KB WASM
+
+### Remaining TODOs:
+
+**Workshop Structure:**
 1. Introductions (me, Frostsnap, team)
-2. FROST & Soveignty
+2. FROST & Sovereignty
 3. What we're going to be doing
 4. Tools and begin
 
-- Things printed to the terminal for educational purposes should use serde debug strings. We could even consider whether it is appropriate to use serde everywhere instead of bincode.
-
-- We should print things to the terminal more often, for example, during keygen we should print something like:
-
-```
-a_0: ..... (SUPER SECRET)
-a_1: ..... (SECRET)
-
-....
-
-Commitments
-a_0 \* G = ....
-
-Proof-of-Possession (PoP) - This proves we know our contribution to the group secret, preventing rogue key / key cancellation attacks.
-
-```
-
-I like explanations like:
-
-```
-
-📝 Creating party sign session...
-🎯 Computing Lagrange coefficient...
-   λ2 allows your share to work with this specific signer subset
-
-✍  Creating signature share...
-   Using: sign_session.sign(&paired_share, nonce)
-   This computes: s2 = k2 + λ2 * c * secret_share
-```
-
-But they're slightly too short and assuming, ok we calculated some lagrange coefficient, but why? Deeper explanations please!
-
-```
-✓ Generated NonceKeyPair:
-   - Secret nonce (k1, k2) - kept private
-   - Public nonce (R1, R2) - shared with others
-```
-
-E.g this one should also explain R1 = G \* k1..
-
-- Perhaps to make this even more educational we should ask questions with varying difficulty along the way, maybe one for each command,
-
-* "Why is it important that we produce and verifiy proofs-of-possession? or, "What kind of attacks do these proofs-of-possession prevent?
-* "(keygen shares) We're skipping a very important security step here, do you know what it is (encrypting keygen shares to securely transmit them to the recipient)
-
-* Nonce gen: "You may notice that we can generate as many nonces as we like at any time, independent of the message being signed. Rather than taking two rounds to sign (share nonces, then sign), what could we do to make FROST "Round Optimized"?
-* Signing, to begin signing you've selected a quorum of nonces to sign under, what downstream implication does this have for the user? (Hint: how could this hinder a user of FROST in a way that's not applicable to script multisig?)
-* Combine - Have a go at signing a nostr event, or, sign a bitcoin transaction?
-
-- Use slightly less emojis, but keeping the powerful ones. No green ticks.
-
-- We should use the secp256kfun frost-coordinator to combine the secret shares after signing, not manual as we are here.
-
-- We should explain the "spaced json" data input format where appropriate, since it is non standard? Im finding it easy to work with on the CLI, but is there an easier more standard alternative?
-
-Very final TODOs:
-
-- more handholding in HTML
-- Frostsnap branding
-- Host
-- A command line or online signature verifier
-- Nice to have (wasm bindings)
-- Nice to have: references
+**Polish:**
+- More handholding in HTML UI
+- Frostsnap branding refinement
+- Hosting setup
+- Signature verifier (command line or online)
+- References section

@@ -1,3 +1,4 @@
+use crate::storage::{FileStorage, Storage};
 use anyhow::{Context, Result};
 use schnorr_fun::frost::{
     self,
@@ -7,7 +8,6 @@ use secp256kfun::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
 
 const STATE_DIR: &str = ".frost_state";
 
@@ -134,17 +134,24 @@ struct Round1State {
     share_indices: Vec<String>, // Hex encoded ShareIndex scalars
 }
 
-pub fn round1(threshold: u32, n_parties: u32, my_index: u32) -> Result<()> {
-    println!("FROST Keygen - Round 1\n");
-    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("Configuration:");
-    println!(
-        "  Threshold: {} (need {} parties to sign)",
+pub fn round1_core(
+    threshold: u32,
+    n_parties: u32,
+    my_index: u32,
+    storage: &dyn Storage,
+) -> Result<String> {
+    let mut out = String::new();
+
+    out.push_str("FROST Keygen - Round 1\n\n");
+    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str("Configuration:\n");
+    out.push_str(&format!(
+        "  Threshold: {} (need {} parties to sign)\n",
         threshold, threshold
-    );
-    println!("  Total parties: {}", n_parties);
-    println!("  Your index: {}", my_index);
-    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    ));
+    out.push_str(&format!("  Total parties: {}\n", n_parties));
+    out.push_str(&format!("  Your index: {}\n", my_index));
+    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n");
 
     if threshold > n_parties {
         anyhow::bail!("Threshold cannot exceed number of parties");
@@ -161,17 +168,17 @@ pub fn round1(threshold: u32, n_parties: u32, my_index: u32) -> Result<()> {
         .map(|i| Scalar::from(i).non_zero().expect("nonzero"))
         .collect();
 
-    println!("⚙️  Using schnorr_fun's FROST implementation");
-    println!("   Calling: Contributor::gen_keygen_input()\n");
+    out.push_str("⚙️  Using schnorr_fun's FROST implementation\n");
+    out.push_str("   Calling: Contributor::gen_keygen_input()\n\n");
 
-    println!("⚙️  Generating random polynomial...");
-    println!(
-        "   Degree: t-1 = {} (for threshold {})",
+    out.push_str("⚙️  Generating random polynomial...\n");
+    out.push_str(&format!(
+        "   Degree: t-1 = {} (for threshold {})\n",
         threshold - 1,
         threshold
-    );
-    println!("   The polynomial f(x) = a0 + a1*x + a2*x² + ...");
-    println!("   where a0 is your secret contribution\n");
+    ));
+    out.push_str("   The polynomial f(x) = a0 + a1*x + a2*x² + ...\n");
+    out.push_str("   where a0 is your secret contribution\n\n");
 
     // Generate keygen input as a contributor
     let mut rng = rand::thread_rng();
@@ -183,35 +190,51 @@ pub fn round1(threshold: u32, n_parties: u32, my_index: u32) -> Result<()> {
         &mut rng,
     );
 
-    println!("❄️  Generated:");
-    println!("   - {} polynomial commitments (public points)", threshold);
-    println!("   - Proof of Possession (PoP) signature");
-    println!("   - {} secret shares (one for each party)\n", n_parties);
+    out.push_str("❄️  Generated:\n");
+    out.push_str(&format!(
+        "   - {} polynomial commitments (public points)\n",
+        threshold
+    ));
+    out.push_str("   - Proof of Possession (PoP) signature\n");
+    out.push_str(&format!(
+        "   - {} secret shares (one for each party)\n\n",
+        n_parties
+    ));
 
-    println!("🧠 What just happened:");
-    println!("   1. Generated {} random polynomial coefficients [a₀, a₁, ..., a_{}]", threshold, threshold - 1);
-    println!("      • a₀ is your SECRET contribution to the group key");
-    println!("      • a₁, a₂, ... are random coefficients\n");
-    println!("   2. Created {} commitments: [a₀*G, a₁*G, ..., a_{}*G]", threshold, threshold - 1);
-    println!("      • These prove the polynomial without revealing it (safe to share!)");
-    println!("      • Everyone combines a₀*G values to get the shared public key\n");
-    println!("   3. Evaluated polynomial at {} indices to create secret shares", n_parties);
-    println!("      • Party i receives: f(i) = a₀ + a₁*i + a₂*i² + ...");
-    println!("      • Each share is a point on your polynomial\n");
-    println!("   4. Created Proof-of-Possession (PoP) signature");
-    println!("      • This proves you know a₀ (your secret contribution)");
-    println!("      • Prevents rogue-key and key-cancellation attacks\n");
-    println!("❓ Think about it:");
-    println!("   Why is it important to verify Proofs-of-Possession?");
-    println!("   What could an attacker do if they could contribute a₀*G");
-    println!("   without proving they know a₀?\n");
+    out.push_str("🧠 What just happened:\n");
+    out.push_str(&format!(
+        "   1. Generated {} random polynomial coefficients [a₀, a₁, ..., a_{}]\n",
+        threshold,
+        threshold - 1
+    ));
+    out.push_str("      • a₀ is your SECRET contribution to the group key\n");
+    out.push_str("      • a₁, a₂, ... are random coefficients\n\n");
+    out.push_str(&format!(
+        "   2. Created {} commitments: [a₀*G, a₁*G, ..., a_{}*G]\n",
+        threshold,
+        threshold - 1
+    ));
+    out.push_str("      • These prove the polynomial without revealing it (safe to share!)\n");
+    out.push_str("      • Everyone combines a₀*G values to get the shared public key\n\n");
+    out.push_str(&format!(
+        "   3. Evaluated polynomial at {} indices to create secret shares\n",
+        n_parties
+    ));
+    out.push_str("      • Party i receives: f(i) = a₀ + a₁*i + a₂*i² + ...\n");
+    out.push_str("      • Each share is a point on your polynomial\n\n");
+    out.push_str("   4. Created Proof-of-Possession (PoP) signature\n");
+    out.push_str("      • This proves you know a₀ (your secret contribution)\n");
+    out.push_str("      • Prevents rogue-key and key-cancellation attacks\n\n");
+    out.push_str("❓ Think about it:\n");
+    out.push_str("   Why is it important to verify Proofs-of-Possession?\n");
+    out.push_str("   What could an attacker do if they could contribute a₀*G\n");
+    out.push_str("   without proving they know a₀?\n\n");
 
     // Serialize for output
     let keygen_input_bytes = bincode::serialize(&keygen_input)?;
     let keygen_input_hex = hex::encode(&keygen_input_bytes);
 
     // Save state for round 2
-    fs::create_dir_all(STATE_DIR)?;
     let state = Round1State {
         my_index,
         threshold,
@@ -222,9 +245,9 @@ pub fn round1(threshold: u32, n_parties: u32, my_index: u32) -> Result<()> {
             .map(|s| hex::encode(s.to_bytes()))
             .collect(),
     };
-    fs::write(
-        format!("{}/round1_state.json", STATE_DIR),
-        serde_json::to_string_pretty(&state)?,
+    storage.write(
+        "round1_state.json",
+        serde_json::to_string_pretty(&state)?.as_bytes(),
     )?;
 
     // Save keygen shares for round 2
@@ -232,16 +255,16 @@ pub fn round1(threshold: u32, n_parties: u32, my_index: u32) -> Result<()> {
         .into_iter()
         .map(|(idx, share)| (hex::encode(idx.to_bytes()), hex::encode(share.to_bytes())))
         .collect();
-    fs::write(
-        format!("{}/my_secret_shares.json", STATE_DIR),
-        serde_json::to_string_pretty(&shares_map)?,
+    storage.write(
+        "my_secret_shares.json",
+        serde_json::to_string_pretty(&shares_map)?.as_bytes(),
     )?;
 
-    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("✉️  Your commitment (copy this JSON):");
-    println!("   Note: The CLI accepts space-separated JSON objects.");
-    println!("   You can combine outputs from all parties like:");
-    println!("   '{{...party1...}} {{...party2...}} {{...party3...}}'\n");
+    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str("✉️  Your commitment (copy this JSON):\n");
+    out.push_str("   Note: The CLI accepts space-separated JSON objects.\n");
+    out.push_str("   You can combine outputs from all parties like:\n");
+    out.push_str("   '{...party1...} {...party2...} {...party3...}'\n\n");
 
     let output = Round1Output {
         party_index: my_index,
@@ -249,29 +272,38 @@ pub fn round1(threshold: u32, n_parties: u32, my_index: u32) -> Result<()> {
         event_type: "keygen_round1".to_string(),
     };
 
-    println!("{}\n", serde_json::to_string_pretty(&output)?);
-    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("\n➜ Paste this JSON into the webpage");
-    println!(
-        "➜ Wait for all {} parties to post their commitments",
+    out.push_str(&format!("{}\n\n", serde_json::to_string_pretty(&output)?));
+    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str("\n➜ Paste this JSON into the webpage\n");
+    out.push_str(&format!(
+        "➜ Wait for all {} parties to post their commitments\n",
         n_parties
-    );
-    println!("➜ Copy the \"all commitments\" JSON from webpage");
-    println!("➜ Run: cargo run -- keygen-round2 --data '<JSON>'",);
+    ));
+    out.push_str("➜ Copy the \"all commitments\" JSON from webpage\n");
+    out.push_str("➜ Run: cargo run -- keygen-round2 --data '<JSON>'\n");
 
+    Ok(out)
+}
+
+pub fn round1(threshold: u32, n_parties: u32, my_index: u32) -> Result<()> {
+    let storage = FileStorage::new(STATE_DIR)?;
+    let output = round1_core(threshold, n_parties, my_index, &storage)?;
+    print!("{}", output);
     Ok(())
 }
 
-pub fn round2(data: &str) -> Result<()> {
-    println!("FROST Keygen - Round 2\n");
+pub fn round2_core(data: &str, storage: &dyn Storage) -> Result<String> {
+    let mut out = String::new();
+
+    out.push_str("FROST Keygen - Round 2\n\n");
 
     // Load state
-    let state_json = fs::read_to_string(format!("{}/round1_state.json", STATE_DIR))
+    let state_json = String::from_utf8(storage.read("round1_state.json")?)
         .context("Failed to load round 1 state. Did you run keygen-round1?")?;
     let state: Round1State = serde_json::from_str(&state_json)?;
 
     // Load my keygen shares (to send to other parties)
-    let shares_json = fs::read_to_string(format!("{}/my_secret_shares.json", STATE_DIR))?;
+    let shares_json = String::from_utf8(storage.read("my_secret_shares.json")?)?;
     let shares_map: BTreeMap<String, String> = serde_json::from_str(&shares_json)?;
 
     // Parse input - space-separated Round1Output objects
@@ -288,13 +320,13 @@ pub fn round2(data: &str) -> Result<()> {
 
     let input = Round1Input { commitments };
 
-    println!(
-        " Received {} commitments from other parties\n",
+    out.push_str(&format!(
+        " Received {} commitments from other parties\n\n",
         input.commitments.len()
-    );
+    ));
 
-    println!("⚙️  Using schnorr_fun's FROST coordinator");
-    println!("   This aggregates all commitments and validates them\n");
+    out.push_str("⚙️  Using schnorr_fun's FROST coordinator\n");
+    out.push_str("   This aggregates all commitments and validates them\n\n");
 
     // Create FROST instance
     let frost = frost::new_with_deterministic_nonces::<Sha256>();
@@ -302,7 +334,7 @@ pub fn round2(data: &str) -> Result<()> {
     // Create coordinator to aggregate inputs
     let mut coordinator = Coordinator::new(state.threshold, state.n_parties);
 
-    println!("⚙️  Adding inputs to coordinator...");
+    out.push_str("⚙️  Adding inputs to coordinator...\n");
     for commit_data in &input.commitments {
         let keygen_input_bytes = hex::decode(&commit_data.data)?;
         let keygen_input: KeygenInput = bincode::deserialize(&keygen_input_bytes)?;
@@ -315,23 +347,27 @@ pub fn round2(data: &str) -> Result<()> {
             )
             .map_err(|e| anyhow::anyhow!("Failed to add input: {}", e))?;
 
-        println!("    Party {}: Commitment validated", commit_data.index);
+        out.push_str(&format!(
+            "    Party {}: Commitment validated\n",
+            commit_data.index
+        ));
     }
 
-    println!("\n❄️  All commitments valid!\n");
+    out.push_str("\n❄️  All commitments valid!\n\n");
 
-    println!("✉️  Your keygen shares to send:");
-    println!("🧠 Why send keygen shares?");
-    println!("   Each party evaluates their polynomial at ALL {} party indices", state.n_parties);
-    println!("   Party i sends f_i(j) to party j");
-    println!("   These keygen shares will be combined to create each party's");
-    println!("   final secret share (without anyone knowing the full key!)\n");
-    println!("⚠️  WARNING: In production, these keygen shares MUST be encrypted!");
-    println!("   We're skipping encryption for educational simplicity.\n");
-    println!("❓ Think about it:");
-    println!("   We're skipping a critical security step here!");
-    println!("   What should we do before sending these keygen shares?");
-    println!("   (Hint: How do you securely transmit secrets to a recipient?)\n");
+    out.push_str("✉️  Your keygen shares to send:\n");
+    out.push_str("🧠 Why send keygen shares?\n");
+    out.push_str(&format!(
+        "   Each party evaluates their polynomial at ALL {} party indices\n",
+        state.n_parties
+    ));
+    out.push_str("   Party i sends f_i(j) to party j\n");
+    out.push_str("   These keygen shares will be combined to create each party's\n");
+    out.push_str("   final secret share (without anyone knowing the full key!)\n\n");
+    out.push_str("❓ Think about it:\n");
+    out.push_str("   By broadcasting these keygen shares publicly on Nostr, we're\n");
+    out.push_str("   making a critical security mistake! Anyone can reconstruct\n");
+    out.push_str("   the full private key. What should be done instead?\n\n");
 
     // Create output with shares
     let mut shares = Vec::new();
@@ -343,7 +379,10 @@ pub fn round2(data: &str) -> Result<()> {
         // Extract index value - scalars are big-endian, so small values are in last byte
         let to_index = idx_scalar.to_bytes()[31] as u32;
 
-        println!("   Share for Party {}: <secret scalar>", to_index);
+        out.push_str(&format!(
+            "   Share for Party {}: <secret scalar>\n",
+            to_index
+        ));
 
         shares.push(ShareData {
             to_index,
@@ -351,8 +390,8 @@ pub fn round2(data: &str) -> Result<()> {
         });
     }
 
-    println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!(" Your shares (copy this JSON):\n");
+    out.push_str("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str(" Your shares (copy this JSON):\n\n");
 
     let output = Round2Output {
         party_index: state.my_index,
@@ -360,30 +399,39 @@ pub fn round2(data: &str) -> Result<()> {
         event_type: "keygen_round2".to_string(),
     };
 
-    println!("{}\n", serde_json::to_string_pretty(&output)?);
-    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("\n➜ Paste this JSON into the webpage");
-    println!("➜ Wait for all parties to post their shares");
-    println!(
-        "➜ Copy \"shares for Party {}\" JSON from webpage",
+    out.push_str(&format!("{}\n\n", serde_json::to_string_pretty(&output)?));
+    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str("\n➜ Paste this JSON into the webpage\n");
+    out.push_str("➜ Wait for all parties to post their shares\n");
+    out.push_str(&format!(
+        "➜ Copy \"shares for Party {}\" JSON from webpage\n",
         state.my_index
-    );
-    println!("➜ Run: cargo run -- keygen-finalize --data '<JSON>'",);
+    ));
+    out.push_str("➜ Run: cargo run -- keygen-finalize --data '<JSON>'\n");
 
     // Save all commitments for validation
-    fs::write(format!("{}/all_commitments.json", STATE_DIR), data)?;
+    storage.write("all_commitments.json", data.as_bytes())?;
 
+    Ok(out)
+}
+
+pub fn round2(data: &str) -> Result<()> {
+    let storage = FileStorage::new(STATE_DIR)?;
+    let output = round2_core(data, &storage)?;
+    print!("{}", output);
     Ok(())
 }
 
-pub fn finalize(data: &str) -> Result<()> {
-    println!("FROST Keygen - Finalize\n");
+pub fn finalize_core(data: &str, storage: &dyn Storage) -> Result<String> {
+    let mut out = String::new();
+
+    out.push_str("FROST Keygen - Finalize\n\n");
 
     // Load state
-    let state_json = fs::read_to_string(format!("{}/round1_state.json", STATE_DIR))?;
+    let state_json = String::from_utf8(storage.read("round1_state.json")?)?;
     let state: Round1State = serde_json::from_str(&state_json)?;
 
-    let commitments_json = fs::read_to_string(format!("{}/all_commitments.json", STATE_DIR))?;
+    let commitments_json = String::from_utf8(storage.read("all_commitments.json")?)?;
     let round1_outputs: Vec<Round1Output> = parse_space_separated_json(&commitments_json)?;
     let commitments: Vec<CommitmentData> = round1_outputs
         .into_iter()
@@ -412,18 +460,24 @@ pub fn finalize(data: &str) -> Result<()> {
 
     let shares_input = Round2Input { shares_for_me };
 
-    println!(
-        " Received {} keygen shares sent to you\n",
+    out.push_str(&format!(
+        " Received {} keygen shares sent to you\n\n",
         shares_input.shares_for_me.len()
-    );
+    ));
 
-    println!("⚙️  Computing your final secret share:");
-    println!("🧠 How it works:");
-    println!("   Your final secret share = sum of all keygen shares received");
-    println!("   secret_share = f₁({}) + f₂({}) + f₃({}) + ...", state.my_index, state.my_index, state.my_index);
-    println!("   ");
-    println!("   This is YOUR piece of the distributed private key!");
-    println!("   With {} secret shares, you can reconstruct the full key.\n", state.threshold);
+    out.push_str("⚙️  Computing your final secret share:\n");
+    out.push_str("🧠 How it works:\n");
+    out.push_str("   Your final secret share = sum of all keygen shares received\n");
+    out.push_str(&format!(
+        "   secret_share = f₁({}) + f₂({}) + f₃({}) + ...\n",
+        state.my_index, state.my_index, state.my_index
+    ));
+    out.push_str("   \n");
+    out.push_str("   This is YOUR piece of the distributed private key!\n");
+    out.push_str(&format!(
+        "   With {} secret shares, you can reconstruct the full key.\n\n",
+        state.threshold
+    ));
 
     // Collect keygen shares into a vector
     let mut secret_share_inputs = Vec::new();
@@ -431,17 +485,20 @@ pub fn finalize(data: &str) -> Result<()> {
         let share_bytes = hex::decode(&incoming.share)?;
         let share: Scalar<Secret, Zero> = bincode::deserialize(&share_bytes)?;
         secret_share_inputs.push(share);
-        println!("   + Party {}'s keygen share", incoming.from_index);
+        out.push_str(&format!(
+            "   + Party {}'s keygen share\n",
+            incoming.from_index
+        ));
     }
 
-    println!("\n⚙️  Computing shared public key:");
-    println!("🧠 How the group public key is created:");
-    println!("   PublicKey = sum of all parties' a₀*G commitments");
-    println!("   PK = (a₀)₁*G + (a₀)₂*G + (a₀)₃*G + ...");
-    println!("   ");
-    println!("   Since PK = (a₀)₁ + (a₀)₂ + ... times G,");
-    println!("   and the private key = (a₀)₁ + (a₀)₂ + ...,");
-    println!("   this IS the public key for the distributed private key!\n");
+    out.push_str("\n⚙️  Computing shared public key:\n");
+    out.push_str("🧠 How the group public key is created:\n");
+    out.push_str("   PublicKey = sum of all parties' a₀*G commitments\n");
+    out.push_str("   PK = (a₀)₁*G + (a₀)₂*G + (a₀)₃*G + ...\n");
+    out.push_str("   \n");
+    out.push_str("   Since PK = (a₀)₁ + (a₀)₂ + ... times G,\n");
+    out.push_str("   and the private key = (a₀)₁ + (a₀)₂ + ...,\n");
+    out.push_str("   this IS the public key for the distributed private key!\n\n");
 
     // Reconstruct all KeygenInputs to get the aggregated key
     let frost = frost::new_with_deterministic_nonces::<Sha256>();
@@ -487,21 +544,24 @@ pub fn finalize(data: &str) -> Result<()> {
     // Save bincode format for loading later (includes type info for deserialization)
     let final_share_bytes = bincode::serialize(&xonly_paired_share)?;
     let public_key_bytes = bincode::serialize(&xonly_shared_key)?;
-    fs::write(
-        format!("{}/paired_secret_share.bin", STATE_DIR),
-        &final_share_bytes,
-    )?;
-    fs::write(format!("{}/shared_key.bin", STATE_DIR), &public_key_bytes)?;
+    storage.write("paired_secret_share.bin", &final_share_bytes)?;
+    storage.write("shared_key.bin", &public_key_bytes)?;
 
-    println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!(" YOUR SECRET SHARE (keep this safe!):");
-    println!("  {}\n", final_share_hex);
-    println!(" SHARED PUBLIC KEY:");
-    println!("  {}\n", public_key_hex);
-    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("\n❄️  Key generation complete!");
-    println!("   Using schnorr_fun's FROST SharedKey and PairedSecretShare");
-    println!("   Compare public keys with other tables to verify!\n");
+    out.push_str("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str(" YOUR SECRET SHARE (keep this safe!):\n");
+    out.push_str(&format!("  {}\n\n", final_share_hex));
+    out.push_str(" SHARED PUBLIC KEY:\n");
+    out.push_str(&format!("  {}\n\n", public_key_hex));
+    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str("\n❄️  Key generation complete!\n");
+    out.push_str("   Compare public keys with other tables to verify!\n\n");
 
+    Ok(out)
+}
+
+pub fn finalize(data: &str) -> Result<()> {
+    let storage = FileStorage::new(STATE_DIR)?;
+    let output = finalize_core(data, &storage)?;
+    print!("{}", output);
     Ok(())
 }
