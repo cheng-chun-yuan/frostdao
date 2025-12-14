@@ -83,7 +83,7 @@ yushan keygen-round2 --data '{PARTY1_JSON} {PARTY2_JSON} ...'
           </li>
           <li>Finish creating your FROST key, sign things!</li>
           <li style="color: var(--bg-secondary)">
-            8. cry to nick if things are broken
+            9. cry to nick if things are broken
           </li>
         </ol>
         <b> Challenge: can you sign a nostr event? </b>
@@ -185,7 +185,7 @@ yushan keygen-round2 --data '{PARTY1_JSON} {PARTY2_JSON} ...'
           </div>
         </div>
         <div class="copy-section" id="round1-copy-section">
-          <div class="copy-label">Aggregated Commitments</div>
+          <div class="copy-label">Group's Keygen Commitments</div>
           <div class="copy-output" id="round1-output">No data yet</div>
           <button
             class="btn btn-secondary"
@@ -229,7 +229,7 @@ yushan keygen-round2 --data '{PARTY1_JSON} {PARTY2_JSON} ...'
           </div>
         </div>
         <div class="copy-section" id="round2-copy-section">
-          <div class="copy-label">Aggregated Shares</div>
+          <div class="copy-label">Group's Keygen Shares</div>
           <div class="copy-output" id="round2-output">No data yet</div>
           <button
             class="btn btn-secondary"
@@ -237,6 +237,23 @@ yushan keygen-round2 --data '{PARTY1_JSON} {PARTY2_JSON} ...'
           >
             Copy All
           </button>
+        </div>
+      </div>
+
+      <!-- Keygen Finalize -->
+      <div class="phase-section">
+        <div class="phase-header">
+          <div class="phase-title">Finalize Keygen</div>
+        </div>
+
+        <div class="post-box">
+          <div class="post-label">
+            Copy "Group's Keygen Shares" above, then run:
+            <br />
+            <code>yushan keygen-finalize --data '&lt;shares-JSON&gt;'</code>
+          </div>
+          After this step, you'll have your secret share of the group's public
+          key!
         </div>
       </div>
 
@@ -270,7 +287,7 @@ yushan keygen-round2 --data '{PARTY1_JSON} {PARTY2_JSON} ...'
           <div class="empty-state">Waiting for signers to post nonces...</div>
         </div>
         <div class="copy-section" id="nonce-copy-section">
-          <div class="copy-label">Aggregated Nonces</div>
+          <div class="copy-label">Session Nonces</div>
           <div class="copy-output" id="nonce-output">No data yet</div>
           <button
             class="btn btn-secondary"
@@ -315,7 +332,7 @@ yushan keygen-round2 --data '{PARTY1_JSON} {PARTY2_JSON} ...'
           </div>
         </div>
         <div class="copy-section" id="sig-copy-section">
-          <div class="copy-label">Aggregated Signature Shares</div>
+          <div class="copy-label">Session Signature Shares</div>
           <div class="copy-output" id="sig-output">No data yet</div>
           <button
             class="btn btn-secondary"
