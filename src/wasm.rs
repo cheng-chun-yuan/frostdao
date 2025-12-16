@@ -35,12 +35,18 @@ fn command_result_to_json(cmd_result: crate::CommandResult) -> Result<String, Js
 
 #[wasm_bindgen]
 #[cfg_attr(not(target_arch = "wasm32"), allow(unused_variables))]
-pub fn wasm_keygen_round1(threshold: u32, n_parties: u32, my_index: u32) -> Result<String, JsValue> {
+pub fn wasm_keygen_round1(
+    threshold: u32,
+    n_parties: u32,
+    my_index: u32,
+    rank: u32,
+    hierarchical: bool,
+) -> Result<String, JsValue> {
     #[cfg(target_arch = "wasm32")]
     {
         use crate::storage::LocalStorageImpl;
         let storage = LocalStorageImpl;
-        let cmd_result = keygen::round1_core(threshold, n_parties, my_index, &storage)
+        let cmd_result = keygen::round1_core(threshold, n_parties, my_index, rank, hierarchical, &storage)
             .map_err(|e| JsValue::from_str(&format!("Error: {}", e)))?;
         command_result_to_json(cmd_result)
     }

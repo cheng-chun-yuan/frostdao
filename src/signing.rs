@@ -1,3 +1,5 @@
+use crate::birkhoff::validate_signer_set;
+use crate::keygen::{parse_space_separated_json, HtssMetadata};
 use crate::storage::{FileStorage, Storage};
 use crate::CommandResult;
 use anyhow::{Context, Result};
@@ -10,14 +12,13 @@ use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::collections::BTreeMap;
 
-// Import the parser from keygen module
-use crate::keygen::parse_space_separated_json;
-
 const STATE_DIR: &str = ".frost_state";
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NonceOutput {
     pub party_index: u32,
+    #[serde(default)]
+    pub rank: u32, // HTSS rank for signer validation
     pub session: String,
     pub nonce: String, // Bincode hex of public nonce
     #[serde(rename = "type")]
@@ -62,9 +63,19 @@ pub struct SignatureShareData {
 pub fn generate_nonce_core(session: &str, storage: &dyn Storage) -> Result<CommandResult> {
     let mut out = String::new();
 
-    out.push_str("FROST Signing - Nonce Generation\n\n");
+    // Load HTSS metadata
+    let htss_metadata: HtssMetadata = {
+        let metadata_json = String::from_utf8(storage.read("htss_metadata.json")?)?;
+        serde_json::from_str(&metadata_json)?
+    };
+
+    let mode_name = if htss_metadata.hierarchical { "HTSS" } else { "TSS" };
+    out.push_str(&format!("FROST Signing ({}) - Nonce Generation\n\n", mode_name));
     out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
     out.push_str(&format!("Session ID: {}\n", session));
+    if htss_metadata.hierarchical {
+        out.push_str(&format!("Your rank: {}\n", htss_metadata.my_rank));
+    }
     out.push_str("⚠  NEVER reuse a nonce as it will leak your secret share!\n");
     out.push_str("    Each signature needs fresh nonces!\n");
     out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n");
@@ -82,6 +93,8 @@ pub fn generate_nonce_core(session: &str, storage: &dyn Storage) -> Result<Comma
 
         u32::from_be_bytes(u32_index_bytes)
     };
+
+    let my_rank = htss_metadata.my_rank;
 
     out.push_str("⚙️  Using schnorr_fun's FROST nonce generation\n");
     out.push_str("   Calling: frost.seed_nonce_rng() and frost.gen_nonce()\n\n");
@@ -138,6 +151,7 @@ pub fn generate_nonce_core(session: &str, storage: &dyn Storage) -> Result<Comma
     // Create JSON result for copy-pasting
     let output = NonceOutput {
         party_index,
+        rank: my_rank,
         session: session.to_string(),
         nonce: public_nonce_hex,
         event_type: "signing_nonce".to_string(),
@@ -168,7 +182,14 @@ pub fn create_signature_share_core(
 ) -> Result<CommandResult> {
     let mut out = String::new();
 
-    out.push_str("🔐 FROST Signing - Create Signature Share\n\n");
+    // Load HTSS metadata
+    let htss_metadata: HtssMetadata = {
+        let metadata_json = String::from_utf8(storage.read("htss_metadata.json")?)?;
+        serde_json::from_str(&metadata_json)?
+    };
+
+    let mode_name = if htss_metadata.hierarchical { "HTSS" } else { "TSS" };
+    out.push_str(&format!("🔐 FROST Signing ({}) - Create Signature Share\n\n", mode_name));
 
     // Load nonce
     let nonce_bytes = storage
@@ -195,12 +216,30 @@ pub fn create_signature_share_core(
     // Parse input - space-separated NonceOutput objects
     let nonce_outputs: Vec<NonceOutput> = parse_space_separated_json(data)?;
 
+    // Extract signer indices and ranks
+    let signer_ranks: Vec<(u32, u32)> = nonce_outputs
+        .iter()
+        .map(|output| (output.party_index, output.rank))
+        .collect();
+
+    let ranks_only: Vec<u32> = signer_ranks.iter().map(|(_, r)| *r).collect();
+
+    // Validate signer set in HTSS mode
+    if htss_metadata.hierarchical {
+        out.push_str("🔐 HTSS Signer Validation:\n");
+        out.push_str(&format!("   Signers: {:?}\n", signer_ranks));
+
+        validate_signer_set(&ranks_only, htss_metadata.threshold)?;
+
+        out.push_str("   ✅ Signer set is valid for HTSS!\n\n");
+    }
+
     // Convert to expected format
     let nonces: Vec<NonceData> = nonce_outputs
-        .into_iter()
+        .iter()
         .map(|output| NonceData {
             index: output.party_index,
-            nonce: output.nonce,
+            nonce: output.nonce.clone(),
         })
         .collect();
 
@@ -264,36 +303,56 @@ pub fn create_signature_share_core(
     let sign_session =
         frost.party_sign_session(shared_key.public_key(), parties.clone(), agg_binonce, msg);
 
-    out.push_str("⚙️  Computing Lagrange coefficient...\n");
-    out.push_str("🧠 Why Lagrange coefficients?\n");
-    out.push_str(&format!(
-        "   During keygen, you received a share for index {}\n",
-        party_index
-    ));
-    out.push_str(&format!(
-        "   But only {} parties are signing in this session!\n",
-        num_signers
-    ));
-    out.push_str("   \n");
-    out.push_str("   Lagrange interpolation adjusts your share to work with\n");
-    out.push_str("   ANY threshold subset of signers (not just all parties).\n");
-    out.push_str("   \n");
-    out.push_str(&format!(
-        "   λ{} = the coefficient that makes YOUR share compatible\n",
-        party_index
-    ));
-    out.push_str(&format!(
-        "   with this specific group of {} signers.\n\n",
-        num_signers
-    ));
-    out.push_str("❓ Think about it:\n");
-    out.push_str(&format!(
-        "   You've selected a specific group of {} signers for this signature.\n",
-        num_signers
-    ));
-    out.push_str("   What downstream implication does this have?\n");
-    out.push_str("   (Hint: How does this differ from Bitcoin script multisig,\n");
-    out.push_str("   where ANY threshold combination can spend?)\n\n");
+    if htss_metadata.hierarchical {
+        out.push_str("⚙️  Computing Birkhoff coefficient (HTSS)...\n");
+        out.push_str("🧠 Why Birkhoff coefficients?\n");
+        out.push_str("   In HTSS, each share has both an index AND a rank.\n");
+        out.push_str("   Birkhoff interpolation uses derivative information (ranks)\n");
+        out.push_str("   to compute coefficients, not just point values.\n");
+        out.push_str("   \n");
+        out.push_str(&format!(
+            "   Your share: index={}, rank={}\n",
+            party_index, htss_metadata.my_rank
+        ));
+        out.push_str("   \n");
+        out.push_str("   Birkhoff coefficients ensure only VALID rank combinations\n");
+        out.push_str("   can reconstruct the secret (satisfying n_i <= i rule).\n\n");
+        out.push_str("❓ Think about it:\n");
+        out.push_str("   HTSS creates a hierarchy of signing authority.\n");
+        out.push_str("   Higher ranks (lower numbers) have more authority.\n");
+        out.push_str("   How might this be useful in organizational structures?\n\n");
+    } else {
+        out.push_str("⚙️  Computing Lagrange coefficient (TSS)...\n");
+        out.push_str("🧠 Why Lagrange coefficients?\n");
+        out.push_str(&format!(
+            "   During keygen, you received a share for index {}\n",
+            party_index
+        ));
+        out.push_str(&format!(
+            "   But only {} parties are signing in this session!\n",
+            num_signers
+        ));
+        out.push_str("   \n");
+        out.push_str("   Lagrange interpolation adjusts your share to work with\n");
+        out.push_str("   ANY threshold subset of signers (not just all parties).\n");
+        out.push_str("   \n");
+        out.push_str(&format!(
+            "   λ{} = the coefficient that makes YOUR share compatible\n",
+            party_index
+        ));
+        out.push_str(&format!(
+            "   with this specific group of {} signers.\n\n",
+            num_signers
+        ));
+        out.push_str("❓ Think about it:\n");
+        out.push_str(&format!(
+            "   You've selected a specific group of {} signers for this signature.\n",
+            num_signers
+        ));
+        out.push_str("   What downstream implication does this have?\n");
+        out.push_str("   (Hint: How does this differ from Bitcoin script multisig,\n");
+        out.push_str("   where ANY threshold combination can spend?)\n\n");
+    }
 
     out.push_str("⚙️  Creating signature share...\n");
     out.push_str("🧠 Schnorr signature math:\n");
@@ -370,7 +429,14 @@ pub fn create_signature_share(session: &str, message: &str, data: &str) -> Resul
 pub fn combine_signatures_core(data: &str, storage: &dyn Storage) -> Result<CommandResult> {
     let mut out = String::new();
 
-    out.push_str("🔐 FROST Signing - Combine Signature Shares\n\n");
+    // Load HTSS metadata
+    let htss_metadata: HtssMetadata = {
+        let metadata_json = String::from_utf8(storage.read("htss_metadata.json")?)?;
+        serde_json::from_str(&metadata_json)?
+    };
+
+    let mode_name = if htss_metadata.hierarchical { "HTSS" } else { "TSS" };
+    out.push_str(&format!("🔐 FROST Signing ({}) - Combine Signature Shares\n\n", mode_name));
 
     // Parse input - space-separated SignatureShareOutput objects
     let sig_outputs: Vec<SignatureShareOutput> = parse_space_separated_json(data)?;

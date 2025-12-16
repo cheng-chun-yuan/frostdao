@@ -84,7 +84,11 @@ where
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Round1Output {
     pub party_index: u32,
+    #[serde(default)]
+    pub rank: u32, // HTSS rank (0 = highest authority)
     pub keygen_input: String, // Bincode hex
+    #[serde(default)]
+    pub hierarchical: bool, // Whether HTSS mode is enabled
     #[serde(rename = "type")]
     pub event_type: String,
 }
@@ -129,21 +133,37 @@ pub struct IncomingShare {
 #[derive(Serialize, Deserialize)]
 struct Round1State {
     my_index: u32,
+    my_rank: u32,        // HTSS rank (0 = highest authority)
     threshold: u32,
     n_parties: u32,
+    hierarchical: bool,  // Whether HTSS mode is enabled
     contributor: Contributor,
     share_indices: Vec<String>, // Hex encoded ShareIndex scalars
+}
+
+/// HTSS metadata stored after keygen finalize
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct HtssMetadata {
+    pub my_index: u32,
+    pub my_rank: u32,
+    pub threshold: u32,
+    pub hierarchical: bool,
+    /// Map of party_index -> rank for all participants
+    pub party_ranks: std::collections::BTreeMap<u32, u32>,
 }
 
 pub fn round1_core(
     threshold: u32,
     n_parties: u32,
     my_index: u32,
+    my_rank: u32,        // HTSS rank (0 = highest authority)
+    hierarchical: bool,  // Whether HTSS mode is enabled
     storage: &dyn Storage,
 ) -> Result<CommandResult> {
     let mut out = String::new();
 
-    out.push_str("FROST Keygen - Round 1\n\n");
+    let mode_name = if hierarchical { "HTSS" } else { "TSS" };
+    out.push_str(&format!("FROST Keygen ({}) - Round 1\n\n", mode_name));
     out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
     out.push_str("Configuration:\n");
     out.push_str(&format!(
@@ -152,6 +172,10 @@ pub fn round1_core(
     ));
     out.push_str(&format!("  Total parties: {}\n", n_parties));
     out.push_str(&format!("  Your index: {}\n", my_index));
+    if hierarchical {
+        out.push_str(&format!("  Your rank: {} (HTSS mode)\n", my_rank));
+        out.push_str("  Note: Rank 0 = highest authority, higher ranks = lower authority\n");
+    }
     out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n");
 
     if threshold > n_parties {
@@ -238,8 +262,10 @@ pub fn round1_core(
     // Save state for round 2
     let state = Round1State {
         my_index,
+        my_rank,
         threshold,
         n_parties,
+        hierarchical,
         contributor,
         share_indices: share_indices
             .iter()
@@ -275,7 +301,9 @@ pub fn round1_core(
     // Create JSON result for copy-pasting
     let output = Round1Output {
         party_index: my_index,
+        rank: my_rank,
         keygen_input: keygen_input_hex,
+        hierarchical,
         event_type: "keygen_round1".to_string(),
     };
     let result = serde_json::to_string(&output)?;
@@ -286,9 +314,15 @@ pub fn round1_core(
     })
 }
 
-pub fn round1(threshold: u32, n_parties: u32, my_index: u32) -> Result<()> {
+pub fn round1(
+    threshold: u32,
+    n_parties: u32,
+    my_index: u32,
+    my_rank: u32,
+    hierarchical: bool,
+) -> Result<()> {
     let storage = FileStorage::new(STATE_DIR)?;
-    let cmd_result = round1_core(threshold, n_parties, my_index, &storage)?;
+    let cmd_result = round1_core(threshold, n_parties, my_index, my_rank, hierarchical, &storage)?;
     println!("{}", cmd_result.output);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("📋 Copy this JSON:");
@@ -432,19 +466,27 @@ pub fn round2(data: &str) -> Result<()> {
 pub fn finalize_core(data: &str, storage: &dyn Storage) -> Result<CommandResult> {
     let mut out = String::new();
 
-    out.push_str("FROST Keygen - Finalize\n\n");
-
     // Load state
     let state_json = String::from_utf8(storage.read("round1_state.json")?)?;
     let state: Round1State = serde_json::from_str(&state_json)?;
 
+    let mode_name = if state.hierarchical { "HTSS" } else { "TSS" };
+    out.push_str(&format!("FROST Keygen ({}) - Finalize\n\n", mode_name));
+
     let commitments_json = String::from_utf8(storage.read("all_commitments.json")?)?;
     let round1_outputs: Vec<Round1Output> = parse_space_separated_json(&commitments_json)?;
+
+    // Collect party ranks for HTSS metadata
+    let mut party_ranks = std::collections::BTreeMap::new();
+    for output in &round1_outputs {
+        party_ranks.insert(output.party_index, output.rank);
+    }
+
     let commitments: Vec<CommitmentData> = round1_outputs
-        .into_iter()
+        .iter()
         .map(|output| CommitmentData {
             index: output.party_index,
-            data: output.keygen_input,
+            data: output.keygen_input.clone(),
         })
         .collect();
     let commitments_input = Round1Input { commitments };
@@ -568,14 +610,43 @@ pub fn finalize_core(data: &str, storage: &dyn Storage) -> Result<CommandResult>
     storage.write("paired_secret_share.bin", &final_share_bytes)?;
     storage.write("shared_key.bin", &public_key_bytes)?;
 
+    // Save HTSS metadata
+    let htss_metadata = HtssMetadata {
+        my_index: state.my_index,
+        my_rank: state.my_rank,
+        threshold: state.threshold,
+        hierarchical: state.hierarchical,
+        party_ranks,
+    };
+    storage.write(
+        "htss_metadata.json",
+        serde_json::to_string_pretty(&htss_metadata)?.as_bytes(),
+    )?;
+
     out.push_str("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
     out.push_str("❄️  Key generation complete!\n");
     out.push_str("   Compare public keys with other tables to verify!\n\n");
 
+    if state.hierarchical {
+        out.push_str("🔐 HTSS Configuration:\n");
+        out.push_str(&format!("   Your rank: {}\n", state.my_rank));
+        out.push_str("   Party ranks: ");
+        let ranks_str: Vec<String> = htss_metadata
+            .party_ranks
+            .iter()
+            .map(|(idx, rank)| format!("P{}=r{}", idx, rank))
+            .collect();
+        out.push_str(&ranks_str.join(", "));
+        out.push_str("\n\n");
+        out.push_str("🧠 HTSS Signing Rules:\n");
+        out.push_str("   To sign, signers' ranks (sorted) must satisfy: rank[i] <= i\n");
+        out.push_str("   Example: [0,1,1] valid, [1,1,2] invalid (rank 1 > position 0)\n\n");
+    }
+
     // Create result with the keys
     let result = format!(
-        "Secret Share: {}\nPublic Key: {}",
-        final_share_hex, public_key_hex
+        "Secret Share: {}\nPublic Key: {}\nMode: {}",
+        final_share_hex, public_key_hex, mode_name
     );
 
     Ok(CommandResult {

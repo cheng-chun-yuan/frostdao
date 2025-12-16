@@ -10,9 +10,10 @@ pub struct CommandResult {
     pub result: String,
 }
 
-mod storage;
+mod birkhoff;
 mod keygen;
 mod signing;
+mod storage;
 
 #[derive(Parser)]
 #[command(name = "yushan")]
@@ -37,6 +38,14 @@ enum Commands {
         /// Your party index (1-based)
         #[arg(long)]
         my_index: u32,
+
+        /// Your HTSS rank (0 = highest authority, higher = lower authority)
+        #[arg(long, default_value = "0")]
+        rank: u32,
+
+        /// Enable hierarchical threshold secret sharing (HTSS)
+        #[arg(long, default_value = "false")]
+        hierarchical: bool,
     },
 
     /// Round 2 of keygen: Exchange shares
@@ -91,8 +100,10 @@ fn main() -> Result<()> {
             threshold,
             n_parties,
             my_index,
+            rank,
+            hierarchical,
         } => {
-            keygen::round1(threshold, n_parties, my_index)?;
+            keygen::round1(threshold, n_parties, my_index, rank, hierarchical)?;
         }
         Commands::KeygenRound2 { data } => {
             keygen::round2(&data)?;
