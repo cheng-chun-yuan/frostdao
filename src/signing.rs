@@ -595,7 +595,6 @@ pub fn combine_signatures(data: &str) -> Result<()> {
 }
 
 /// Verify a FROST signature
-#[allow(dead_code)]
 pub fn verify_signature_core(
     signature_hex: &str,
     public_key_hex: &str,
@@ -645,7 +644,6 @@ pub fn verify_signature_core(
     })
 }
 
-#[allow(dead_code)]
 pub fn verify_signature(signature_hex: &str, public_key_hex: &str, message: &str) -> Result<()> {
     let cmd_result = verify_signature_core(signature_hex, public_key_hex, message)?;
     println!("{}", cmd_result.output);

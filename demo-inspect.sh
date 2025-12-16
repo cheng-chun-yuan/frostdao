@@ -50,13 +50,36 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "  Secret Shares (each party has unique share)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-for party in ceo cfo coo manager; do
+echo "  Rank 0 (Top Level):"
+for party in ceo; do
     if [ -f "$BASE/$party/secret_share.txt" ]; then
         share=$(cat "$BASE/$party/secret_share.txt")
         party_upper=$(echo "$party" | tr '[:lower:]' '[:upper:]')
         share_start=$(echo "$share" | cut -c1-24)
         share_end=$(echo "$share" | tail -c 9)
-        echo "  ${party_upper}: ${share_start}...${share_end}"
+        echo "    ${party_upper}: ${share_start}...${share_end}"
+    fi
+done
+echo ""
+echo "  Rank 1 (C-Suite):"
+for party in cfo coo cto; do
+    if [ -f "$BASE/$party/secret_share.txt" ]; then
+        share=$(cat "$BASE/$party/secret_share.txt")
+        party_upper=$(echo "$party" | tr '[:lower:]' '[:upper:]')
+        share_start=$(echo "$share" | cut -c1-24)
+        share_end=$(echo "$share" | tail -c 9)
+        echo "    ${party_upper}: ${share_start}...${share_end}"
+    fi
+done
+echo ""
+echo "  Rank 2 (Staff):"
+for party in manager1 manager2 manager3 intern1 intern2 intern3; do
+    if [ -f "$BASE/$party/secret_share.txt" ]; then
+        share=$(cat "$BASE/$party/secret_share.txt")
+        party_upper=$(echo "$party" | tr '[:lower:]' '[:upper:]')
+        share_start=$(echo "$share" | cut -c1-24)
+        share_end=$(echo "$share" | tail -c 9)
+        echo "    ${party_upper}: ${share_start}...${share_end}"
     fi
 done
 echo ""
@@ -68,12 +91,12 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "  FROST Internal State Files"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-for party in ceo cfo coo manager; do
-    echo "  $BASE/$party/.frost_state/"
+for party in ceo cfo coo cto manager1 manager2 manager3 intern1 intern2 intern3; do
     if [ -d "$BASE/$party/.frost_state" ]; then
+        echo "  $party/.frost_state/"
         ls -la "$BASE/$party/.frost_state/" | tail -n +2 | awk '{print "    " $9 " (" $5 " bytes)"}'
+        echo ""
     fi
-    echo ""
 done
 
 #############################################

@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTSS Interactive Demo</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+            padding: 20px;
+        }
+        .container { max-width: 1000px; margin: 0 auto; }
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.2em;
+            background: linear-gradient(90deg, #f39c12, #e74c3c);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle { text-align: center; color: #888; margin-bottom: 20px; }
+        .card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .card h2 {
+            margin-bottom: 16px;
+            font-size: 1.2em;
+            color: #f39c12;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .card h2 .step-num {
+            background: linear-gradient(135deg, #f39c12, #e74c3c);
+            width: 28px; height: 28px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.9em; color: #fff;
+        }
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #f39c12, #e74c3c);
+            color: #fff;
+        }
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(243, 156, 18, 0.3);
+        }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-secondary {
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .btn-secondary:hover { background: rgba(255,255,255,0.15); }
+        .key-display {
+            background: #0d1117;
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.85em;
+            word-break: break-all;
+            margin: 16px 0;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .key-display label {
+            display: block; color: #888; font-size: 0.8em; margin-bottom: 8px;
+            font-family: -apple-system, sans-serif;
+        }
+        .key-display .value { color: #2ecc71; }
+        .log-box {
+            background: #0d1117;
+            border-radius: 8px;
+            padding: 16px;
+            font-family: monospace;
+            font-size: 0.8em;
+            max-height: 250px;
+            overflow-y: auto;
+            margin-top: 16px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+        .log-box .success { color: #2ecc71; }
+        .log-box .error { color: #e74c3c; }
+        .log-box .info { color: #3498db; }
+        .hierarchy {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin: 16px 0;
+        }
+        .rank-group {
+            background: rgba(0,0,0,0.2);
+            border-radius: 12px;
+            padding: 16px;
+        }
+        .rank-group h3 {
+            font-size: 0.85em; color: #888; margin-bottom: 12px;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .rank-group.rank-0 { border-left: 4px solid #e74c3c; }
+        .rank-group.rank-1 { border-left: 4px solid #f39c12; }
+        .rank-group.rank-2 { border-left: 4px solid #3498db; }
+        .party-btn {
+            display: block; width: 100%;
+            padding: 12px 16px; margin-bottom: 8px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            background: rgba(255,255,255,0.05);
+            color: #fff; cursor: pointer;
+            transition: all 0.2s;
+            font-size: 1em; text-align: left;
+        }
+        .party-btn:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
+        .party-btn.selected { background: rgba(46, 204, 113, 0.2); border-color: #2ecc71; }
+        .party-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .party-btn .rank-badge {
+            float: right;
+            background: rgba(255,255,255,0.1);
+            padding: 2px 10px; border-radius: 4px; font-size: 0.85em;
+        }
+        .selected-display {
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 16px; margin: 16px 0;
+            min-height: 60px;
+        }
+        .signer-chip {
+            display: inline-block;
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
+            padding: 8px 16px; border-radius: 20px;
+            margin: 4px; font-weight: 500;
+        }
+        .validation-box {
+            padding: 16px; border-radius: 10px; margin: 16px 0;
+        }
+        .validation-box.valid { background: rgba(46, 204, 113, 0.15); border: 2px solid #2ecc71; }
+        .validation-box.invalid { background: rgba(231, 76, 60, 0.15); border: 2px solid #e74c3c; }
+        .validation-box.pending { background: rgba(255,255,255,0.05); border: 2px dashed rgba(255,255,255,0.2); }
+        .validation-rule {
+            font-family: monospace;
+            background: rgba(0,0,0,0.3);
+            padding: 6px 12px; border-radius: 4px;
+            margin: 6px 0; display: inline-block;
+        }
+        .rule-check { padding: 4px 0; display: inline-block; margin-right: 16px; }
+        .rule-check.pass { color: #2ecc71; }
+        .rule-check.fail { color: #e74c3c; }
+        .quick-btns { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+        .quick-btn {
+            padding: 8px 16px;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 20px;
+            background: rgba(255,255,255,0.05);
+            color: #fff; cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.2s;
+        }
+        .quick-btn:hover { background: rgba(255,255,255,0.1); }
+        .quick-btn.valid { border-color: rgba(46, 204, 113, 0.5); }
+        .quick-btn.invalid { border-color: rgba(231, 76, 60, 0.5); }
+        .message-input {
+            width: 100%; padding: 14px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            background: rgba(0,0,0,0.2);
+            color: #fff; font-size: 1em;
+            margin-bottom: 16px;
+        }
+        .message-input:focus { outline: none; border-color: #f39c12; }
+        .result-box {
+            background: rgba(46, 204, 113, 0.1);
+            border: 2px solid #2ecc71;
+            border-radius: 12px;
+            padding: 20px; margin-top: 20px;
+        }
+        .result-box h3 { color: #2ecc71; margin-bottom: 16px; font-size: 1.3em; }
+        .result-box.error { background: rgba(231, 76, 60, 0.1); border-color: #e74c3c; }
+        .result-box.error h3 { color: #e74c3c; }
+        .info-grid {
+            display: grid; grid-template-columns: repeat(2, 1fr);
+            gap: 12px; margin-bottom: 16px;
+        }
+        .info-item {
+            background: rgba(0,0,0,0.2);
+            padding: 12px; border-radius: 8px;
+        }
+        .info-item label { display: block; color: #888; font-size: 0.8em; margin-bottom: 4px; }
+        .info-item value { display: block; font-family: monospace; word-break: break-all; }
+        .signature-display {
+            background: #0d1117;
+            padding: 16px; border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.85em;
+            word-break: break-all;
+            color: #2ecc71;
+            margin-top: 12px;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px; height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: #f39c12;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (max-width: 768px) {
+            .hierarchy { grid-template-columns: 1fr; }
+            .info-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>HTSS Interactive Demo</h1>
+        <p class="subtitle">Hierarchical Threshold Signature Scheme - Real Cryptography</p>
+
+        <!-- Step 1: DKG -->
+        <div class="card">
+            <h2><span class="step-num">1</span> Generate Keys (DKG)</h2>
+            <p style="color: #aaa; margin-bottom: 16px;">
+                Run Distributed Key Generation for 4 parties: CEO, CFO, COO, Manager
+            </p>
+            <button class="btn btn-primary" id="dkgBtn" onclick="runDKG()">
+                Run DKG for All Parties
+            </button>
+            <button class="btn btn-secondary" onclick="clearAll()">Clear All</button>
+
+            <div id="dkgResult" style="display: none;">
+                <div class="key-display">
+                    <label>Shared Public Key (Schnorr)</label>
+                    <div class="value" id="publicKeyDisplay"></div>
+                </div>
+                <div class="log-box" id="dkgLog"></div>
+            </div>
+        </div>
+
+        <!-- Step 2: Select Signers -->
+        <div class="card">
+            <h2><span class="step-num">2</span> Select 2 Signers</h2>
+
+            <p style="color: #aaa; margin-bottom: 12px;">Quick combinations:</p>
+            <div class="quick-btns">
+                <button class="quick-btn valid" onclick="selectCombo(['ceo','cfo'])">CEO+CFO [0,1]</button>
+                <button class="quick-btn valid" onclick="selectCombo(['ceo','coo'])">CEO+COO [0,1]</button>
+                <button class="quick-btn valid" onclick="selectCombo(['ceo','manager'])">CEO+Manager [0,2]</button>
+                <button class="quick-btn invalid" onclick="selectCombo(['cfo','coo'])">CFO+COO [1,1]</button>
+                <button class="quick-btn invalid" onclick="selectCombo(['cfo','manager'])">CFO+Manager [1,2]</button>
+            </div>
+
+            <div class="hierarchy">
+                <div class="rank-group rank-0">
+                    <h3>Rank 0 - Executive</h3>
+                    <button class="party-btn" data-party="ceo" data-rank="0" onclick="toggleSigner(this)" disabled>
+                        CEO <span class="rank-badge">Rank 0</span>
+                    </button>
+                </div>
+                <div class="rank-group rank-1">
+                    <h3>Rank 1 - C-Suite</h3>
+                    <button class="party-btn" data-party="cfo" data-rank="1" onclick="toggleSigner(this)" disabled>
+                        CFO <span class="rank-badge">Rank 1</span>
+                    </button>
+                    <button class="party-btn" data-party="coo" data-rank="1" onclick="toggleSigner(this)" disabled>
+                        COO <span class="rank-badge">Rank 1</span>
+                    </button>
+                </div>
+                <div class="rank-group rank-2">
+                    <h3>Rank 2 - Staff</h3>
+                    <button class="party-btn" data-party="manager" data-rank="2" onclick="toggleSigner(this)" disabled>
+                        Manager <span class="rank-badge">Rank 2</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="selected-display">
+                <strong>Selected:</strong>
+                <span id="selectedDisplay" style="color: #888;">Run DKG first...</span>
+            </div>
+
+            <div class="validation-box pending" id="validationBox">
+                <div id="validationContent">
+                    <strong>HTSS Rule:</strong> For sorted ranks, r<sub>i</sub> &le; i
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Sign -->
+        <div class="card">
+            <h2><span class="step-num">3</span> Sign Message</h2>
+            <input type="text" class="message-input" id="messageInput"
+                   placeholder="Enter message..." value="Transfer 10 BTC to vendor">
+            <button class="btn btn-primary" id="signBtn" onclick="signMessage()" disabled>
+                Create Threshold Signature
+            </button>
+            <button class="btn btn-secondary" onclick="clearSignature()">Clear</button>
+            <div id="signResult" style="display: none;"></div>
+        </div>
+
+        <!-- Step 4: Verify -->
+        <div class="card">
+            <h2><span class="step-num">4</span> Verify Signature</h2>
+            <p style="color: #aaa; margin-bottom: 16px;">
+                Paste any signature, public key, and message to verify independently.
+            </p>
+            <div style="margin-bottom: 12px;">
+                <label style="display:block;color:#888;font-size:0.85em;margin-bottom:4px;">Public Key</label>
+                <input type="text" class="message-input" id="verifyPubKey" placeholder="Public key hex...">
+            </div>
+            <div style="margin-bottom: 12px;">
+                <label style="display:block;color:#888;font-size:0.85em;margin-bottom:4px;">Message</label>
+                <input type="text" class="message-input" id="verifyMessage" placeholder="Original message...">
+            </div>
+            <div style="margin-bottom: 12px;">
+                <label style="display:block;color:#888;font-size:0.85em;margin-bottom:4px;">Signature</label>
+                <input type="text" class="message-input" id="verifySignature" placeholder="Signature hex (128 chars)...">
+            </div>
+            <button class="btn btn-primary" onclick="verifySignature()">
+                Verify Signature
+            </button>
+            <button class="btn btn-secondary" onclick="clearVerify()">Clear</button>
+            <div id="verifyResult" style="display: none;"></div>
+        </div>
+
+        <!-- Info -->
+        <div class="card">
+            <h2>How HTSS Works</h2>
+            <div style="color: #aaa; line-height: 1.8;">
+                <p><strong style="color: #f39c12;">The Rule:</strong> For sorted ranks [r<sub>0</sub>, r<sub>1</sub>], valid iff r<sub>i</sub> &le; i</p>
+                <ul style="margin: 12px 0 0 20px;">
+                    <li style="color: #2ecc71;">[0,1] or [0,2] - Valid (CEO at position 0)</li>
+                    <li style="color: #e74c3c;">[1,1] or [1,2] - Invalid (no rank-0 at position 0)</li>
+                </ul>
+                <p style="margin-top: 12px;"><strong style="color: #e74c3c;">CEO is cryptographically required!</strong> Without a rank-0 signer, the Birkhoff interpolation matrix is singular.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const THRESHOLD = 2;
+        const PARTIES = [
+            { id: 'ceo', rank: 0, name: 'CEO' },
+            { id: 'cfo', rank: 1, name: 'CFO' },
+            { id: 'coo', rank: 1, name: 'COO' },
+            { id: 'manager', rank: 2, name: 'Manager' }
+        ];
+
+        let selectedSigners = [];
+        let keysReady = false;
+        let publicKey = '';
+
+        async function runDKG() {
+            const btn = document.getElementById('dkgBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>Running DKG...';
+
+            document.getElementById('dkgResult').style.display = 'block';
+            document.getElementById('dkgLog').textContent = 'Starting DKG...\n';
+
+            try {
+                const resp = await fetch('/api/dkg');
+                const data = await resp.json();
+
+                if (data.success) {
+                    publicKey = data.public_key;
+                    keysReady = true;
+
+                    document.getElementById('publicKeyDisplay').textContent = publicKey;
+                    document.getElementById('dkgLog').textContent = data.logs.join('\n');
+
+                    enableSignerSelection();
+                } else {
+                    document.getElementById('dkgLog').textContent = 'Error: ' + data.error;
+                }
+            } catch (e) {
+                document.getElementById('dkgLog').textContent = 'Error: ' + e.message + '\n\nMake sure demo-server.py is running!';
+            }
+
+            btn.disabled = false;
+            btn.textContent = 'Run DKG for All Parties';
+        }
+
+        function enableSignerSelection() {
+            document.querySelectorAll('.party-btn').forEach(btn => btn.disabled = false);
+            document.getElementById('selectedDisplay').innerHTML = '<span style="color:#888">Click to select signers...</span>';
+        }
+
+        function clearAll() {
+            keysReady = false;
+            publicKey = '';
+            selectedSigners = [];
+
+            document.querySelectorAll('.party-btn').forEach(btn => {
+                btn.classList.remove('selected');
+                btn.disabled = true;
+            });
+            document.getElementById('publicKeyDisplay').textContent = '';
+            document.getElementById('dkgResult').style.display = 'none';
+            document.getElementById('signResult').style.display = 'none';
+            document.getElementById('selectedDisplay').innerHTML = '<span style="color:#888">Run DKG first...</span>';
+            updateValidation();
+        }
+
+        function toggleSigner(btn) {
+            if (!keysReady) return;
+            const party = btn.dataset.party;
+
+            if (btn.classList.contains('selected')) {
+                btn.classList.remove('selected');
+                selectedSigners = selectedSigners.filter(s => s !== party);
+            } else {
+                if (selectedSigners.length >= THRESHOLD) {
+                    // Remove oldest selection
+                    const oldest = selectedSigners.shift();
+                    document.querySelector(`[data-party="${oldest}"]`).classList.remove('selected');
+                }
+                btn.classList.add('selected');
+                selectedSigners.push(party);
+            }
+            updateUI();
+        }
+
+        function selectCombo(parties) {
+            if (!keysReady) {
+                alert('Run DKG first!');
+                return;
+            }
+            document.querySelectorAll('.party-btn').forEach(btn => btn.classList.remove('selected'));
+            selectedSigners = [];
+            parties.forEach(p => {
+                const btn = document.querySelector(`[data-party="${p}"]`);
+                if (btn) {
+                    btn.classList.add('selected');
+                    selectedSigners.push(p);
+                }
+            });
+            updateUI();
+        }
+
+        function updateUI() {
+            const display = document.getElementById('selectedDisplay');
+            if (selectedSigners.length === 0) {
+                display.innerHTML = '<span style="color:#888">Click to select signers...</span>';
+            } else {
+                display.innerHTML = selectedSigners.map(id => {
+                    const p = PARTIES.find(x => x.id === id);
+                    return `<span class="signer-chip">${p.name} (r${p.rank})</span>`;
+                }).join('');
+            }
+            updateValidation();
+        }
+
+        function updateValidation() {
+            const box = document.getElementById('validationBox');
+            const content = document.getElementById('validationContent');
+            const signBtn = document.getElementById('signBtn');
+
+            if (selectedSigners.length < THRESHOLD) {
+                box.className = 'validation-box pending';
+                content.innerHTML = `<strong>Select ${THRESHOLD - selectedSigners.length} more signer(s)</strong>`;
+                signBtn.disabled = !keysReady;
+                return;
+            }
+
+            const ranks = selectedSigners.map(id => PARTIES.find(p => p.id === id).rank).sort((a,b) => a-b);
+            let valid = true;
+            let checks = [];
+
+            for (let i = 0; i < ranks.length; i++) {
+                const pass = ranks[i] <= i;
+                checks.push({ pos: i, rank: ranks[i], pass });
+                if (!pass) valid = false;
+            }
+
+            box.className = valid ? 'validation-box valid' : 'validation-box invalid';
+            signBtn.disabled = !keysReady;  // Enable button to let user try and see error
+
+            content.innerHTML = `
+                <strong>${valid ? '&#10003; VALID' : '&#10007; INVALID'}</strong>
+                <span class="validation-rule">[${ranks.join(',')}]</span><br>
+                ${checks.map(c => `<span class="rule-check ${c.pass?'pass':'fail'}">
+                    ${c.pass?'&#10003;':'&#10007;'} r<sub>${c.rank}</sub> ${c.pass?'&le;':'&gt;'} ${c.pos}
+                </span>`).join('')}
+            `;
+        }
+
+        async function signMessage() {
+            if (!keysReady) return;
+            if (selectedSigners.length < THRESHOLD) {
+                alert(`Please select ${THRESHOLD} signers first`);
+                return;
+            }
+
+            const message = document.getElementById('messageInput').value;
+            const btn = document.getElementById('signBtn');
+            const resultDiv = document.getElementById('signResult');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>Signing...';
+
+            try {
+                const signers = selectedSigners.join(',');
+                const resp = await fetch(`/api/sign?signers=${signers}&message=${encodeURIComponent(message)}`);
+                const data = await resp.json();
+
+                if (data.success && data.htss_rejected) {
+                    // HTSS rejected but we have a dummy signature to verify
+                    resultDiv.innerHTML = `
+                        <div class="result-box" style="background: rgba(243, 156, 18, 0.1); border-color: #f39c12;">
+                            <h3 style="color:#f39c12">&#9888; Signature Created (INVALID)</h3>
+                            <p style="color:#f39c12;margin-bottom:16px">
+                                HTSS validation failed! This signature is mathematically invalid.<br>
+                                Click "Copy to Verify Section" to see verification fail.
+                            </p>
+                            <div class="info-grid">
+                                <div class="info-item"><label>Message</label><value>"${data.message}"</value></div>
+                                <div class="info-item"><label>Signers</label><value>${data.signers.join(' + ')}</value></div>
+                                <div class="info-item"><label>Ranks (sorted)</label><value>[${data.ranks.join(', ')}]</value></div>
+                                <div class="info-item"><label>Status</label><value style="color:#e74c3c">HTSS REJECTED</value></div>
+                            </div>
+                            <div class="info-item" style="margin-bottom:12px">
+                                <label>Public Key (x-only)</label>
+                                <value style="color:#888">${data.public_key}</value>
+                            </div>
+                            <div class="info-item">
+                                <label>Signature (INVALID - dummy bytes)</label>
+                                <div class="signature-display" style="color:#e74c3c">${data.signature}</div>
+                            </div>
+                            <button class="btn btn-secondary" style="margin-top:16px" onclick="copyToVerify('${data.public_key}', '${data.message}', '${data.signature}')">
+                                Copy to Verify Section (will fail!)
+                            </button>
+                            <div class="log-box" style="margin-top:16px;max-height:200px">${data.logs.join('\n')}</div>
+                        </div>
+                    `;
+                    resultDiv.style.display = 'block';
+                } else if (data.success && data.valid) {
+                    resultDiv.innerHTML = `
+                        <div class="result-box">
+                            <h3>&#10003; Signature Created!</h3>
+                            <div class="info-grid">
+                                <div class="info-item"><label>Message</label><value>"${data.message}"</value></div>
+                                <div class="info-item"><label>Signers</label><value>${data.signers.join(' + ')}</value></div>
+                                <div class="info-item"><label>Ranks (sorted)</label><value>[${data.ranks.join(', ')}]</value></div>
+                                <div class="info-item"><label>Signature Type</label><value>Schnorr (BIP-340)</value></div>
+                            </div>
+                            <div class="info-item" style="margin-bottom:12px">
+                                <label>Public Key (x-only, 32 bytes) - for verification</label>
+                                <value style="color:#3498db">${data.public_key}</value>
+                            </div>
+                            <div class="info-item" style="margin-bottom:12px">
+                                <label>Public Key (compressed, 33 bytes)</label>
+                                <value style="color:#888">${data.public_key_compressed || ''}</value>
+                            </div>
+                            <div class="info-item">
+                                <label>Signature (64 bytes)</label>
+                                <div class="signature-display">${data.signature}</div>
+                            </div>
+                            <button class="btn btn-secondary" style="margin-top:16px" onclick="copyToVerify('${data.public_key}', '${data.message}', '${data.signature}')">
+                                Copy to Verify Section
+                            </button>
+                            <div class="log-box" style="margin-top:16px;max-height:150px">${data.logs.join('\n')}</div>
+                        </div>
+                    `;
+                    resultDiv.style.display = 'block';
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result-box error">
+                            <h3>&#10007; Signing Rejected</h3>
+                            <div class="info-grid">
+                                <div class="info-item"><label>Signers</label><value>${data.signers ? data.signers.join(' + ') : 'N/A'}</value></div>
+                                <div class="info-item"><label>Ranks (sorted)</label><value>[${data.ranks ? data.ranks.join(', ') : 'N/A'}]</value></div>
+                            </div>
+                            <div class="info-item">
+                                <label>Error</label>
+                                <value style="color:#e74c3c">${data.error}</value>
+                            </div>
+                            <p style="margin-top:16px;color:#aaa">
+                                The HTSS rule requires rank[i] &le; i for sorted ranks.<br>
+                                Without a rank-0 signer (CEO) at position 0, signing is mathematically impossible.
+                            </p>
+                            <div class="log-box" style="margin-top:16px;max-height:150px">${data.logs ? data.logs.join('\n') : ''}</div>
+                        </div>
+                    `;
+                }
+                resultDiv.style.display = 'block';
+
+            } catch (e) {
+                resultDiv.innerHTML = `
+                    <div class="result-box error">
+                        <h3>&#10007; Error</h3>
+                        <p>${e.message}</p>
+                        <p style="margin-top:12px;color:#888">Make sure demo-server.py is running!</p>
+                    </div>
+                `;
+                resultDiv.style.display = 'block';
+            }
+
+            btn.disabled = false;
+            btn.textContent = 'Create Threshold Signature';
+            updateValidation();
+        }
+
+        function clearSignature() {
+            document.getElementById('signResult').style.display = 'none';
+        }
+
+        async function verifySignature() {
+            const pubKey = document.getElementById('verifyPubKey').value.trim();
+            const message = document.getElementById('verifyMessage').value.trim();
+            const signature = document.getElementById('verifySignature').value.trim();
+            const resultDiv = document.getElementById('verifyResult');
+
+            if (!pubKey || !message || !signature) {
+                alert('Please fill in all fields');
+                return;
+            }
+
+            try {
+                const resp = await fetch(`/api/verify?signature=${encodeURIComponent(signature)}&public_key=${encodeURIComponent(pubKey)}&message=${encodeURIComponent(message)}`);
+                const data = await resp.json();
+
+                if (data.valid) {
+                    resultDiv.innerHTML = `
+                        <div class="result-box" style="margin-top:16px">
+                            <h3>&#10003; SIGNATURE VALID!</h3>
+                            <p style="color:#aaa;margin-top:12px">
+                                The signature is cryptographically valid.<br>
+                                It was created by threshold parties holding the private key.
+                            </p>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result-box error" style="margin-top:16px">
+                            <h3>&#10007; SIGNATURE INVALID</h3>
+                            <p style="color:#aaa;margin-top:12px">
+                                Verification failed. The signature, public key, or message is incorrect.
+                            </p>
+                        </div>
+                    `;
+                }
+                resultDiv.style.display = 'block';
+            } catch (e) {
+                resultDiv.innerHTML = `
+                    <div class="result-box error" style="margin-top:16px">
+                        <h3>&#10007; Error</h3>
+                        <p>${e.message}</p>
+                    </div>
+                `;
+                resultDiv.style.display = 'block';
+            }
+        }
+
+        function clearVerify() {
+            document.getElementById('verifyPubKey').value = '';
+            document.getElementById('verifyMessage').value = '';
+            document.getElementById('verifySignature').value = '';
+            document.getElementById('verifyResult').style.display = 'none';
+        }
+
+        function copyToVerify(pubKey, message, signature) {
+            document.getElementById('verifyPubKey').value = pubKey;
+            document.getElementById('verifyMessage').value = message;
+            document.getElementById('verifySignature').value = signature;
+            document.getElementById('verifyResult').style.display = 'none';
+            // Scroll to verify section
+            document.getElementById('verifyPubKey').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Check server status on load
+        fetch('/api/status')
+            .then(r => r.json())
+            .then(data => {
+                if (data.dkg_done) {
+                    publicKey = data.public_key;
+                    keysReady = true;
+                    document.getElementById('dkgResult').style.display = 'block';
+                    document.getElementById('publicKeyDisplay').textContent = publicKey;
+                    document.getElementById('dkgLog').textContent = 'Keys loaded from previous session.';
+                    enableSignerSelection();
+                }
+            })
+            .catch(() => {
+                console.log('Server not running - start demo-server.py');
+            });
+    </script>
+</body>
+</html>

@@ -90,6 +90,21 @@ enum Commands {
         #[arg(long)]
         data: String,
     },
+
+    /// Verify a Schnorr signature
+    Verify {
+        /// Signature hex (64 bytes / 128 hex chars)
+        #[arg(long)]
+        signature: String,
+
+        /// Public key hex
+        #[arg(long)]
+        public_key: String,
+
+        /// Message that was signed
+        #[arg(long)]
+        message: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -123,6 +138,13 @@ fn main() -> Result<()> {
         }
         Commands::Combine { data } => {
             signing::combine_signatures(&data)?;
+        }
+        Commands::Verify {
+            signature,
+            public_key,
+            message,
+        } => {
+            signing::verify_signature(&signature, &public_key, &message)?;
         }
     }
 

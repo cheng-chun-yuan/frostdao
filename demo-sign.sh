@@ -23,7 +23,13 @@ get_index() {
         ceo) echo 1 ;;
         cfo) echo 2 ;;
         coo) echo 3 ;;
-        manager) echo 4 ;;
+        cto) echo 4 ;;
+        manager1) echo 5 ;;
+        manager2) echo 6 ;;
+        manager3) echo 7 ;;
+        intern1) echo 8 ;;
+        intern2) echo 9 ;;
+        intern3) echo 10 ;;
         *) echo 0 ;;
     esac
 }
@@ -34,7 +40,13 @@ get_rank() {
         ceo) echo 0 ;;
         cfo) echo 1 ;;
         coo) echo 1 ;;
-        manager) echo 2 ;;
+        cto) echo 1 ;;
+        manager1) echo 2 ;;
+        manager2) echo 2 ;;
+        manager3) echo 2 ;;
+        intern1) echo 2 ;;
+        intern2) echo 2 ;;
+        intern3) echo 2 ;;
         *) echo -1 ;;
     esac
 }
@@ -50,12 +62,16 @@ while [ $# -gt 0 ]; do
         --help|-h)
             echo "Usage: $0 [--message \"msg\"] signer1 signer2 signer3"
             echo ""
-            echo "Signers: ceo, cfo, coo, manager"
+            echo "Signers:"
+            echo "  Rank 0: ceo"
+            echo "  Rank 1: cfo, coo, cto"
+            echo "  Rank 2: manager1, manager2, manager3, intern1, intern2, intern3"
             echo ""
             echo "Examples:"
             echo "  $0 ceo cfo coo              # Valid: ranks [0,1,1]"
-            echo "  $0 ceo cfo manager          # Valid: ranks [0,1,2]"
-            echo "  $0 cfo coo manager          # Invalid: ranks [1,1,2]"
+            echo "  $0 ceo cto manager1         # Valid: ranks [0,1,2]"
+            echo "  $0 cfo coo cto              # Invalid: ranks [1,1,1] - no CEO!"
+            echo "  $0 manager1 intern1 intern2 # Invalid: ranks [2,2,2]"
             echo "  $0 -m \"Pay invoice\" ceo cfo coo"
             exit 0
             ;;
@@ -92,21 +108,27 @@ echo ""
 if [ -z "$SIGNERS" ]; then
     echo "Select signers (need 3 for threshold):"
     echo ""
-    echo "  Valid combinations:"
-    echo "    1) CEO + CFO + COO     [0,1,1] - Executive approval"
-    echo "    2) CEO + CFO + Manager [0,1,2] - Mixed approval"
-    echo "    3) CEO + COO + Manager [0,1,2] - Mixed approval"
+    echo "  Valid combinations (CEO required at position 0):"
+    echo "    1) CEO + CFO + COO       [0,1,1] - C-Suite only"
+    echo "    2) CEO + CFO + CTO       [0,1,1] - C-Suite only"
+    echo "    3) CEO + CTO + Manager1  [0,1,2] - Mixed levels"
+    echo "    4) CEO + Manager1 + Intern1 [0,2,2] - With junior staff"
     echo ""
-    echo "  Invalid combinations:"
-    echo "    4) CFO + COO + Manager [1,1,2] - No CEO (will fail)"
+    echo "  Invalid combinations (will fail):"
+    echo "    5) CFO + COO + CTO       [1,1,1] - No CEO!"
+    echo "    6) CTO + Manager1 + Manager2 [1,2,2] - No CEO!"
+    echo "    7) Manager1 + Intern1 + Intern2 [2,2,2] - All rank 2!"
     echo ""
-    read -p "Enter choice (1-4): " choice
+    read -p "Enter choice (1-7): " choice
 
     case $choice in
         1) SIGNERS="ceo cfo coo" ;;
-        2) SIGNERS="ceo cfo manager" ;;
-        3) SIGNERS="ceo coo manager" ;;
-        4) SIGNERS="cfo coo manager" ;;
+        2) SIGNERS="ceo cfo cto" ;;
+        3) SIGNERS="ceo cto manager1" ;;
+        4) SIGNERS="ceo manager1 intern1" ;;
+        5) SIGNERS="cfo coo cto" ;;
+        6) SIGNERS="cto manager1 manager2" ;;
+        7) SIGNERS="manager1 intern1 intern2" ;;
         *) echo "Invalid choice"; exit 1 ;;
     esac
 fi
@@ -120,7 +142,8 @@ for signer in $SIGNERS; do
     rank=$(get_rank "$signer_lower")
 
     if [ "$idx" = "0" ]; then
-        echo "Error: Unknown signer '$signer'. Valid: ceo, cfo, coo, manager"
+        echo "Error: Unknown signer '$signer'."
+        echo "Valid signers: ceo, cfo, coo, cto, manager1, manager2, manager3, intern1, intern2, intern3"
         exit 1
     fi
 
