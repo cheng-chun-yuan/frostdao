@@ -234,13 +234,13 @@
 <body>
     <div class="container">
         <h1>HTSS Interactive Demo</h1>
-        <p class="subtitle">Hierarchical Threshold Signature Scheme - Real Cryptography</p>
+        <p class="subtitle">Hierarchical Threshold Signature Scheme - 3-of-5 with Ranks</p>
 
         <!-- Step 1: DKG -->
         <div class="card">
             <h2><span class="step-num">1</span> Generate Keys (DKG)</h2>
             <p style="color: #aaa; margin-bottom: 16px;">
-                Run Distributed Key Generation for 4 parties: CEO, CFO, COO, Manager
+                Run Distributed Key Generation for 5 parties with ranks [0,1,1,2,2]
             </p>
             <button class="btn btn-primary" id="dkgBtn" onclick="runDKG()">
                 Run DKG for All Parties
@@ -258,15 +258,15 @@
 
         <!-- Step 2: Select Signers -->
         <div class="card">
-            <h2><span class="step-num">2</span> Select 2 Signers</h2>
+            <h2><span class="step-num">2</span> Select 3 Signers</h2>
 
             <p style="color: #aaa; margin-bottom: 12px;">Quick combinations:</p>
             <div class="quick-btns">
-                <button class="quick-btn valid" onclick="selectCombo(['ceo','cfo'])">CEO+CFO [0,1]</button>
-                <button class="quick-btn valid" onclick="selectCombo(['ceo','coo'])">CEO+COO [0,1]</button>
-                <button class="quick-btn valid" onclick="selectCombo(['ceo','manager'])">CEO+Manager [0,2]</button>
-                <button class="quick-btn invalid" onclick="selectCombo(['cfo','coo'])">CFO+COO [1,1]</button>
-                <button class="quick-btn invalid" onclick="selectCombo(['cfo','manager'])">CFO+Manager [1,2]</button>
+                <button class="quick-btn valid" onclick="selectCombo(['ceo','cfo','coo'])">CEO+CFO+COO [0,1,1]</button>
+                <button class="quick-btn valid" onclick="selectCombo(['ceo','cfo','director'])">CEO+CFO+Dir [0,1,2]</button>
+                <button class="quick-btn valid" onclick="selectCombo(['ceo','coo','manager'])">CEO+COO+Mgr [0,1,2]</button>
+                <button class="quick-btn invalid" onclick="selectCombo(['cfo','coo','director'])">CFO+COO+Dir [1,1,2]</button>
+                <button class="quick-btn invalid" onclick="selectCombo(['cfo','director','manager'])">CFO+Dir+Mgr [1,2,2]</button>
             </div>
 
             <div class="hierarchy">
@@ -286,7 +286,10 @@
                     </button>
                 </div>
                 <div class="rank-group rank-2">
-                    <h3>Rank 2 - Staff</h3>
+                    <h3>Rank 2 - Management</h3>
+                    <button class="party-btn" data-party="director" data-rank="2" onclick="toggleSigner(this)" disabled>
+                        Director <span class="rank-badge">Rank 2</span>
+                    </button>
                     <button class="party-btn" data-party="manager" data-rank="2" onclick="toggleSigner(this)" disabled>
                         Manager <span class="rank-badge">Rank 2</span>
                     </button>
@@ -346,22 +349,24 @@
         <div class="card">
             <h2>How HTSS Works</h2>
             <div style="color: #aaa; line-height: 1.8;">
-                <p><strong style="color: #f39c12;">The Rule:</strong> For sorted ranks [r<sub>0</sub>, r<sub>1</sub>], valid iff r<sub>i</sub> &le; i</p>
+                <p><strong style="color: #f39c12;">The Rule:</strong> For sorted ranks [r<sub>0</sub>, r<sub>1</sub>, r<sub>2</sub>], valid iff r<sub>i</sub> &le; i for all i</p>
                 <ul style="margin: 12px 0 0 20px;">
-                    <li style="color: #2ecc71;">[0,1] or [0,2] - Valid (CEO at position 0)</li>
-                    <li style="color: #e74c3c;">[1,1] or [1,2] - Invalid (no rank-0 at position 0)</li>
+                    <li style="color: #2ecc71;">[0,1,1] or [0,1,2] - Valid (CEO at position 0)</li>
+                    <li style="color: #e74c3c;">[1,1,2] or [1,2,2] - Invalid (no rank-0 at position 0)</li>
                 </ul>
                 <p style="margin-top: 12px;"><strong style="color: #e74c3c;">CEO is cryptographically required!</strong> Without a rank-0 signer, the Birkhoff interpolation matrix is singular.</p>
+                <p style="margin-top: 8px;"><strong style="color: #3498db;">Threshold: 3-of-5</strong> with ranks [0, 1, 1, 2, 2]</p>
             </div>
         </div>
     </div>
 
     <script>
-        const THRESHOLD = 2;
+        const THRESHOLD = 3;
         const PARTIES = [
             { id: 'ceo', rank: 0, name: 'CEO' },
             { id: 'cfo', rank: 1, name: 'CFO' },
             { id: 'coo', rank: 1, name: 'COO' },
+            { id: 'director', rank: 2, name: 'Director' },
             { id: 'manager', rank: 2, name: 'Manager' }
         ];
 

@@ -15,15 +15,16 @@ SCRIPT_DIR = Path(__file__).parent.absolute()
 YUSHAN = SCRIPT_DIR / "target" / "release" / "yushan"
 BASE = Path("/tmp/htss_interactive")
 
-# Party configuration
+# Party configuration - ranks 0,1,1,2,2
 PARTIES = [
     {"id": "ceo", "index": 1, "rank": 0, "name": "CEO"},
     {"id": "cfo", "index": 2, "rank": 1, "name": "CFO"},
     {"id": "coo", "index": 3, "rank": 1, "name": "COO"},
-    {"id": "manager", "index": 4, "rank": 2, "name": "Manager"},
+    {"id": "director", "index": 4, "rank": 2, "name": "Director"},
+    {"id": "manager", "index": 5, "rank": 2, "name": "Manager"},
 ]
-THRESHOLD = 2
-N_PARTIES = 4
+THRESHOLD = 3
+N_PARTIES = 5
 
 # State
 state = {
