@@ -1,8 +1,24 @@
-# Yushan - FROST TSS/HTSS Workshop
+# FrostDAO - Hierarchical Threshold Signatures for Organizations
 
-A hands-on threshold signature workshop using schnorr_fun's FROST with support for both **TSS** (Threshold Secret Sharing) and **HTSS** (Hierarchical Threshold Secret Sharing).
+> **🏆 Winner at [BTC++ Taipei 2024](https://devpost.com/software/frostdao)**
+> - **1st Place Overall**
+> - **Best Use of Cryptography**
+
+A production-grade FROST implementation with **Hierarchical Threshold Secret Sharing (HTSS)** - enabling organizational hierarchies for Bitcoin multisig.
 
 **No single party ever knows the full secret key.**
+
+## Overview
+
+FrostDAO extends classical threshold signatures by introducing **ranks** (authority levels) to each share. This enables real-world organizational hierarchies where higher-ranked members are required for signing, while still maintaining the security guarantees of threshold cryptography.
+
+### Key Features
+
+- **Real Cryptography**: Built on `schnorr_fun` and `secp256kfun` - production-grade FROST implementation
+- **Hierarchical Access Control**: Rank-based signing policies (CEO must approve, managers cannot act alone)
+- **Birkhoff Interpolation**: Advanced mathematical foundation for hierarchical secret sharing
+- **CLI & WASM Support**: Use from command line or integrate into web applications
+- **No Trusted Dealer**: Distributed key generation - no single point of failure
 
 ## What's New: Hierarchical TSS (HTSS)
 
@@ -275,6 +291,16 @@ This is an **educational implementation** for learning threshold signatures and 
 - [Hierarchical Threshold Secret Sharing](https://www.cs.umd.edu/~gasMDa/htss.pdf)
 - [Alice HTSS Implementation](https://github.com/getamis/alice/tree/master/crypto/tss/eddsa/frost)
 - [schnorr_fun Library](https://github.com/LLFourn/secp256kfun)
+
+## Acknowledgments
+
+This project would not have been possible without the incredible work of:
+
+- **[Frostsnap Team](https://frostsnap.com/)** - For building the excellent `schnorr_fun` and `secp256kfun` libraries that power the cryptographic foundation of this project. Their production-grade FROST implementation made hierarchical threshold signatures accessible.
+
+- **[Nick Farrow](https://github.com/nickfarrow)** - For the original [Yushan](https://github.com/nickfarrow/yushan) workshop codebase that served as the foundation for this project. His educational approach to threshold signatures was invaluable.
+
+Thank you for pushing Bitcoin cryptography forward! 🙏
 
 ## License
 
