@@ -1,6 +1,6 @@
 # FrostDAO - Hierarchical Threshold Signatures for Organizations
 ## Fork from -> (https://github.com/nickfarrow/yushan)
-> **🏆 Winner at [BTC++ Taipei 2024](https://devpost.com/software/frostdao)**
+> **🏆 Winner at [BTC++ Taipei 2025](https://devpost.com/software/frostdao)**
 > - **1st Place Overall**
 > - **Best Use of Cryptography**
 
