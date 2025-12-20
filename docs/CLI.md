@@ -1,0 +1,384 @@
+# FrostDAO CLI Reference
+
+Complete reference for all CLI commands.
+
+## Installation
+
+```bash
+cargo install --path .
+frostdao --help
+```
+
+---
+
+## Key Management
+
+### btc-keygen
+
+Generate a new Bitcoin Schnorr keypair (BIP340).
+
+```bash
+frostdao btc-keygen
+```
+
+**Output:**
+- Public key (32-byte x-only, hex)
+- Keypair saved to `.frost_state/bitcoin_keypair.json`
+
+---
+
+### btc-import-key
+
+Import an existing secret key.
+
+```bash
+frostdao btc-import-key --secret <hex>
+```
+
+**Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `--secret` | 32-byte secret key in hex (64 chars) |
+
+---
+
+### btc-pubkey
+
+Display the stored public key.
+
+```bash
+frostdao btc-pubkey
+```
+
+---
+
+## Address Commands
+
+### btc-address
+
+Get mainnet Taproot address (bc1p...).
+
+```bash
+frostdao btc-address
+```
+
+---
+
+### btc-address-testnet
+
+Get testnet Taproot address (tb1p...).
+
+```bash
+frostdao btc-address-testnet
+```
+
+---
+
+### btc-address-signet
+
+Get signet Taproot address (tb1p...).
+
+```bash
+frostdao btc-address-signet
+```
+
+---
+
+### dkg-address
+
+Get the DKG group Taproot address (testnet).
+
+```bash
+frostdao dkg-address
+```
+
+**Requires:** Completed DKG (`keygen-finalize`)
+
+---
+
+### dkg-balance
+
+Check DKG group wallet balance on testnet.
+
+```bash
+frostdao dkg-balance
+```
+
+**Output:**
+- DKG group address
+- Total/Confirmed balance
+- UTXO details
+- Note about threshold signature requirements
+
+**Requires:** Completed DKG (`keygen-finalize`)
+
+---
+
+## Transaction Commands
+
+### btc-balance
+
+Check testnet balance and UTXOs (single-signer wallet).
+
+```bash
+frostdao btc-balance
+```
+
+**Output:**
+- Network
+- Address
+- Total/Confirmed balance
+- UTXO details
+
+---
+
+### btc-send
+
+Send Bitcoin on testnet.
+
+```bash
+frostdao btc-send --to <address> --amount <sats> [--fee-rate <sats/vbyte>]
+```
+
+**Parameters:**
+| Parameter | Description | Required |
+|-----------|-------------|----------|
+| `--to` | Recipient Taproot address | Yes |
+| `--amount` | Amount in satoshis | Yes |
+| `--fee-rate` | Fee rate (sats/vbyte) | No (default: recommended) |
+
+**Example:**
+```bash
+frostdao btc-send \
+  --to tb1p3e44guscrytuum9q36tlx5kez9zvdheuwxlq9k9y4kud3hyckhtq63fz34 \
+  --amount 10000 \
+  --fee-rate 2
+```
+
+---
+
+### btc-send-signet
+
+Send Bitcoin on signet.
+
+```bash
+frostdao btc-send-signet --to <address> --amount <sats> [--fee-rate <sats/vbyte>]
+```
+
+---
+
+## Signing Commands
+
+### btc-sign
+
+Sign a UTF-8 message with BIP340 Schnorr.
+
+```bash
+frostdao btc-sign --message "Hello, Bitcoin!"
+```
+
+---
+
+### btc-sign-hex
+
+Sign a hex-encoded message.
+
+```bash
+frostdao btc-sign-hex --message <hex_data>
+```
+
+---
+
+### btc-sign-taproot
+
+Sign a Taproot sighash (32 bytes).
+
+```bash
+frostdao btc-sign-taproot --sighash <hex>
+```
+
+---
+
+### btc-verify
+
+Verify a BIP340 signature.
+
+```bash
+frostdao btc-verify \
+  --signature <64_byte_hex> \
+  --public-key <32_byte_hex> \
+  --message "Hello, Bitcoin!"
+```
+
+---
+
+### btc-verify-hex
+
+Verify with hex-encoded message.
+
+```bash
+frostdao btc-verify-hex \
+  --signature <hex> \
+  --public-key <hex> \
+  --message <hex>
+```
+
+---
+
+## DKG Commands
+
+### keygen-round1
+
+Generate polynomial and commitments for DKG.
+
+```bash
+frostdao keygen-round1 \
+  --threshold <t> \
+  --n-parties <n> \
+  --my-index <i> \
+  [--rank <r>] \
+  [--hierarchical]
+```
+
+**Parameters:**
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `--threshold` | Minimum signers required | Required |
+| `--n-parties` | Total number of parties | Required |
+| `--my-index` | Your party index (1-based) | Required |
+| `--rank` | HTSS rank (0=highest) | 0 |
+| `--hierarchical` | Enable HTSS mode | false |
+
+**Examples:**
+```bash
+# Standard TSS (2-of-3)
+frostdao keygen-round1 --threshold 2 --n-parties 3 --my-index 1
+
+# HTSS (3-of-4 with ranks)
+frostdao keygen-round1 --threshold 3 --n-parties 4 --my-index 1 --rank 0 --hierarchical
+```
+
+---
+
+### keygen-round2
+
+Exchange encrypted shares.
+
+```bash
+frostdao keygen-round2 --data '<json>'
+```
+
+**Input Format:**
+```json
+{
+  "commitments": [
+    {"index": 1, "commitment": "...", "rank": 0},
+    {"index": 2, "commitment": "...", "rank": 0}
+  ]
+}
+```
+
+---
+
+### keygen-finalize
+
+Finalize DKG and derive keys.
+
+```bash
+frostdao keygen-finalize --data '<json>'
+```
+
+**Output:**
+- Group public key
+- Your secret share
+- HTSS metadata (if hierarchical)
+
+---
+
+## Threshold Signing Commands
+
+### generate-nonce
+
+Generate a signing nonce for a session.
+
+```bash
+frostdao generate-nonce --session "tx-001"
+```
+
+**Important:** Never reuse session IDs!
+
+---
+
+### sign
+
+Create a signature share.
+
+```bash
+frostdao sign \
+  --session "tx-001" \
+  --message "data to sign" \
+  --data '<nonces_json>'
+```
+
+**Input Format:**
+```json
+{
+  "nonces": [
+    {"index": 1, "nonce": "..."},
+    {"index": 2, "nonce": "..."}
+  ],
+  "public_key": "..."
+}
+```
+
+---
+
+### combine
+
+Combine signature shares into final signature.
+
+```bash
+frostdao combine --data '<signature_shares_json>'
+```
+
+---
+
+### verify
+
+Verify a threshold signature.
+
+```bash
+frostdao verify \
+  --signature <hex> \
+  --public-key <hex> \
+  --message "signed message"
+```
+
+---
+
+## Storage Locations
+
+| File | Location | Description |
+|------|----------|-------------|
+| Single keypair | `.frost_state/bitcoin_keypair.json` | BIP340 keypair |
+| DKG public key | `.frost_state/shared_key.bin` | Group public key |
+| DKG secret share | `.frost_state/paired_secret_share.bin` | Your share |
+| HTSS metadata | `.frost_state/htss_metadata.json` | Ranks, threshold |
+| Round 1 state | `.frost_state/round1_state.json` | DKG intermediate |
+
+---
+
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Error (see message) |
+
+---
+
+## Environment
+
+- Keys stored in `.frost_state/` (gitignored)
+- Network API: mempool.space
+- Testnet faucet: https://bitcoinfaucet.uo1.net/

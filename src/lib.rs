@@ -1,6 +1,7 @@
 use wasm_bindgen::prelude::*;
 
 pub mod birkhoff;
+pub mod bitcoin_schnorr;
 pub mod keygen;
 pub mod signing;
 pub mod storage;

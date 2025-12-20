@@ -1,2 +1,25 @@
+# Build output
 /target
-.frost_state
+
+# Key storage (sensitive!)
+.frost_state/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node (for frontend development)
+node_modules/
+
+# Backup files
+*.bak
+*~

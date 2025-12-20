@@ -11,13 +11,15 @@ pub struct CommandResult {
 }
 
 mod birkhoff;
+mod bitcoin_schnorr;
+mod bitcoin_tx;
 mod keygen;
 mod signing;
 mod storage;
 
 #[derive(Parser)]
-#[command(name = "yushan")]
-#[command(about = "Educational FROST threshold signature workshop", long_about = None)]
+#[command(name = "frostdao")]
+#[command(about = "FrostDAO - FROST threshold signatures for Bitcoin", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -105,6 +107,122 @@ enum Commands {
         #[arg(long)]
         message: String,
     },
+
+    // ========================================================================
+    // Bitcoin Schnorr (BIP340) Commands
+    // ========================================================================
+
+    /// Generate a new Bitcoin Schnorr keypair (BIP340)
+    BtcKeygen,
+
+    /// Import an existing Bitcoin secret key
+    BtcImportKey {
+        /// Secret key in hex (32 bytes / 64 hex chars)
+        #[arg(long)]
+        secret: String,
+    },
+
+    /// Get the stored Bitcoin public key
+    BtcPubkey,
+
+    /// Sign a message with Bitcoin Schnorr (BIP340)
+    BtcSign {
+        /// Message to sign (UTF-8 string)
+        #[arg(long)]
+        message: String,
+    },
+
+    /// Sign a hex-encoded message with Bitcoin Schnorr (BIP340)
+    BtcSignHex {
+        /// Message to sign (hex-encoded)
+        #[arg(long)]
+        message: String,
+    },
+
+    /// Verify a BIP340 Schnorr signature
+    BtcVerify {
+        /// Signature hex (64 bytes / 128 hex chars)
+        #[arg(long)]
+        signature: String,
+
+        /// Public key hex (32 bytes / 64 hex chars, x-only)
+        #[arg(long)]
+        public_key: String,
+
+        /// Message that was signed (UTF-8 string)
+        #[arg(long)]
+        message: String,
+    },
+
+    /// Verify a BIP340 Schnorr signature with hex-encoded message
+    BtcVerifyHex {
+        /// Signature hex (64 bytes / 128 hex chars)
+        #[arg(long)]
+        signature: String,
+
+        /// Public key hex (32 bytes / 64 hex chars, x-only)
+        #[arg(long)]
+        public_key: String,
+
+        /// Message that was signed (hex-encoded)
+        #[arg(long)]
+        message: String,
+    },
+
+    /// Sign a Bitcoin Taproot sighash
+    BtcSignTaproot {
+        /// Transaction sighash (32 bytes / 64 hex chars)
+        #[arg(long)]
+        sighash: String,
+    },
+
+    /// Get Bitcoin Taproot address (mainnet)
+    BtcAddress,
+
+    /// Get Bitcoin Taproot address (testnet)
+    BtcAddressTestnet,
+
+    /// Get Bitcoin Taproot address (signet)
+    BtcAddressSignet,
+
+    /// Get DKG group Taproot address (testnet)
+    DkgAddress,
+
+    /// Check DKG group balance (testnet)
+    DkgBalance,
+
+    /// Check Bitcoin balance (testnet)
+    BtcBalance,
+
+    /// Send Bitcoin on testnet
+    BtcSend {
+        /// Recipient address
+        #[arg(long)]
+        to: String,
+
+        /// Amount in satoshis
+        #[arg(long)]
+        amount: u64,
+
+        /// Fee rate in sats/vbyte (optional, defaults to recommended)
+        #[arg(long)]
+        fee_rate: Option<u64>,
+    },
+
+    /// Send Bitcoin on signet
+    BtcSendSignet {
+        /// Recipient address
+        #[arg(long)]
+        to: String,
+
+        /// Amount in satoshis
+        #[arg(long)]
+        amount: u64,
+
+        /// Fee rate in sats/vbyte (optional, defaults to recommended)
+        #[arg(long)]
+        fee_rate: Option<u64>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -145,6 +263,64 @@ fn main() -> Result<()> {
             message,
         } => {
             signing::verify_signature(&signature, &public_key, &message)?;
+        }
+
+        // Bitcoin Schnorr (BIP340) commands
+        Commands::BtcKeygen => {
+            bitcoin_schnorr::generate_keypair()?;
+        }
+        Commands::BtcImportKey { secret } => {
+            bitcoin_schnorr::import_key(&secret)?;
+        }
+        Commands::BtcPubkey => {
+            bitcoin_schnorr::get_public_key()?;
+        }
+        Commands::BtcSign { message } => {
+            bitcoin_schnorr::sign_message(&message)?;
+        }
+        Commands::BtcSignHex { message } => {
+            bitcoin_schnorr::sign_message_hex(&message)?;
+        }
+        Commands::BtcVerify {
+            signature,
+            public_key,
+            message,
+        } => {
+            bitcoin_schnorr::verify_signature(&signature, &public_key, &message)?;
+        }
+        Commands::BtcVerifyHex {
+            signature,
+            public_key,
+            message,
+        } => {
+            bitcoin_schnorr::verify_signature_hex(&signature, &public_key, &message)?;
+        }
+        Commands::BtcSignTaproot { sighash } => {
+            bitcoin_schnorr::sign_taproot_sighash(&sighash)?;
+        }
+        Commands::BtcAddress => {
+            bitcoin_schnorr::get_address_mainnet()?;
+        }
+        Commands::BtcAddressTestnet => {
+            bitcoin_schnorr::get_address_testnet()?;
+        }
+        Commands::BtcAddressSignet => {
+            bitcoin_schnorr::get_address_signet()?;
+        }
+        Commands::DkgAddress => {
+            bitcoin_schnorr::get_dkg_address_testnet()?;
+        }
+        Commands::DkgBalance => {
+            bitcoin_tx::check_dkg_balance_testnet()?;
+        }
+        Commands::BtcBalance => {
+            bitcoin_tx::check_balance_testnet()?;
+        }
+        Commands::BtcSend { to, amount, fee_rate } => {
+            bitcoin_tx::send_testnet(&to, amount, fee_rate)?;
+        }
+        Commands::BtcSendSignet { to, amount, fee_rate } => {
+            bitcoin_tx::send_signet(&to, amount, fee_rate)?;
         }
     }
 

@@ -1,12 +1,53 @@
 use anyhow::Result;
 use std::path::PathBuf;
 
+#[cfg(test)]
+use std::collections::HashMap;
+#[cfg(test)]
+use std::sync::RwLock;
+
 /// Storage abstraction for both file system and browser localStorage
 pub trait Storage {
     fn read(&self, key: &str) -> Result<Vec<u8>>;
     fn write(&self, key: &str, data: &[u8]) -> Result<()>;
     #[allow(dead_code)]
     fn exists(&self, key: &str) -> bool;
+}
+
+/// In-memory storage for testing
+#[cfg(test)]
+pub struct MemoryStorage {
+    data: RwLock<HashMap<String, Vec<u8>>>,
+}
+
+#[cfg(test)]
+impl MemoryStorage {
+    pub fn new() -> Self {
+        Self {
+            data: RwLock::new(HashMap::new()),
+        }
+    }
+}
+
+#[cfg(test)]
+impl Storage for MemoryStorage {
+    fn read(&self, key: &str) -> Result<Vec<u8>> {
+        let data = self.data.read().unwrap();
+        data.get(key)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("Key not found: {}", key))
+    }
+
+    fn write(&self, key: &str, data: &[u8]) -> Result<()> {
+        let mut storage = self.data.write().unwrap();
+        storage.insert(key.to_string(), data.to_vec());
+        Ok(())
+    }
+
+    fn exists(&self, key: &str) -> bool {
+        let data = self.data.read().unwrap();
+        data.contains_key(key)
+    }
 }
 
 /// File-based storage for CLI

@@ -1,7 +1,11 @@
 [package]
-name = "yushan"
+name = "frostdao"
 version = "0.1.0"
 edition = "2021"
+
+[[bin]]
+name = "frostdao"
+path = "src/main.rs"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -33,3 +37,10 @@ rand = "0.8"
 rand_chacha = "0.3"
 sha2 = "0.10"
 getrandom = { version = "0.2", features = ["js"] }
+
+# Bitcoin
+bitcoin = { version = "0.32", features = ["serde"] }
+bech32 = "0.11"
+
+# HTTP client for blockchain API
+reqwest = { version = "0.12", features = ["blocking", "json"] }
