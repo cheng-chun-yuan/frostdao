@@ -69,8 +69,15 @@ pub fn generate_nonce_core(session: &str, storage: &dyn Storage) -> Result<Comma
         serde_json::from_str(&metadata_json)?
     };
 
-    let mode_name = if htss_metadata.hierarchical { "HTSS" } else { "TSS" };
-    out.push_str(&format!("FROST Signing ({}) - Nonce Generation\n\n", mode_name));
+    let mode_name = if htss_metadata.hierarchical {
+        "HTSS"
+    } else {
+        "TSS"
+    };
+    out.push_str(&format!(
+        "FROST Signing ({}) - Nonce Generation\n\n",
+        mode_name
+    ));
     out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
     out.push_str(&format!("Session ID: {}\n", session));
     if htss_metadata.hierarchical {
@@ -188,8 +195,15 @@ pub fn create_signature_share_core(
         serde_json::from_str(&metadata_json)?
     };
 
-    let mode_name = if htss_metadata.hierarchical { "HTSS" } else { "TSS" };
-    out.push_str(&format!("🔐 FROST Signing ({}) - Create Signature Share\n\n", mode_name));
+    let mode_name = if htss_metadata.hierarchical {
+        "HTSS"
+    } else {
+        "TSS"
+    };
+    out.push_str(&format!(
+        "🔐 FROST Signing ({}) - Create Signature Share\n\n",
+        mode_name
+    ));
 
     // Load nonce
     let nonce_bytes = storage
@@ -435,8 +449,15 @@ pub fn combine_signatures_core(data: &str, storage: &dyn Storage) -> Result<Comm
         serde_json::from_str(&metadata_json)?
     };
 
-    let mode_name = if htss_metadata.hierarchical { "HTSS" } else { "TSS" };
-    out.push_str(&format!("🔐 FROST Signing ({}) - Combine Signature Shares\n\n", mode_name));
+    let mode_name = if htss_metadata.hierarchical {
+        "HTSS"
+    } else {
+        "TSS"
+    };
+    out.push_str(&format!(
+        "🔐 FROST Signing ({}) - Combine Signature Shares\n\n",
+        mode_name
+    ));
 
     // Parse input - space-separated SignatureShareOutput objects
     let sig_outputs: Vec<SignatureShareOutput> = parse_space_separated_json(data)?;

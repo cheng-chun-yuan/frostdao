@@ -19,8 +19,8 @@
 //!
 //! Result: New shares s'_j for the same group secret s
 
-use crate::storage::{FileStorage, Storage};
 use crate::keygen::{get_state_dir, GroupInfo, HtssMetadata};
+use crate::storage::{FileStorage, Storage};
 use anyhow::Result;
 use schnorr_fun::frost;
 use schnorr_fun::fun::marker::*;
@@ -52,11 +52,7 @@ pub fn reshare_round1(
     let path = std::path::Path::new(&state_dir);
 
     if !path.exists() {
-        anyhow::bail!(
-            "Wallet '{}' not found at {}.",
-            source_wallet,
-            state_dir
-        );
+        anyhow::bail!("Wallet '{}' not found at {}.", source_wallet, state_dir);
     }
 
     let storage = FileStorage::new(&state_dir)?;
@@ -82,7 +78,11 @@ pub fn reshare_round1(
     }
 
     println!("Source wallet: {}", source_wallet);
-    println!("Old config: {}-of-{}", htss.threshold, htss.party_ranks.len());
+    println!(
+        "Old config: {}-of-{}",
+        htss.threshold,
+        htss.party_ranks.len()
+    );
     println!("New config: {}-of-{}", new_threshold, new_n_parties);
     println!("My old index: {}", my_old_index);
     println!();
@@ -105,8 +105,8 @@ pub fn reshare_round1(
     // Compute polynomial commitments (for verification)
     let mut polynomial_commitment: Vec<String> = Vec::new();
     for coeff_bytes in &coefficients {
-        let coeff: Scalar<Secret, Zero> = Scalar::from_bytes(*coeff_bytes)
-            .unwrap_or(Scalar::zero());
+        let coeff: Scalar<Secret, Zero> =
+            Scalar::from_bytes(*coeff_bytes).unwrap_or(Scalar::zero());
         let commitment = g!(coeff * G).normalize();
         polynomial_commitment.push(hex::encode(commitment.to_bytes()));
     }
@@ -122,11 +122,11 @@ pub fn reshare_round1(
         // Start from highest degree coefficient
         for i in (0..coefficients.len()).rev() {
             // result = result * x + coeff[i]
-            let result_scalar: Scalar<Secret, Zero> = Scalar::from_bytes(result)
-                .unwrap_or(Scalar::zero());
+            let result_scalar: Scalar<Secret, Zero> =
+                Scalar::from_bytes(result).unwrap_or(Scalar::zero());
             let x_scalar: Scalar<Public, Zero> = Scalar::from(x);
-            let coeff_scalar: Scalar<Secret, Zero> = Scalar::from_bytes(coefficients[i])
-                .unwrap_or(Scalar::zero());
+            let coeff_scalar: Scalar<Secret, Zero> =
+                Scalar::from_bytes(coefficients[i]).unwrap_or(Scalar::zero());
 
             let new_result = s!(result_scalar * x_scalar + coeff_scalar);
             result = new_result.to_bytes();
@@ -169,13 +169,17 @@ pub fn reshare_finalize(
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
     // Parse round1 outputs (space-separated JSON objects)
-    let round1_outputs: Vec<ReshareRound1Output> = crate::keygen::parse_space_separated_json(round1_data)?;
+    let round1_outputs: Vec<ReshareRound1Output> =
+        crate::keygen::parse_space_separated_json(round1_data)?;
 
     if round1_outputs.is_empty() {
         anyhow::bail!("No round1 data provided");
     }
 
-    println!("Received sub-shares from {} old parties", round1_outputs.len());
+    println!(
+        "Received sub-shares from {} old parties",
+        round1_outputs.len()
+    );
     println!("My new index: {}", my_new_index);
     println!("My rank: {}", my_rank);
     println!();
@@ -201,7 +205,11 @@ pub fn reshare_finalize(
         );
     }
 
-    println!("Old threshold: {} (have {} sub-shares)", old_threshold, round1_outputs.len());
+    println!(
+        "Old threshold: {} (have {} sub-shares)",
+        old_threshold,
+        round1_outputs.len()
+    );
 
     // Get the new threshold from the polynomial commitment degree
     let new_threshold = round1_outputs[0].polynomial_commitment.len() as u32;
@@ -218,7 +226,9 @@ pub fn reshare_finalize(
 
     for output in &round1_outputs {
         // Get sub-share for my new index
-        let sub_share_hex = output.sub_shares.get(&my_new_index)
+        let sub_share_hex = output
+            .sub_shares
+            .get(&my_new_index)
             .ok_or_else(|| anyhow::anyhow!("Missing sub-share for index {}", my_new_index))?;
 
         let sub_share_bytes: [u8; 32] = hex::decode(sub_share_hex)?
@@ -229,14 +239,11 @@ pub fn reshare_finalize(
             .ok_or_else(|| anyhow::anyhow!("Invalid sub-share scalar"))?;
 
         // Compute Lagrange coefficient for this old party at x=0
-        let lagrange_coeff = compute_lagrange_coefficient(
-            output.old_party_index,
-            &old_indices,
-        )?;
+        let lagrange_coeff = compute_lagrange_coefficient(output.old_party_index, &old_indices)?;
 
         // Add weighted sub-share to result
-        let current: Scalar<Secret, Zero> = Scalar::from_bytes(new_share_bytes)
-            .unwrap_or(Scalar::zero());
+        let current: Scalar<Secret, Zero> =
+            Scalar::from_bytes(new_share_bytes).unwrap_or(Scalar::zero());
         let weighted = s!(lagrange_coeff * sub_share);
         let sum = s!(current + weighted);
         new_share_bytes = sum.to_bytes();
@@ -332,10 +339,7 @@ pub fn reshare_finalize(
     )?;
 
     // Also save share in hex format for easy verification
-    target_storage.write(
-        "share_hex.txt",
-        hex::encode(new_share_bytes).as_bytes(),
-    )?;
+    target_storage.write("share_hex.txt", hex::encode(new_share_bytes).as_bytes())?;
 
     println!();
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -433,11 +437,7 @@ pub fn reshare_round1_core(
     let path = std::path::Path::new(&state_dir);
 
     if !path.exists() {
-        anyhow::bail!(
-            "Wallet '{}' not found at {}.",
-            source_wallet,
-            state_dir
-        );
+        anyhow::bail!("Wallet '{}' not found at {}.", source_wallet, state_dir);
     }
 
     let storage = FileStorage::new(&state_dir)?;
@@ -492,11 +492,11 @@ pub fn reshare_round1_core(
 
         let mut result = [0u8; 32];
         for i in (0..coefficients.len()).rev() {
-            let result_scalar: Scalar<Secret, Zero> = Scalar::from_bytes(result)
-                .unwrap_or(Scalar::zero());
+            let result_scalar: Scalar<Secret, Zero> =
+                Scalar::from_bytes(result).unwrap_or(Scalar::zero());
             let x_scalar: Scalar<Public, Zero> = Scalar::from(x);
-            let coeff_scalar: Scalar<Secret, Zero> = Scalar::from_bytes(coefficients[i])
-                .unwrap_or(Scalar::zero());
+            let coeff_scalar: Scalar<Secret, Zero> =
+                Scalar::from_bytes(coefficients[i]).unwrap_or(Scalar::zero());
 
             let new_result = s!(result_scalar * x_scalar + coeff_scalar);
             result = new_result.to_bytes();
@@ -535,7 +535,8 @@ pub fn reshare_finalize_core(
     force_overwrite: bool,
 ) -> Result<CommandResult> {
     // Parse round1 outputs
-    let round1_outputs: Vec<ReshareRound1Output> = crate::keygen::parse_space_separated_json(round1_data)?;
+    let round1_outputs: Vec<ReshareRound1Output> =
+        crate::keygen::parse_space_separated_json(round1_data)?;
 
     if round1_outputs.is_empty() {
         anyhow::bail!("No round1 data provided");
@@ -570,7 +571,9 @@ pub fn reshare_finalize_core(
     let mut new_share_bytes = [0u8; 32];
 
     for output in &round1_outputs {
-        let sub_share_hex = output.sub_shares.get(&my_new_index)
+        let sub_share_hex = output
+            .sub_shares
+            .get(&my_new_index)
             .ok_or_else(|| anyhow::anyhow!("Missing sub-share for index {}", my_new_index))?;
 
         let sub_share_bytes: [u8; 32] = hex::decode(sub_share_hex)?
@@ -580,13 +583,10 @@ pub fn reshare_finalize_core(
         let sub_share: Scalar<Secret, Zero> = Scalar::from_bytes(sub_share_bytes)
             .ok_or_else(|| anyhow::anyhow!("Invalid sub-share scalar"))?;
 
-        let lagrange_coeff = compute_lagrange_coefficient(
-            output.old_party_index,
-            &old_indices,
-        )?;
+        let lagrange_coeff = compute_lagrange_coefficient(output.old_party_index, &old_indices)?;
 
-        let current: Scalar<Secret, Zero> = Scalar::from_bytes(new_share_bytes)
-            .unwrap_or(Scalar::zero());
+        let current: Scalar<Secret, Zero> =
+            Scalar::from_bytes(new_share_bytes).unwrap_or(Scalar::zero());
         let weighted = s!(lagrange_coeff * sub_share);
         let sum = s!(current + weighted);
         new_share_bytes = sum.to_bytes();
@@ -598,7 +598,10 @@ pub fn reshare_finalize_core(
 
     if target_path.exists() {
         if !force_overwrite {
-            anyhow::bail!("Target wallet '{}' already exists. Use force_overwrite=true to replace.", target_wallet);
+            anyhow::bail!(
+                "Target wallet '{}' already exists. Use force_overwrite=true to replace.",
+                target_wallet
+            );
         }
         std::fs::remove_dir_all(target_path)?;
     }
@@ -657,10 +660,7 @@ pub fn reshare_finalize_core(
         serde_json::to_string_pretty(&group_info)?.as_bytes(),
     )?;
 
-    target_storage.write(
-        "share_hex.txt",
-        hex::encode(new_share_bytes).as_bytes(),
-    )?;
+    target_storage.write("share_hex.txt", hex::encode(new_share_bytes).as_bytes())?;
 
     Ok(CommandResult {
         output: format!(
@@ -711,9 +711,9 @@ mod tests {
         let coeff = Scalar::<Secret, NonZero>::random(&mut rng);
 
         // Evaluate at indices 1, 2, 3
-        let share1 = s!(secret + {Scalar::<Secret, Zero>::from(1u32)} * coeff);
-        let share2 = s!(secret + {Scalar::<Secret, Zero>::from(2u32)} * coeff);
-        let share3 = s!(secret + {Scalar::<Secret, Zero>::from(3u32)} * coeff);
+        let share1 = s!(secret + { Scalar::<Secret, Zero>::from(1u32) } * coeff);
+        let share2 = s!(secret + { Scalar::<Secret, Zero>::from(2u32) } * coeff);
+        let share3 = s!(secret + { Scalar::<Secret, Zero>::from(3u32) } * coeff);
 
         // Reconstruct secret using Lagrange at x=0 with shares 1 and 2
         let indices = vec![1, 2];
@@ -723,8 +723,7 @@ mod tests {
         let reconstructed = s!(lambda1 * share1 + lambda2 * share2);
 
         // Should equal original secret
-        let secret_zero: Scalar<Secret, Zero> = Scalar::from_bytes(secret.to_bytes())
-            .unwrap();
+        let secret_zero: Scalar<Secret, Zero> = Scalar::from_bytes(secret.to_bytes()).unwrap();
         assert_eq!(reconstructed.to_bytes(), secret_zero.to_bytes());
 
         // Also verify with indices 2 and 3

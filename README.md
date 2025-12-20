@@ -20,12 +20,14 @@ FrostDAO implements FROST threshold signatures with **Hierarchical Threshold Sec
 4. [Single-Signer Wallet](#single-signer-wallet)
 5. [Threshold Signatures (DKG)](#threshold-signatures-dkg)
 6. [Hierarchical TSS (HTSS)](#hierarchical-tss-htss)
-7. [Bitcoin Transactions](#bitcoin-transactions)
-8. [CLI Reference](#cli-reference)
-9. [Web UI](#web-ui)
-10. [Architecture](#architecture)
-11. [Use Cases](#use-cases)
-12. [Security](#security)
+7. [Resharing (Proactive Security)](#resharing-proactive-security)
+8. [Bitcoin Transactions](#bitcoin-transactions)
+9. [Terminal UI (TUI)](#terminal-ui-tui)
+10. [CLI Reference](#cli-reference)
+11. [Web UI](#web-ui)
+12. [Architecture](#architecture)
+13. [Use Cases](#use-cases)
+14. [Security](#security)
 
 ---
 
@@ -36,8 +38,10 @@ FrostDAO implements FROST threshold signatures with **Hierarchical Threshold Sec
 | **Single-Signer Wallet** | BIP340 Schnorr signatures for Bitcoin Taproot |
 | **Threshold Signatures** | FROST-based t-of-n multisig without trusted dealer |
 | **Hierarchical TSS** | Rank-based signing authority (CEO must approve) |
+| **Resharing** | Proactive secret sharing - refresh shares without changing address |
 | **Bitcoin Integration** | Taproot addresses, transaction building, broadcasting |
 | **On-Chain Transactions** | UTXO fetching, signing, and broadcasting via mempool.space |
+| **Terminal UI** | Interactive TUI for wallet management and balance checking |
 
 ---
 
@@ -79,19 +83,20 @@ frostdao btc-send --to <recipient> --amount 10000
 ### Threshold Wallet (2-of-3)
 
 ```bash
-# Each party runs Round 1
-frostdao keygen-round1 --threshold 2 --n-parties 3 --my-index 1
-frostdao keygen-round1 --threshold 2 --n-parties 3 --my-index 2
-frostdao keygen-round1 --threshold 2 --n-parties 3 --my-index 3
+# Each party runs Round 1 (use same --name for the wallet)
+frostdao keygen-round1 --name treasury --threshold 2 --n-parties 3 --my-index 1
+frostdao keygen-round1 --name treasury --threshold 2 --n-parties 3 --my-index 2
+frostdao keygen-round1 --name treasury --threshold 2 --n-parties 3 --my-index 3
 
 # Exchange commitments, run Round 2
-frostdao keygen-round2 --data '<commitments_json>'
+frostdao keygen-round2 --name treasury --data '<commitments_json>'
 
 # Finalize
-frostdao keygen-finalize --data '<shares_json>'
+frostdao keygen-finalize --name treasury --data '<shares_json>'
 
-# Get group address
-frostdao dkg-address
+# Get group address and balance
+frostdao dkg-address --name treasury
+frostdao dkg-balance --name treasury
 ```
 
 ---
@@ -163,17 +168,20 @@ Distributed Key Generation creates a shared wallet where `t-of-n` parties must c
 
 ```bash
 # Round 1: Generate polynomial and commitments
-frostdao keygen-round1 --threshold 2 --n-parties 3 --my-index 1
+frostdao keygen-round1 --name my_wallet --threshold 2 --n-parties 3 --my-index 1
 
 # Round 2: Exchange encrypted shares
-frostdao keygen-round2 --data '{"commitments": [...]}'
+frostdao keygen-round2 --name my_wallet --data '{"commitments": [...]}'
 
 # Finalize: Derive group key and personal share
-frostdao keygen-finalize --data '{"shares": [...]}'
+frostdao keygen-finalize --name my_wallet --data '{"shares": [...]}'
 
-# Get group address
-frostdao dkg-address
+# Get group address and balance
+frostdao dkg-address --name my_wallet
+frostdao dkg-balance --name my_wallet
 ```
+
+**Note:** The `--name` parameter creates a folder `.frost_state/<name>/` to store all wallet data. If a wallet with the same name exists, you'll be prompted to confirm replacement.
 
 ### Threshold Signing
 
@@ -215,16 +223,16 @@ Valid if: rᵢ ≤ i for all positions i
 
 ```bash
 # CEO (rank 0)
-frostdao keygen-round1 --threshold 3 --n-parties 4 --my-index 1 --rank 0 --hierarchical
+frostdao keygen-round1 --name corp_treasury --threshold 3 --n-parties 4 --my-index 1 --rank 0 --hierarchical
 
 # CFO (rank 1)
-frostdao keygen-round1 --threshold 3 --n-parties 4 --my-index 2 --rank 1 --hierarchical
+frostdao keygen-round1 --name corp_treasury --threshold 3 --n-parties 4 --my-index 2 --rank 1 --hierarchical
 
 # COO (rank 1)
-frostdao keygen-round1 --threshold 3 --n-parties 4 --my-index 3 --rank 1 --hierarchical
+frostdao keygen-round1 --name corp_treasury --threshold 3 --n-parties 4 --my-index 3 --rank 1 --hierarchical
 
 # Manager (rank 2)
-frostdao keygen-round1 --threshold 3 --n-parties 4 --my-index 4 --rank 2 --hierarchical
+frostdao keygen-round1 --name corp_treasury --threshold 3 --n-parties 4 --my-index 4 --rank 2 --hierarchical
 ```
 
 ### Valid Combinations
@@ -236,6 +244,138 @@ frostdao keygen-round1 --threshold 3 --n-parties 4 --my-index 4 --rank 2 --hiera
 | CFO + COO + Manager | [1,1,2] | No | 1>0 fails |
 
 **CEO must always be involved!**
+
+---
+
+## Resharing (Proactive Security)
+
+Resharing allows you to refresh secret shares while keeping the same group public key and Bitcoin address. This is useful for:
+
+- **Proactive security**: Invalidate potentially compromised shares
+- **Party replacement**: Add/remove parties without changing the address
+- **Threshold changes**: Modify the signing threshold
+
+### How Resharing Works
+
+```
+Old Configuration (2-of-3)          New Configuration (2-of-3)
+┌─────────┐ ┌─────────┐ ┌─────────┐     ┌─────────┐ ┌─────────┐ ┌─────────┐
+│ Party 1 │ │ Party 2 │ │ Party 3 │     │ Party A │ │ Party B │ │ Party C │
+│ Share_1 │ │ Share_2 │ │ Share_3 │     │ Share_A │ │ Share_B │ │ Share_C │
+└────┬────┘ └────┬────┘ └────┬────┘     └────┬────┘ └────┬────┘ └────┬────┘
+     │           │           │               │           │           │
+     └───────────┼───────────┘               └───────────┼───────────┘
+                 │                                       │
+         ┌───────▼───────┐                       ┌───────▼───────┐
+         │ Group Secret  │  ═══════════════════▶ │ Group Secret  │
+         │     (same)    │                       │     (same)    │
+         └───────────────┘                       └───────────────┘
+                 │                                       │
+         ┌───────▼───────┐                       ┌───────▼───────┐
+         │ Public Key    │  ═══════════════════▶ │ Public Key    │
+         │ (same)        │                       │ (same)        │
+         └───────────────┘                       └───────────────┘
+```
+
+### Commands
+
+```bash
+# Step 1: Old parties generate sub-shares (need at least t old parties)
+frostdao reshare-round1 \
+  --source treasury \
+  --new-threshold 2 \
+  --new-n-parties 3 \
+  --my-index 1
+
+# Step 2: New parties combine sub-shares
+frostdao reshare-finalize \
+  --source treasury \
+  --target treasury_v2 \
+  --my-index 1 \
+  --data '<round1_outputs_json>'
+```
+
+### Example: Refresh a 2-of-3 Wallet
+
+```bash
+# Party 1 (old) generates sub-shares
+P1_SUB=$(frostdao reshare-round1 --source wallet --new-threshold 2 --new-n-parties 3 --my-index 1)
+
+# Party 2 (old) generates sub-shares
+P2_SUB=$(frostdao reshare-round1 --source wallet --new-threshold 2 --new-n-parties 3 --my-index 2)
+
+# New party 1 combines (needs at least 2 old party outputs)
+frostdao reshare-finalize \
+  --source wallet \
+  --target wallet_refreshed \
+  --my-index 1 \
+  --data "$P1_SUB $P2_SUB"
+
+# Verify: addresses should match!
+frostdao dkg-address --name wallet
+frostdao dkg-address --name wallet_refreshed
+```
+
+### Security Note
+
+- Old shares become invalid after resharing
+- Delete old wallet folders once all parties have reshared
+- The same Bitcoin address remains valid for receiving funds
+
+---
+
+## Terminal UI (TUI)
+
+FrostDAO includes an interactive terminal UI for wallet management.
+
+### Running the TUI
+
+```bash
+frostdao tui
+```
+
+### Screenshot
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ FrostDAO - DKG Wallet Manager                                    │
+├────────────────────────────┬─────────────────────────────────────┤
+│ Wallets                    │ Details                             │
+│                            │                                     │
+│ >> treasury (2-of-3 TSS)   │ Name: treasury                      │
+│    backup (3-of-5 HTSS) $  │                                     │
+│    test (1-of-1 TSS)       │ Threshold: 2-of-3                   │
+│                            │ Mode: Standard (TSS)                │
+│                            │                                     │
+│                            │ Address:                            │
+│                            │ tb1p7sray...zpvhs4x7ehm             │
+│                            │                                     │
+│                            │ Balance: 50000 sats                 │
+│                            │          (0.00050000 BTC)           │
+│                            │ UTXOs: 2                            │
+├────────────────────────────┴─────────────────────────────────────┤
+│ Help: ↑/↓: Navigate | Enter/r: Refresh Balance | R: Reload | q  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `↑` / `k` | Move selection up |
+| `↓` / `j` | Move selection down |
+| `Enter` / `r` | Refresh balance for selected wallet |
+| `R` | Reload wallet list |
+| `q` / `Esc` | Quit |
+
+### Features
+
+- View all DKG wallets
+- Check real-time balances (via mempool.space API)
+- See threshold configuration and mode (TSS/HTSS)
+- Navigate with vim-style keys
+
+See [docs/TUI.md](docs/TUI.md) for full documentation.
 
 ---
 
@@ -304,15 +444,15 @@ frostdao btc-send \
 | `btc-address` | Mainnet address |
 | `btc-address-testnet` | Testnet address |
 | `btc-address-signet` | Signet address |
-| `dkg-address` | DKG group address |
-| `dkg-balance` | DKG group balance |
+| `dkg-address --name <wallet>` | DKG group address |
+| `dkg-balance --name <wallet>` | DKG group balance |
 
 ### Transactions
 
 | Command | Description |
 |---------|-------------|
 | `btc-balance` | Check single-signer balance |
-| `dkg-balance` | Check DKG group balance |
+| `dkg-balance --name <wallet>` | Check DKG group balance |
 | `btc-send --to <addr> --amount <sats>` | Send on testnet |
 | `btc-send-signet --to <addr> --amount <sats>` | Send on signet |
 
@@ -329,9 +469,9 @@ frostdao btc-send \
 
 | Command | Description |
 |---------|-------------|
-| `keygen-round1` | Generate commitments |
-| `keygen-round2 --data <json>` | Exchange shares |
-| `keygen-finalize --data <json>` | Derive keys |
+| `keygen-round1 --name <wallet> ...` | Generate commitments |
+| `keygen-round2 --name <wallet> --data <json>` | Exchange shares |
+| `keygen-finalize --name <wallet> --data <json>` | Derive keys + group_info.json |
 
 ### Threshold Signing
 
@@ -341,6 +481,21 @@ frostdao btc-send \
 | `sign --session <id> --message <msg> --data <json>` | Create share |
 | `combine --data <json>` | Combine signatures |
 | `verify` | Verify signature |
+
+### Resharing
+
+| Command | Description |
+|---------|-------------|
+| `reshare-round1 --source <wallet> ...` | Generate sub-shares for resharing |
+| `reshare-finalize --source <old> --target <new> ...` | Combine sub-shares into new wallet |
+
+### Wallet Management
+
+| Command | Description |
+|---------|-------------|
+| `dkg-list` | List all DKG wallets |
+| `dkg-info --name <wallet>` | Regenerate group_info.json |
+| `tui` | Launch interactive Terminal UI |
 
 ---
 
@@ -372,18 +527,26 @@ frostdao/
 │   ├── lib.rs                # Library exports
 │   ├── keygen.rs             # DKG implementation
 │   ├── signing.rs            # Threshold signing
+│   ├── reshare.rs            # Resharing protocol
+│   ├── tui.rs                # Terminal UI
 │   ├── birkhoff.rs           # HTSS Birkhoff interpolation
 │   ├── bitcoin_schnorr.rs    # BIP340 & addresses
 │   ├── bitcoin_tx.rs         # Transactions & broadcasting
 │   ├── storage.rs            # Key storage
 │   └── wasm.rs               # WebAssembly bindings
+├── tests/                    # Integration tests
+│   ├── reshare_tests.rs      # Resharing protocol tests
+│   ├── dkg_flow_tests.rs     # DKG flow tests
+│   └── signing_tests.rs      # Signing tests
 ├── frontend/                 # Web UI
 │   ├── btc-send.html         # Send BTC interface
 │   ├── index.html            # DKG demo
 │   └── pkg/                  # WASM bindings
 ├── docs/                     # Documentation
 │   ├── CLI.md                # CLI reference
-│   └── BITCOIN_GUIDE.md      # Bitcoin guide
+│   ├── TUI.md                # Terminal UI guide
+│   ├── BITCOIN_GUIDE.md      # Bitcoin guide
+│   └── demo-reshare.sh       # Resharing demo script
 ├── .frost_state/             # Key storage (gitignored)
 ├── README.md
 └── Cargo.toml
@@ -393,12 +556,17 @@ frostdao/
 
 Keys stored in `.frost_state/` (gitignored):
 
-| File | Contents |
-|------|----------|
-| `bitcoin_keypair.json` | Single-signer keys |
-| `shared_key.bin` | DKG group public key |
-| `paired_secret_share.bin` | Your DKG share |
-| `htss_metadata.json` | HTSS config |
+```
+.frost_state/
+├── <wallet_name>/             # Each DKG wallet in its own folder
+│   ├── group_info.json        # Public info (shareable, parties by rank)
+│   ├── shared_key.bin         # Group public key
+│   ├── paired_secret_share.bin  # Your secret share
+│   └── htss_metadata.json     # HTSS config
+└── bitcoin_keypair.json       # Single-signer keys
+```
+
+The `group_info.json` contains public wallet info sorted by rank - useful for coordination.
 
 ---
 

@@ -155,9 +155,9 @@ pub fn compute_birkhoff_coefficients(params: &[BirkhoffParameter]) -> Result<Vec
     }
 
     // Compute pseudoinverse
-    let pseudo_inverse = svd.pseudo_inverse(tolerance).map_err(|e| {
-        anyhow::anyhow!("Failed to compute pseudoinverse: {}", e)
-    })?;
+    let pseudo_inverse = svd
+        .pseudo_inverse(tolerance)
+        .map_err(|e| anyhow::anyhow!("Failed to compute pseudoinverse: {}", e))?;
 
     // Extract first row (coefficients for recovering constant term a_0)
     // The inverse maps [y_1, y_2, ..., y_n] -> [a_0, a_1, ..., a_{n-1}]
@@ -284,8 +284,7 @@ mod tests {
         let birkhoff_coeffs = compute_birkhoff_coefficients(&params).unwrap();
 
         for (i, param) in params.iter().enumerate() {
-            let lagrange_coeff =
-                compute_lagrange_coefficient(param.x, &[1, 2, 3]);
+            let lagrange_coeff = compute_lagrange_coefficient(param.x, &[1, 2, 3]);
             println!(
                 "Party {}: Birkhoff={:.6}, Lagrange={:.6}",
                 param.x, birkhoff_coeffs[i], lagrange_coeff

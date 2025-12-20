@@ -159,7 +159,11 @@ fn nonce_hash(masked_secret: &[u8; 32], pubkey_bytes: &[u8; 32], message: &[u8])
 }
 
 /// Sign a message using BIP340 (returns 64-byte signature)
-fn sign_bip340(secret_bytes: &[u8; 32], pubkey_bytes: &[u8; 32], message: &[u8]) -> Result<[u8; 64]> {
+fn sign_bip340(
+    secret_bytes: &[u8; 32],
+    pubkey_bytes: &[u8; 32],
+    message: &[u8],
+) -> Result<[u8; 64]> {
     let secret_scalar: Scalar<Secret, NonZero> = Scalar::from_bytes(*secret_bytes)
         .ok_or_else(|| anyhow::anyhow!("Invalid secret key bytes"))?
         .non_zero()
@@ -191,8 +195,8 @@ fn sign_bip340(secret_bytes: &[u8; 32], pubkey_bytes: &[u8; 32], message: &[u8])
 
     // Compute challenge
     let e_bytes = challenge_hash(&r_bytes, pubkey_bytes, message);
-    let e_scalar: Scalar<Public, Zero> = Scalar::from_bytes(e_bytes)
-        .ok_or_else(|| anyhow::anyhow!("Invalid challenge bytes"))?;
+    let e_scalar: Scalar<Public, Zero> =
+        Scalar::from_bytes(e_bytes).ok_or_else(|| anyhow::anyhow!("Invalid challenge bytes"))?;
 
     // Compute s = k + e * d
     let s_scalar = s!(k_scalar + e_scalar * secret_scalar);
@@ -275,7 +279,9 @@ pub fn broadcast_transaction(raw_tx_hex: &str, network: Network) -> Result<Strin
         anyhow::bail!("Broadcast failed {}: {}", status, body);
     }
 
-    let txid = response.text().context("Failed to get txid from response")?;
+    let txid = response
+        .text()
+        .context("Failed to get txid from response")?;
     Ok(txid.trim().to_string())
 }
 
@@ -320,14 +326,32 @@ pub fn check_balance_core(network: Network, storage: &dyn Storage) -> Result<Com
 
     out.push_str(&format!("\nTotal UTXOs: {}\n", utxos.len()));
     out.push_str(&format!("Confirmed UTXOs: {}\n", confirmed_utxos.len()));
-    out.push_str(&format!("\nTotal Balance: {} sats ({:.8} BTC)\n", total_balance, total_balance as f64 / 100_000_000.0));
-    out.push_str(&format!("Confirmed Balance: {} sats ({:.8} BTC)\n", confirmed_balance, confirmed_balance as f64 / 100_000_000.0));
+    out.push_str(&format!(
+        "\nTotal Balance: {} sats ({:.8} BTC)\n",
+        total_balance,
+        total_balance as f64 / 100_000_000.0
+    ));
+    out.push_str(&format!(
+        "Confirmed Balance: {} sats ({:.8} BTC)\n",
+        confirmed_balance,
+        confirmed_balance as f64 / 100_000_000.0
+    ));
 
     if !utxos.is_empty() {
         out.push_str("\nUTXO Details:\n");
         for utxo in &utxos {
-            let status = if utxo.status.confirmed { "confirmed" } else { "unconfirmed" };
-            out.push_str(&format!("  {} sats - {}:{} ({})\n", utxo.value, &utxo.txid[..16], utxo.vout, status));
+            let status = if utxo.status.confirmed {
+                "confirmed"
+            } else {
+                "unconfirmed"
+            };
+            out.push_str(&format!(
+                "  {} sats - {}:{} ({})\n",
+                utxo.value,
+                &utxo.txid[..16],
+                utxo.vout,
+                status
+            ));
         }
     }
 
@@ -398,14 +422,32 @@ pub fn check_dkg_balance_core(network: Network, storage: &dyn Storage) -> Result
 
     out.push_str(&format!("\nTotal UTXOs: {}\n", utxos.len()));
     out.push_str(&format!("Confirmed UTXOs: {}\n", confirmed_utxos.len()));
-    out.push_str(&format!("\nTotal Balance: {} sats ({:.8} BTC)\n", total_balance, total_balance as f64 / 100_000_000.0));
-    out.push_str(&format!("Confirmed Balance: {} sats ({:.8} BTC)\n", confirmed_balance, confirmed_balance as f64 / 100_000_000.0));
+    out.push_str(&format!(
+        "\nTotal Balance: {} sats ({:.8} BTC)\n",
+        total_balance,
+        total_balance as f64 / 100_000_000.0
+    ));
+    out.push_str(&format!(
+        "Confirmed Balance: {} sats ({:.8} BTC)\n",
+        confirmed_balance,
+        confirmed_balance as f64 / 100_000_000.0
+    ));
 
     if !utxos.is_empty() {
         out.push_str("\nUTXO Details:\n");
         for utxo in &utxos {
-            let status = if utxo.status.confirmed { "confirmed" } else { "unconfirmed" };
-            out.push_str(&format!("  {} sats - {}:{} ({})\n", utxo.value, &utxo.txid[..16], utxo.vout, status));
+            let status = if utxo.status.confirmed {
+                "confirmed"
+            } else {
+                "unconfirmed"
+            };
+            out.push_str(&format!(
+                "  {} sats - {}:{} ({})\n",
+                utxo.value,
+                &utxo.txid[..16],
+                utxo.vout,
+                status
+            ));
         }
     }
 
@@ -427,8 +469,20 @@ pub fn check_dkg_balance_core(network: Network, storage: &dyn Storage) -> Result
 }
 
 /// CLI wrapper for DKG testnet balance
-pub fn check_dkg_balance_testnet() -> Result<()> {
-    let storage = FileStorage::new(STATE_DIR)?;
+pub fn check_dkg_balance_testnet(name: &str) -> Result<()> {
+    let state_dir = crate::keygen::get_state_dir(name);
+    let path = std::path::Path::new(&state_dir);
+
+    if !path.exists() {
+        anyhow::bail!(
+            "Wallet '{}' not found at {}. Did you run keygen-finalize with --name {}?",
+            name,
+            state_dir,
+            name
+        );
+    }
+
+    let storage = FileStorage::new(&state_dir)?;
     let cmd_result = check_dkg_balance_core(Network::Testnet, &storage)?;
     println!("{}", cmd_result.output);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -603,8 +657,8 @@ pub fn send_transaction_core(
 
         // Compute the taptweak
         let tap_tweak_hash = tagged_hash("TapTweak", &pubkey_bytes);
-        let tweak_scalar: Scalar<Public, Zero> = Scalar::from_bytes(tap_tweak_hash)
-            .ok_or_else(|| anyhow::anyhow!("Invalid tweak"))?;
+        let tweak_scalar: Scalar<Public, Zero> =
+            Scalar::from_bytes(tap_tweak_hash).ok_or_else(|| anyhow::anyhow!("Invalid tweak"))?;
 
         // Load secret as scalar
         let secret_scalar: Scalar<Secret, NonZero> = Scalar::from_bytes(secret_bytes)
@@ -707,7 +761,13 @@ pub fn send_transaction_core(
 /// CLI wrapper for sending on testnet
 pub fn send_testnet(to_address: &str, amount_sats: u64, fee_rate: Option<u64>) -> Result<()> {
     let storage = FileStorage::new(STATE_DIR)?;
-    let cmd_result = send_transaction_core(to_address, amount_sats, fee_rate, Network::Testnet, &storage)?;
+    let cmd_result = send_transaction_core(
+        to_address,
+        amount_sats,
+        fee_rate,
+        Network::Testnet,
+        &storage,
+    )?;
     println!("{}", cmd_result.output);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("Copy this JSON:");
@@ -718,7 +778,8 @@ pub fn send_testnet(to_address: &str, amount_sats: u64, fee_rate: Option<u64>) -
 /// CLI wrapper for sending on signet
 pub fn send_signet(to_address: &str, amount_sats: u64, fee_rate: Option<u64>) -> Result<()> {
     let storage = FileStorage::new(STATE_DIR)?;
-    let cmd_result = send_transaction_core(to_address, amount_sats, fee_rate, Network::Signet, &storage)?;
+    let cmd_result =
+        send_transaction_core(to_address, amount_sats, fee_rate, Network::Signet, &storage)?;
     println!("{}", cmd_result.output);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("Copy this JSON:");

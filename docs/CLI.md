@@ -89,8 +89,13 @@ frostdao btc-address-signet
 Get the DKG group Taproot address (testnet).
 
 ```bash
-frostdao dkg-address
+frostdao dkg-address --name <wallet_name>
 ```
+
+**Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `--name` | Wallet/session name |
 
 **Requires:** Completed DKG (`keygen-finalize`)
 
@@ -101,8 +106,13 @@ frostdao dkg-address
 Check DKG group wallet balance on testnet.
 
 ```bash
-frostdao dkg-balance
+frostdao dkg-balance --name <wallet_name>
 ```
+
+**Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `--name` | Wallet/session name |
 
 **Output:**
 - DKG group address
@@ -233,6 +243,7 @@ Generate polynomial and commitments for DKG.
 
 ```bash
 frostdao keygen-round1 \
+  --name <wallet_name> \
   --threshold <t> \
   --n-parties <n> \
   --my-index <i> \
@@ -243,19 +254,22 @@ frostdao keygen-round1 \
 **Parameters:**
 | Parameter | Description | Default |
 |-----------|-------------|---------|
+| `--name` | Wallet/session name (creates folder) | Required |
 | `--threshold` | Minimum signers required | Required |
 | `--n-parties` | Total number of parties | Required |
 | `--my-index` | Your party index (1-based) | Required |
 | `--rank` | HTSS rank (0=highest) | 0 |
 | `--hierarchical` | Enable HTSS mode | false |
 
+**Safety:** If a wallet with the same name exists, you'll be prompted to confirm replacement.
+
 **Examples:**
 ```bash
 # Standard TSS (2-of-3)
-frostdao keygen-round1 --threshold 2 --n-parties 3 --my-index 1
+frostdao keygen-round1 --name treasury --threshold 2 --n-parties 3 --my-index 1
 
 # HTSS (3-of-4 with ranks)
-frostdao keygen-round1 --threshold 3 --n-parties 4 --my-index 1 --rank 0 --hierarchical
+frostdao keygen-round1 --name corp_wallet --threshold 3 --n-parties 4 --my-index 1 --rank 0 --hierarchical
 ```
 
 ---
@@ -265,18 +279,14 @@ frostdao keygen-round1 --threshold 3 --n-parties 4 --my-index 1 --rank 0 --hiera
 Exchange encrypted shares.
 
 ```bash
-frostdao keygen-round2 --data '<json>'
+frostdao keygen-round2 --name <wallet_name> --data '<json>'
 ```
 
-**Input Format:**
-```json
-{
-  "commitments": [
-    {"index": 1, "commitment": "...", "rank": 0},
-    {"index": 2, "commitment": "...", "rank": 0}
-  ]
-}
-```
+**Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `--name` | Wallet/session name (must match round1) |
+| `--data` | JSON with all round1 commitments |
 
 ---
 
@@ -285,13 +295,20 @@ frostdao keygen-round2 --data '<json>'
 Finalize DKG and derive keys.
 
 ```bash
-frostdao keygen-finalize --data '<json>'
+frostdao keygen-finalize --name <wallet_name> --data '<json>'
 ```
+
+**Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `--name` | Wallet/session name (must match round1) |
+| `--data` | JSON with all round2 shares |
 
 **Output:**
 - Group public key
 - Your secret share
 - HTSS metadata (if hierarchical)
+- `group_info.json` with parties ordered by rank
 
 ---
 
@@ -358,13 +375,40 @@ frostdao verify \
 
 ## Storage Locations
 
-| File | Location | Description |
-|------|----------|-------------|
-| Single keypair | `.frost_state/bitcoin_keypair.json` | BIP340 keypair |
-| DKG public key | `.frost_state/shared_key.bin` | Group public key |
-| DKG secret share | `.frost_state/paired_secret_share.bin` | Your share |
-| HTSS metadata | `.frost_state/htss_metadata.json` | Ranks, threshold |
-| Round 1 state | `.frost_state/round1_state.json` | DKG intermediate |
+DKG wallets are stored in named folders under `.frost_state/`:
+
+```
+.frost_state/
+├── <wallet_name>/           # Each DKG wallet has its own folder
+│   ├── group_info.json      # Public info (shareable)
+│   ├── shared_key.bin       # Group public key
+│   ├── paired_secret_share.bin  # Your secret share (keep private!)
+│   ├── htss_metadata.json   # Ranks, threshold
+│   ├── all_commitments.json # Round 1 data
+│   └── round1_state.json    # DKG intermediate state
+└── bitcoin_keypair.json     # Single-signer BIP340 keypair
+```
+
+### group_info.json
+
+Generated after `keygen-finalize`, contains public info sorted by rank:
+
+```json
+{
+  "name": "treasury",
+  "group_public_key": "35a3e7ff...",
+  "taproot_address_testnet": "tb1p...",
+  "taproot_address_mainnet": "bc1p...",
+  "threshold": 2,
+  "total_parties": 3,
+  "hierarchical": false,
+  "parties": [
+    {"index": 1, "rank": 0, "verification_share": "..."},
+    {"index": 2, "rank": 0, "verification_share": "..."},
+    {"index": 3, "rank": 0, "verification_share": "..."}
+  ]
+}
+```
 
 ---
 
