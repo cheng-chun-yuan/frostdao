@@ -7,6 +7,7 @@ use std::collections::HashMap;
 
 use crate::keygen::{list_wallets, WalletSummary};
 use crate::storage::{FileStorage, Storage};
+use crate::tui::screens::KeygenFormData;
 use crate::tui::state::{AppState, NetworkSelection};
 
 /// Balance information for a wallet
@@ -42,6 +43,9 @@ pub struct App {
 
     /// Chain selector index (for popup)
     pub chain_selector_index: usize,
+
+    /// Keygen wizard form data
+    pub keygen_form: KeygenFormData,
 }
 
 impl App {
@@ -62,6 +66,7 @@ impl App {
             message: None,
             loading: false,
             chain_selector_index: 0,
+            keygen_form: KeygenFormData::new(),
         })
     }
 
