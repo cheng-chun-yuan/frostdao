@@ -13,9 +13,13 @@ pub struct CommandResult {
 mod birkhoff;
 mod bitcoin_schnorr;
 mod bitcoin_tx;
+mod dkg_tx;
 mod keygen;
+mod recovery;
+mod reshare;
 mod signing;
 mod storage;
+mod tui;
 
 #[derive(Parser)]
 #[command(name = "frostdao")]
@@ -29,6 +33,10 @@ struct Cli {
 enum Commands {
     /// Round 1 of keygen: Generate polynomial and commitments
     KeygenRound1 {
+        /// Wallet/session name (creates .frost_state/<name>/ folder)
+        #[arg(long)]
+        name: String,
+
         /// Threshold (minimum signers needed)
         #[arg(long)]
         threshold: u32,
@@ -52,6 +60,10 @@ enum Commands {
 
     /// Round 2 of keygen: Exchange shares
     KeygenRound2 {
+        /// Wallet/session name (must match round1)
+        #[arg(long)]
+        name: String,
+
         /// JSON with all commitments from round 1 (paste from webpage)
         #[arg(long)]
         data: String,
@@ -59,6 +71,10 @@ enum Commands {
 
     /// Finalize keygen: Validate and combine shares
     KeygenFinalize {
+        /// Wallet/session name (must match round1)
+        #[arg(long)]
+        name: String,
+
         /// JSON with all shares sent to you (paste from webpage)
         #[arg(long)]
         data: String,
@@ -111,7 +127,6 @@ enum Commands {
     // ========================================================================
     // Bitcoin Schnorr (BIP340) Commands
     // ========================================================================
-
     /// Generate a new Bitcoin Schnorr keypair (BIP340)
     BtcKeygen,
 
@@ -185,11 +200,120 @@ enum Commands {
     /// Get Bitcoin Taproot address (signet)
     BtcAddressSignet,
 
-    /// Get DKG group Taproot address (testnet)
-    DkgAddress,
+    /// Get DKG group Taproot address (testnet). Without --name, lists all wallets.
+    DkgAddress {
+        /// Wallet/session name (optional - lists wallets if not provided)
+        #[arg(long)]
+        name: Option<String>,
+    },
 
-    /// Check DKG group balance (testnet)
-    DkgBalance,
+    /// Check DKG group balance (testnet). Without --name, lists all wallets.
+    DkgBalance {
+        /// Wallet/session name (optional - lists wallets if not provided)
+        #[arg(long)]
+        name: Option<String>,
+    },
+
+    /// List all DKG wallets
+    DkgList,
+
+    /// Regenerate group_info.json for a wallet
+    DkgInfo {
+        /// Wallet/session name
+        #[arg(long)]
+        name: String,
+    },
+
+    /// Reshare Round 1: Old party generates sub-shares for new parties
+    ReshareRound1 {
+        /// Source wallet name (existing wallet to reshare from)
+        #[arg(long)]
+        source: String,
+
+        /// New threshold for reshared wallet
+        #[arg(long)]
+        new_threshold: u32,
+
+        /// New total number of parties
+        #[arg(long)]
+        new_n_parties: u32,
+
+        /// Your old party index
+        #[arg(long)]
+        my_index: u32,
+    },
+
+    /// Reshare Finalize: New party combines sub-shares
+    ReshareFinalize {
+        /// Source wallet name
+        #[arg(long)]
+        source: String,
+
+        /// Target wallet name (new wallet to create)
+        #[arg(long)]
+        target: String,
+
+        /// Your new party index
+        #[arg(long)]
+        my_index: u32,
+
+        /// Your HTSS rank (0 = highest)
+        #[arg(long, default_value = "0")]
+        rank: u32,
+
+        /// Enable hierarchical mode
+        #[arg(long, default_value = "false")]
+        hierarchical: bool,
+
+        /// JSON with round1 outputs from old parties
+        #[arg(long)]
+        data: String,
+    },
+
+    /// Recovery Round 1: Helper party generates sub-share for lost party
+    RecoverRound1 {
+        /// Wallet name
+        #[arg(long)]
+        name: String,
+
+        /// Index of the party who lost their share
+        #[arg(long)]
+        lost_index: u32,
+    },
+
+    /// Recovery Finalize: Lost party combines sub-shares to recover
+    RecoverFinalize {
+        /// Source wallet name (the wallet to recover into)
+        #[arg(long)]
+        source: String,
+
+        /// Target wallet name (new wallet file to create)
+        #[arg(long)]
+        target: String,
+
+        /// Your party index (the one being recovered)
+        #[arg(long)]
+        my_index: u32,
+
+        /// Your HTSS rank (0 = highest)
+        #[arg(long, default_value = "0")]
+        rank: u32,
+
+        /// Enable hierarchical mode
+        #[arg(long, default_value = "false")]
+        hierarchical: bool,
+
+        /// JSON with round1 outputs from helper parties
+        #[arg(long)]
+        data: String,
+
+        /// Force overwrite if target wallet exists
+        #[arg(long, default_value = "false")]
+        force: bool,
+    },
+
+    /// Interactive Terminal UI for wallet management
+    Tui,
 
     /// Check Bitcoin balance (testnet)
     BtcBalance,
@@ -223,6 +347,85 @@ enum Commands {
         #[arg(long)]
         fee_rate: Option<u64>,
     },
+
+    // ========================================================================
+    // DKG Threshold Transaction Commands
+    // ========================================================================
+    /// Build unsigned transaction for DKG threshold signing
+    DkgBuildTx {
+        /// Wallet name
+        #[arg(long)]
+        name: String,
+
+        /// Recipient address
+        #[arg(long)]
+        to: String,
+
+        /// Amount in satoshis
+        #[arg(long)]
+        amount: u64,
+
+        /// Fee rate in sats/vbyte (optional)
+        #[arg(long)]
+        fee_rate: Option<u64>,
+
+        /// Network (testnet, signet, mainnet)
+        #[arg(long, default_value = "testnet")]
+        network: String,
+    },
+
+    /// Generate nonce for DKG transaction signing
+    DkgNonce {
+        /// Wallet name
+        #[arg(long)]
+        name: String,
+
+        /// Session ID from dkg-build-tx
+        #[arg(long)]
+        session: String,
+    },
+
+    /// Create signature share for DKG transaction
+    DkgSign {
+        /// Wallet name
+        #[arg(long)]
+        name: String,
+
+        /// Session ID
+        #[arg(long)]
+        session: String,
+
+        /// Sighash to sign (32 bytes hex)
+        #[arg(long)]
+        sighash: String,
+
+        /// JSON with nonces from all signing parties
+        #[arg(long)]
+        data: String,
+    },
+
+    /// Combine signature shares and broadcast transaction
+    DkgBroadcast {
+        /// Wallet name
+        #[arg(long)]
+        name: String,
+
+        /// Session ID
+        #[arg(long)]
+        session: String,
+
+        /// Unsigned transaction hex
+        #[arg(long)]
+        unsigned_tx: String,
+
+        /// JSON with signature shares from all parties
+        #[arg(long)]
+        data: String,
+
+        /// Network (testnet, signet, mainnet)
+        #[arg(long, default_value = "testnet")]
+        network: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -230,19 +433,20 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::KeygenRound1 {
+            name,
             threshold,
             n_parties,
             my_index,
             rank,
             hierarchical,
         } => {
-            keygen::round1(threshold, n_parties, my_index, rank, hierarchical)?;
+            keygen::round1(&name, threshold, n_parties, my_index, rank, hierarchical)?;
         }
-        Commands::KeygenRound2 { data } => {
-            keygen::round2(&data)?;
+        Commands::KeygenRound2 { name, data } => {
+            keygen::round2(&name, &data)?;
         }
-        Commands::KeygenFinalize { data } => {
-            keygen::finalize(&data)?;
+        Commands::KeygenFinalize { name, data } => {
+            keygen::finalize(&name, &data)?;
         }
         Commands::GenerateNonce { session } => {
             signing::generate_nonce(&session)?;
@@ -307,20 +511,112 @@ fn main() -> Result<()> {
         Commands::BtcAddressSignet => {
             bitcoin_schnorr::get_address_signet()?;
         }
-        Commands::DkgAddress => {
-            bitcoin_schnorr::get_dkg_address_testnet()?;
+        Commands::DkgAddress { name } => match name {
+            Some(n) => bitcoin_schnorr::get_dkg_address_testnet(&n)?,
+            None => keygen::print_wallet_list()?,
+        },
+        Commands::DkgBalance { name } => match name {
+            Some(n) => bitcoin_tx::check_dkg_balance_testnet(&n)?,
+            None => keygen::print_wallet_list()?,
+        },
+        Commands::DkgList => {
+            keygen::print_wallet_list()?;
         }
-        Commands::DkgBalance => {
-            bitcoin_tx::check_dkg_balance_testnet()?;
+        Commands::DkgInfo { name } => {
+            keygen::regenerate_group_info(&name)?;
+        }
+        Commands::ReshareRound1 {
+            source,
+            new_threshold,
+            new_n_parties,
+            my_index,
+        } => {
+            reshare::reshare_round1(&source, new_threshold, new_n_parties, my_index)?;
+        }
+        Commands::ReshareFinalize {
+            source,
+            target,
+            my_index,
+            rank,
+            hierarchical,
+            data,
+        } => {
+            reshare::reshare_finalize(&source, &target, my_index, rank, hierarchical, &data)?;
+        }
+        Commands::RecoverRound1 { name, lost_index } => {
+            recovery::recover_round1(&name, lost_index)?;
+        }
+        Commands::RecoverFinalize {
+            source,
+            target,
+            my_index,
+            rank,
+            hierarchical,
+            data,
+            force,
+        } => {
+            recovery::recover_finalize(&source, &target, my_index, rank, hierarchical, &data, force)?;
+        }
+        Commands::Tui => {
+            tui::run_tui()?;
         }
         Commands::BtcBalance => {
             bitcoin_tx::check_balance_testnet()?;
         }
-        Commands::BtcSend { to, amount, fee_rate } => {
+        Commands::BtcSend {
+            to,
+            amount,
+            fee_rate,
+        } => {
             bitcoin_tx::send_testnet(&to, amount, fee_rate)?;
         }
-        Commands::BtcSendSignet { to, amount, fee_rate } => {
+        Commands::BtcSendSignet {
+            to,
+            amount,
+            fee_rate,
+        } => {
             bitcoin_tx::send_signet(&to, amount, fee_rate)?;
+        }
+
+        // DKG Threshold Transaction commands
+        Commands::DkgBuildTx {
+            name,
+            to,
+            amount,
+            fee_rate,
+            network,
+        } => {
+            let net = match network.as_str() {
+                "mainnet" => bitcoin::Network::Bitcoin,
+                "signet" => bitcoin::Network::Signet,
+                _ => bitcoin::Network::Testnet,
+            };
+            dkg_tx::build_unsigned_tx(&name, &to, amount, fee_rate, net)?;
+        }
+        Commands::DkgNonce { name, session } => {
+            dkg_tx::dkg_generate_nonce(&name, &session)?;
+        }
+        Commands::DkgSign {
+            name,
+            session,
+            sighash,
+            data,
+        } => {
+            dkg_tx::dkg_sign(&name, &session, &sighash, &data)?;
+        }
+        Commands::DkgBroadcast {
+            name,
+            session,
+            unsigned_tx,
+            data,
+            network,
+        } => {
+            let net = match network.as_str() {
+                "mainnet" => bitcoin::Network::Bitcoin,
+                "signet" => bitcoin::Network::Signet,
+                _ => bitcoin::Network::Testnet,
+            };
+            dkg_tx::dkg_broadcast(&name, &session, &unsigned_tx, &data, net)?;
         }
     }
 
