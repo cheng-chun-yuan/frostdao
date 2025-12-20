@@ -118,9 +118,7 @@ pub enum SendState {
     #[default]
     SelectWallet,
     /// Enter recipient and amount
-    EnterDetails {
-        wallet_name: String,
-    },
+    EnterDetails { wallet_name: String },
     /// Show sighash for signing
     ShowSighash {
         wallet_name: String,
@@ -157,9 +155,7 @@ pub enum SendState {
         sighash: String,
     },
     /// Transaction complete
-    Complete {
-        txid: String,
-    },
+    Complete { txid: String },
 }
 
 /// Form field focus for multi-field forms

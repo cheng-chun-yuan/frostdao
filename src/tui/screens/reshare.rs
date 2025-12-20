@@ -10,7 +10,7 @@ use ratatui::{
 
 use crate::tui::app::App;
 use crate::tui::components::{TextArea, TextInput};
-use crate::tui::state::{ReshareFormField, ReshareState, ReshareFinalizeField};
+use crate::tui::state::{ReshareFinalizeField, ReshareFormField, ReshareState};
 
 /// Reshare wizard form data
 #[derive(Clone)]
@@ -41,7 +41,9 @@ impl ReshareFormData {
         Self {
             source_wallet_index: 0,
             new_threshold: TextInput::new("New Threshold").with_value("2").numeric(),
-            new_n_parties: TextInput::new("New Total Parties").with_value("3").numeric(),
+            new_n_parties: TextInput::new("New Total Parties")
+                .with_value("3")
+                .numeric(),
             focused_field: ReshareFormField::SourceWallet,
             round1_output: String::new(),
             target_name: TextInput::new("New Wallet Name").with_placeholder("reshared_wallet"),
@@ -107,8 +109,8 @@ fn render_round1_setup(frame: &mut Frame, app: &App, form: &ReshareFormData, are
         .map(|w| w.name.as_str())
         .unwrap_or("(no wallets)");
 
-    let wallet_para = Paragraph::new(format!("  {}  (↑/↓ to change)", wallet_name))
-        .block(wallet_block);
+    let wallet_para =
+        Paragraph::new(format!("  {}  (↑/↓ to change)", wallet_name)).block(wallet_block);
     frame.render_widget(wallet_para, chunks[0]);
 
     // New threshold
@@ -155,8 +157,8 @@ fn render_round1_output(frame: &mut Frame, output_json: &str, area: Rect) {
         ])
         .split(inner);
 
-    let instructions = Paragraph::new("Share this with NEW parties:")
-        .style(Style::default().fg(Color::Yellow));
+    let instructions =
+        Paragraph::new("Share this with NEW parties:").style(Style::default().fg(Color::Yellow));
     frame.render_widget(instructions, chunks[0]);
 
     let output_block = Block::default()
@@ -217,7 +219,9 @@ fn render_finalize_input(frame: &mut Frame, form: &ReshareFormData, area: Rect) 
     let hier_focused = form.finalize_field == ReshareFinalizeField::Hierarchical;
     let checkbox = if form.hierarchical { "[x]" } else { "[ ]" };
     let checkbox_style = if hier_focused {
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::White)
     };

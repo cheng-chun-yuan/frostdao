@@ -136,10 +136,7 @@ impl TextInput {
 
         // Show cursor when focused
         if focused && !self.value.is_empty() {
-            frame.set_cursor_position((
-                area.x + 1 + self.cursor as u16,
-                area.y + 1,
-            ));
+            frame.set_cursor_position((area.x + 1 + self.cursor as u16, area.y + 1));
         } else if focused && self.value.is_empty() {
             frame.set_cursor_position((area.x + 1, area.y + 1));
         }
@@ -165,10 +162,7 @@ impl TextInput {
         frame.render_widget(paragraph, area);
 
         if focused {
-            frame.set_cursor_position((
-                area.x + 1 + self.cursor as u16,
-                area.y + 1,
-            ));
+            frame.set_cursor_position((area.x + 1 + self.cursor as u16, area.y + 1));
         }
     }
 }

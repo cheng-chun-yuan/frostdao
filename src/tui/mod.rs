@@ -14,7 +14,9 @@ pub mod state;
 
 use anyhow::Result;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind},
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
+    },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -65,10 +67,7 @@ pub fn run_tui() -> Result<()> {
     Ok(())
 }
 
-fn run_app<B: ratatui::backend::Backend>(
-    terminal: &mut Terminal<B>,
-    app: &mut App,
-) -> Result<()> {
+fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> {
     loop {
         terminal.draw(|f| ui(f, app))?;
 
@@ -155,7 +154,9 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
             KeyCode::BackTab | KeyCode::Up => {
                 app.keygen_form.focused_field = app.keygen_form.focused_field.prev();
             }
-            KeyCode::Char(' ') if app.keygen_form.focused_field == KeygenFormField::Hierarchical => {
+            KeyCode::Char(' ')
+                if app.keygen_form.focused_field == KeygenFormField::Hierarchical =>
+            {
                 app.keygen_form.hierarchical = !app.keygen_form.hierarchical;
             }
             KeyCode::Enter => {
@@ -172,13 +173,11 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
                     return;
                 }
                 if threshold == 0 || threshold > n_parties {
-                    app.keygen_form.error_message =
-                        Some("Invalid threshold".to_string());
+                    app.keygen_form.error_message = Some("Invalid threshold".to_string());
                     return;
                 }
                 if my_index == 0 || my_index > n_parties {
-                    app.keygen_form.error_message =
-                        Some("Invalid party index".to_string());
+                    app.keygen_form.error_message = Some("Invalid party index".to_string());
                     return;
                 }
 
@@ -265,20 +264,18 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
 
                 let state_dir = keygen::get_state_dir(&name);
                 match FileStorage::new(&state_dir) {
-                    Ok(storage) => {
-                        match keygen::round2_core(&data, &storage) {
-                            Ok(result) => {
-                                app.keygen_form.round2_output = result.result;
-                                app.keygen_form.error_message = None;
-                                app.state = AppState::Keygen(KeygenState::Round2Output {
-                                    output_json: app.keygen_form.round2_output.clone(),
-                                });
-                            }
-                            Err(e) => {
-                                app.keygen_form.error_message = Some(format!("Error: {}", e));
-                            }
+                    Ok(storage) => match keygen::round2_core(&data, &storage) {
+                        Ok(result) => {
+                            app.keygen_form.round2_output = result.result;
+                            app.keygen_form.error_message = None;
+                            app.state = AppState::Keygen(KeygenState::Round2Output {
+                                output_json: app.keygen_form.round2_output.clone(),
+                            });
                         }
-                    }
+                        Err(e) => {
+                            app.keygen_form.error_message = Some(format!("Error: {}", e));
+                        }
+                    },
                     Err(e) => {
                         app.keygen_form.error_message = Some(format!("Storage error: {}", e));
                     }
@@ -354,8 +351,8 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
 }
 
 fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
-    use state::{ReshareFormField, ReshareFinalizeField};
     use screens::ReshareFormData;
+    use state::{ReshareFinalizeField, ReshareFormField};
 
     let state = app.state.clone();
     match state {
@@ -379,13 +376,17 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
                     app.reshare_form.focused_field = app.reshare_form.focused_field.prev();
                 }
             }
-            KeyCode::Char('j') if app.reshare_form.focused_field == ReshareFormField::SourceWallet => {
+            KeyCode::Char('j')
+                if app.reshare_form.focused_field == ReshareFormField::SourceWallet =>
+            {
                 if !app.wallets.is_empty() {
                     app.reshare_form.source_wallet_index =
                         (app.reshare_form.source_wallet_index + 1) % app.wallets.len();
                 }
             }
-            KeyCode::Char('k') if app.reshare_form.focused_field == ReshareFormField::SourceWallet => {
+            KeyCode::Char('k')
+                if app.reshare_form.focused_field == ReshareFormField::SourceWallet =>
+            {
                 if app.reshare_form.source_wallet_index > 0 {
                     app.reshare_form.source_wallet_index -= 1;
                 } else if !app.wallets.is_empty() {
@@ -399,9 +400,13 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
                     return;
                 }
 
-                let wallet_name = app.wallets[app.reshare_form.source_wallet_index].name.clone();
-                let new_threshold: u32 = app.reshare_form.new_threshold.value().parse().unwrap_or(0);
-                let new_n_parties: u32 = app.reshare_form.new_n_parties.value().parse().unwrap_or(0);
+                let wallet_name = app.wallets[app.reshare_form.source_wallet_index]
+                    .name
+                    .clone();
+                let new_threshold: u32 =
+                    app.reshare_form.new_threshold.value().parse().unwrap_or(0);
+                let new_n_parties: u32 =
+                    app.reshare_form.new_n_parties.value().parse().unwrap_or(0);
 
                 if new_threshold == 0 || new_threshold > new_n_parties {
                     app.reshare_form.error_message = Some("Invalid threshold".to_string());
@@ -424,7 +429,8 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
                                 // Extract party index from Scalar (hack from signing.rs)
                                 let my_old_index = {
                                     let mut u32_index_bytes = [0u8; 4];
-                                    u32_index_bytes.copy_from_slice(&paired_share.index().to_bytes()[28..]);
+                                    u32_index_bytes
+                                        .copy_from_slice(&paired_share.index().to_bytes()[28..]);
                                     u32::from_be_bytes(u32_index_bytes)
                                 };
 
@@ -442,12 +448,14 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
                                         });
                                     }
                                     Err(e) => {
-                                        app.reshare_form.error_message = Some(format!("Error: {}", e));
+                                        app.reshare_form.error_message =
+                                            Some(format!("Error: {}", e));
                                     }
                                 }
                             }
                             Err(e) => {
-                                app.reshare_form.error_message = Some(format!("Cannot read wallet: {}", e));
+                                app.reshare_form.error_message =
+                                    Some(format!("Cannot read wallet: {}", e));
                             }
                         }
                     }
@@ -498,13 +506,17 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
             KeyCode::BackTab => {
                 app.reshare_form.finalize_field = app.reshare_form.finalize_field.prev();
             }
-            KeyCode::Char(' ') if app.reshare_form.finalize_field == ReshareFinalizeField::Hierarchical => {
+            KeyCode::Char(' ')
+                if app.reshare_form.finalize_field == ReshareFinalizeField::Hierarchical =>
+            {
                 app.reshare_form.hierarchical = !app.reshare_form.hierarchical;
             }
             KeyCode::Enter => {
                 // Run reshare finalize
                 let source_wallet = if !app.wallets.is_empty() {
-                    app.wallets[app.reshare_form.source_wallet_index].name.clone()
+                    app.wallets[app.reshare_form.source_wallet_index]
+                        .name
+                        .clone()
                 } else {
                     String::new()
                 };
@@ -523,7 +535,8 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
                     return;
                 }
                 if data.trim().is_empty() {
-                    app.reshare_form.error_message = Some("Paste round 1 outputs first".to_string());
+                    app.reshare_form.error_message =
+                        Some("Paste round 1 outputs first".to_string());
                     return;
                 }
 
@@ -581,8 +594,8 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
 }
 
 fn handle_send_keys(app: &mut App, key: KeyEvent) {
-    use state::SendFormField;
     use screens::SendFormData;
+    use state::SendFormField;
 
     let state = app.state.clone();
     match state {
@@ -658,16 +671,14 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     session_id,
                 });
             }
-            _ => {
-                match app.send_form.focused_field {
-                    SendFormField::ToAddress => {
-                        app.send_form.to_address.handle_key(key);
-                    }
-                    SendFormField::Amount => {
-                        app.send_form.amount.handle_key(key);
-                    }
+            _ => match app.send_form.focused_field {
+                SendFormField::ToAddress => {
+                    app.send_form.to_address.handle_key(key);
                 }
-            }
+                SendFormField::Amount => {
+                    app.send_form.amount.handle_key(key);
+                }
+            },
         },
         AppState::Send(SendState::ShowSighash {
             wallet_name,
@@ -687,22 +698,20 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 // Generate nonce
                 let state_dir = keygen::get_state_dir(&wallet_name);
                 match FileStorage::new(&state_dir) {
-                    Ok(storage) => {
-                        match signing::generate_nonce_core(&session_id, &storage) {
-                            Ok(result) => {
-                                app.send_form.nonce_output = result.result.clone();
-                                app.state = AppState::Send(SendState::GenerateNonce {
-                                    wallet_name,
-                                    session_id,
-                                    sighash,
-                                    nonce_output: result.result,
-                                });
-                            }
-                            Err(e) => {
-                                app.send_form.error_message = Some(format!("Error: {}", e));
-                            }
+                    Ok(storage) => match signing::generate_nonce_core(&session_id, &storage) {
+                        Ok(result) => {
+                            app.send_form.nonce_output = result.result.clone();
+                            app.state = AppState::Send(SendState::GenerateNonce {
+                                wallet_name,
+                                session_id,
+                                sighash,
+                                nonce_output: result.result,
+                            });
                         }
-                    }
+                        Err(e) => {
+                            app.send_form.error_message = Some(format!("Error: {}", e));
+                        }
+                    },
                     Err(e) => {
                         app.send_form.error_message = Some(format!("Storage error: {}", e));
                     }
@@ -730,9 +739,8 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
             }
             KeyCode::Enter => {
                 // Pre-fill with my nonce
-                app.send_form.nonces_input = crate::tui::components::TextArea::new(
-                    "Paste nonces from other parties",
-                );
+                app.send_form.nonces_input =
+                    crate::tui::components::TextArea::new("Paste nonces from other parties");
                 app.send_form.nonces_input.handle_paste(&nonce_output);
                 app.state = AppState::Send(SendState::EnterNonces {
                     wallet_name,
@@ -826,10 +834,7 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
             }
             _ => {}
         },
-        AppState::Send(SendState::CombineShares {
-            wallet_name,
-            ..
-        }) => match key.code {
+        AppState::Send(SendState::CombineShares { wallet_name, .. }) => match key.code {
             KeyCode::Esc => {
                 app.state = AppState::Send(SendState::GenerateShare {
                     wallet_name,
@@ -848,20 +853,18 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 // Combine signatures
                 let state_dir = keygen::get_state_dir(&wallet_name);
                 match FileStorage::new(&state_dir) {
-                    Ok(storage) => {
-                        match signing::combine_signatures_core(&shares_data, &storage) {
-                            Ok(result) => {
-                                app.send_form.final_signature = result.result.clone();
-                                app.send_form.error_message = None;
-                                app.state = AppState::Send(SendState::Complete {
-                                    txid: result.result,
-                                });
-                            }
-                            Err(e) => {
-                                app.send_form.error_message = Some(format!("Error: {}", e));
-                            }
+                    Ok(storage) => match signing::combine_signatures_core(&shares_data, &storage) {
+                        Ok(result) => {
+                            app.send_form.final_signature = result.result.clone();
+                            app.send_form.error_message = None;
+                            app.state = AppState::Send(SendState::Complete {
+                                txid: result.result,
+                            });
                         }
-                    }
+                        Err(e) => {
+                            app.send_form.error_message = Some(format!("Error: {}", e));
+                        }
+                    },
                     Err(e) => {
                         app.send_form.error_message = Some(format!("Storage error: {}", e));
                     }
@@ -927,7 +930,10 @@ fn render_title(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
         ),
         Span::raw("  "),
         Span::styled("[", Style::default().fg(Color::Gray)),
-        Span::styled(app.network.display_name(), Style::default().fg(network_color)),
+        Span::styled(
+            app.network.display_name(),
+            Style::default().fg(network_color),
+        ),
         Span::styled("]", Style::default().fg(Color::Gray)),
     ]);
 

@@ -92,8 +92,11 @@ fn render_round1_setup(frame: &mut Frame, form: &KeygenFormData, area: Rect) {
         .split(inner);
 
     // Name input
-    form.name
-        .render(frame, chunks[0], form.focused_field == KeygenFormField::Name);
+    form.name.render(
+        frame,
+        chunks[0],
+        form.focused_field == KeygenFormField::Name,
+    );
 
     // Threshold input
     form.threshold.render(
@@ -127,7 +130,9 @@ fn render_round1_setup(frame: &mut Frame, form: &KeygenFormData, area: Rect) {
     let hierarchical_focused = form.focused_field == KeygenFormField::Hierarchical;
     let checkbox = if form.hierarchical { "[x]" } else { "[ ]" };
     let checkbox_style = if hierarchical_focused {
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::White)
     };
@@ -148,8 +153,7 @@ fn render_round1_setup(frame: &mut Frame, form: &KeygenFormData, area: Rect) {
 
     // Error message
     if let Some(error) = &form.error_message {
-        let error_para = Paragraph::new(error.as_str())
-            .style(Style::default().fg(Color::Red));
+        let error_para = Paragraph::new(error.as_str()).style(Style::default().fg(Color::Red));
         frame.render_widget(error_para, chunks[7]);
     }
 
@@ -178,8 +182,8 @@ fn render_round1_output(frame: &mut Frame, output_json: &str, area: Rect) {
         .split(inner);
 
     // Instructions
-    let instructions = Paragraph::new("Share this with all parties:")
-        .style(Style::default().fg(Color::Yellow));
+    let instructions =
+        Paragraph::new("Share this with all parties:").style(Style::default().fg(Color::Yellow));
     frame.render_widget(instructions, chunks[0]);
 
     // Output JSON
@@ -228,8 +232,7 @@ fn render_round2_input(frame: &mut Frame, form: &KeygenFormData, area: Rect) {
 
     // Error
     if let Some(error) = &form.error_message {
-        let error_para = Paragraph::new(error.as_str())
-            .style(Style::default().fg(Color::Red));
+        let error_para = Paragraph::new(error.as_str()).style(Style::default().fg(Color::Red));
         frame.render_widget(error_para, chunks[2]);
     }
 
@@ -258,8 +261,8 @@ fn render_round2_output(frame: &mut Frame, output_json: &str, area: Rect) {
         .split(inner);
 
     // Instructions
-    let instructions = Paragraph::new("Share this with all parties:")
-        .style(Style::default().fg(Color::Yellow));
+    let instructions =
+        Paragraph::new("Share this with all parties:").style(Style::default().fg(Color::Yellow));
     frame.render_widget(instructions, chunks[0]);
 
     // Output JSON
@@ -308,8 +311,7 @@ fn render_finalize_input(frame: &mut Frame, form: &KeygenFormData, area: Rect) {
 
     // Error
     if let Some(error) = &form.error_message {
-        let error_para = Paragraph::new(error.as_str())
-            .style(Style::default().fg(Color::Red));
+        let error_para = Paragraph::new(error.as_str()).style(Style::default().fg(Color::Red));
         frame.render_widget(error_para, chunks[2]);
     }
 

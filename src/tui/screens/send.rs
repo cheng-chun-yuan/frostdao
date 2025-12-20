@@ -107,8 +107,8 @@ fn render_select_wallet(frame: &mut Frame, app: &App, form: &SendFormData, area:
         ])
         .split(inner);
 
-    let instructions = Paragraph::new("Select a wallet to sign from:")
-        .style(Style::default().fg(Color::Yellow));
+    let instructions =
+        Paragraph::new("Select a wallet to sign from:").style(Style::default().fg(Color::Yellow));
     frame.render_widget(instructions, chunks[0]);
 
     // Wallet selector
@@ -322,8 +322,9 @@ fn render_generate_share(frame: &mut Frame, share_output: &str, area: Rect) {
         .wrap(Wrap { trim: false });
     frame.render_widget(share_para, chunks[1]);
 
-    let help = Paragraph::new("c: Copy | Enter: Combine Shares (Aggregator) | Esc: Done (Non-Aggregator)")
-        .style(Style::default().fg(Color::DarkGray));
+    let help =
+        Paragraph::new("c: Copy | Enter: Combine Shares (Aggregator) | Esc: Done (Non-Aggregator)")
+            .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[2]);
 }
 
@@ -396,17 +397,16 @@ fn render_complete(frame: &mut Frame, txid: &str, area: Rect) {
         .border_style(Style::default().fg(Color::Cyan))
         .title("Result");
     let info = Paragraph::new(vec![
-        Line::from(vec![
-            Span::styled("Signature/TXID: ", Style::default().fg(Color::Gray)),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                txid,
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]),
+        Line::from(vec![Span::styled(
+            "Signature/TXID: ",
+            Style::default().fg(Color::Gray),
+        )]),
+        Line::from(vec![Span::styled(
+            txid,
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )]),
         Line::from(""),
         Line::from("All parties contributed their shares to create this signature."),
         Line::from("In a real transaction, this would be broadcast to the network."),

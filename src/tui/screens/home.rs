@@ -78,7 +78,10 @@ fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
         if let (Some(t), Some(n)) = (wallet.threshold, wallet.total_parties) {
             lines.push(Line::from(vec![
                 Span::styled("Threshold: ", Style::default().fg(Color::Gray)),
-                Span::styled(format!("{}-of-{}", t, n), Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    format!("{}-of-{}", t, n),
+                    Style::default().fg(Color::Yellow),
+                ),
             ]));
         }
 
@@ -129,12 +132,18 @@ fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
             let btc = info.balance_sats as f64 / 100_000_000.0;
             lines.push(Line::from(vec![
                 Span::styled("         ", Style::default()),
-                Span::styled(format!("({:.8} BTC)", btc), Style::default().fg(Color::Gray)),
+                Span::styled(
+                    format!("({:.8} BTC)", btc),
+                    Style::default().fg(Color::Gray),
+                ),
             ]));
 
             lines.push(Line::from(vec![
                 Span::styled("UTXOs: ", Style::default().fg(Color::Gray)),
-                Span::styled(format!("{}", info.utxo_count), Style::default().fg(Color::White)),
+                Span::styled(
+                    format!("{}", info.utxo_count),
+                    Style::default().fg(Color::White),
+                ),
             ]));
         } else {
             lines.push(Line::from(vec![
