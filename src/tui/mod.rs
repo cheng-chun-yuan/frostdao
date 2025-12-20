@@ -29,10 +29,11 @@ use ratatui::{
 use std::io;
 
 use app::App;
-use state::{AppState, KeygenState, ReshareState};
+use state::{AppState, KeygenState, ReshareState, SendState};
 
 use crate::keygen;
 use crate::reshare;
+use crate::signing;
 use crate::storage::{FileStorage, Storage};
 
 /// Run the terminal UI
@@ -83,7 +84,7 @@ fn run_app<B: ratatui::backend::Backend>(
                     AppState::ChainSelect => handle_chain_select_keys(app, key.code),
                     AppState::Keygen(_) => handle_keygen_keys(app, key),
                     AppState::Reshare(_) => handle_reshare_keys(app, key),
-                    AppState::Send(_) => handle_send_keys(app, key.code),
+                    AppState::Send(_) => handle_send_keys(app, key),
                 }
             }
         }
@@ -579,12 +580,305 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
     }
 }
 
-fn handle_send_keys(app: &mut App, code: KeyCode) {
-    match code {
-        KeyCode::Esc => app.state = AppState::Home,
-        _ => {
-            // Will be implemented in Commit 5
-        }
+fn handle_send_keys(app: &mut App, key: KeyEvent) {
+    use state::SendFormField;
+    use screens::SendFormData;
+
+    let state = app.state.clone();
+    match state {
+        AppState::Send(SendState::SelectWallet) => match key.code {
+            KeyCode::Esc => {
+                app.send_form = SendFormData::new();
+                app.state = AppState::Home;
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if app.send_form.wallet_index > 0 {
+                    app.send_form.wallet_index -= 1;
+                } else if !app.wallets.is_empty() {
+                    app.send_form.wallet_index = app.wallets.len() - 1;
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if !app.wallets.is_empty() {
+                    app.send_form.wallet_index =
+                        (app.send_form.wallet_index + 1) % app.wallets.len();
+                }
+            }
+            KeyCode::Enter => {
+                if app.wallets.is_empty() {
+                    app.send_form.error_message = Some("No wallets available".to_string());
+                    return;
+                }
+                let wallet_name = app.wallets[app.send_form.wallet_index].name.clone();
+                app.state = AppState::Send(SendState::EnterDetails { wallet_name });
+            }
+            _ => {}
+        },
+        AppState::Send(SendState::EnterDetails { wallet_name }) => match key.code {
+            KeyCode::Esc => {
+                app.state = AppState::Send(SendState::SelectWallet);
+            }
+            KeyCode::Tab => {
+                app.send_form.focused_field = app.send_form.focused_field.next();
+            }
+            KeyCode::BackTab => {
+                app.send_form.focused_field = app.send_form.focused_field.prev();
+            }
+            KeyCode::Enter => {
+                // Generate a demo sighash (in real world, this would come from TX builder)
+                let to_addr = app.send_form.to_address.value().to_string();
+                let amount: u64 = app.send_form.amount.value().parse().unwrap_or(0);
+
+                if to_addr.is_empty() {
+                    app.send_form.error_message = Some("Enter destination address".to_string());
+                    return;
+                }
+                if amount == 0 {
+                    app.send_form.error_message = Some("Enter valid amount".to_string());
+                    return;
+                }
+
+                // Generate session ID and demo sighash
+                let session_id = SendFormData::generate_session_id();
+                // Create a demo sighash based on the inputs (in real world this comes from TX)
+                let sighash = format!(
+                    "demo_sighash_{}_{}_{}",
+                    wallet_name,
+                    &to_addr[..8.min(to_addr.len())],
+                    amount
+                );
+                app.send_form.session_id = session_id.clone();
+                app.send_form.sighash = sighash.clone();
+
+                app.state = AppState::Send(SendState::ShowSighash {
+                    wallet_name,
+                    to_address: to_addr,
+                    amount,
+                    sighash,
+                    session_id,
+                });
+            }
+            _ => {
+                match app.send_form.focused_field {
+                    SendFormField::ToAddress => {
+                        app.send_form.to_address.handle_key(key);
+                    }
+                    SendFormField::Amount => {
+                        app.send_form.amount.handle_key(key);
+                    }
+                }
+            }
+        },
+        AppState::Send(SendState::ShowSighash {
+            wallet_name,
+            sighash,
+            session_id,
+            ..
+        }) => match key.code {
+            KeyCode::Esc => {
+                app.state = AppState::Send(SendState::EnterDetails {
+                    wallet_name: wallet_name.clone(),
+                });
+            }
+            KeyCode::Char('c') => {
+                app.set_message("Sighash copied to clipboard (simulated)");
+            }
+            KeyCode::Enter => {
+                // Generate nonce
+                let state_dir = keygen::get_state_dir(&wallet_name);
+                match FileStorage::new(&state_dir) {
+                    Ok(storage) => {
+                        match signing::generate_nonce_core(&session_id, &storage) {
+                            Ok(result) => {
+                                app.send_form.nonce_output = result.result.clone();
+                                app.state = AppState::Send(SendState::GenerateNonce {
+                                    wallet_name,
+                                    session_id,
+                                    sighash,
+                                    nonce_output: result.result,
+                                });
+                            }
+                            Err(e) => {
+                                app.send_form.error_message = Some(format!("Error: {}", e));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        app.send_form.error_message = Some(format!("Storage error: {}", e));
+                    }
+                }
+            }
+            _ => {}
+        },
+        AppState::Send(SendState::GenerateNonce {
+            wallet_name,
+            session_id,
+            sighash,
+            nonce_output,
+        }) => match key.code {
+            KeyCode::Esc => {
+                app.state = AppState::Send(SendState::ShowSighash {
+                    wallet_name,
+                    to_address: app.send_form.to_address.value().to_string(),
+                    amount: app.send_form.amount.value().parse().unwrap_or(0),
+                    sighash,
+                    session_id,
+                });
+            }
+            KeyCode::Char('c') => {
+                app.set_message("Nonce copied to clipboard (simulated)");
+            }
+            KeyCode::Enter => {
+                // Pre-fill with my nonce
+                app.send_form.nonces_input = crate::tui::components::TextArea::new(
+                    "Paste nonces from other parties",
+                );
+                app.send_form.nonces_input.handle_paste(&nonce_output);
+                app.state = AppState::Send(SendState::EnterNonces {
+                    wallet_name,
+                    session_id,
+                    sighash,
+                    my_nonce: nonce_output,
+                });
+            }
+            _ => {}
+        },
+        AppState::Send(SendState::EnterNonces {
+            wallet_name,
+            session_id,
+            sighash,
+            ..
+        }) => match key.code {
+            KeyCode::Esc => {
+                app.state = AppState::Send(SendState::GenerateNonce {
+                    wallet_name,
+                    session_id,
+                    sighash,
+                    nonce_output: app.send_form.nonce_output.clone(),
+                });
+            }
+            KeyCode::Enter => {
+                let nonces_data = app.send_form.nonces_input.content();
+                if nonces_data.trim().is_empty() {
+                    app.send_form.error_message = Some("Paste nonces first".to_string());
+                    return;
+                }
+
+                // Generate signature share
+                let state_dir = keygen::get_state_dir(&wallet_name);
+                match FileStorage::new(&state_dir) {
+                    Ok(storage) => {
+                        match signing::create_signature_share_core(
+                            &session_id,
+                            &sighash,
+                            &nonces_data,
+                            &storage,
+                        ) {
+                            Ok(result) => {
+                                app.send_form.share_output = result.result.clone();
+                                app.send_form.error_message = None;
+                                app.state = AppState::Send(SendState::GenerateShare {
+                                    wallet_name,
+                                    session_id,
+                                    sighash,
+                                    share_output: result.result,
+                                });
+                            }
+                            Err(e) => {
+                                app.send_form.error_message = Some(format!("Error: {}", e));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        app.send_form.error_message = Some(format!("Storage error: {}", e));
+                    }
+                }
+            }
+            _ => {
+                app.send_form.nonces_input.handle_key(key);
+            }
+        },
+        AppState::Send(SendState::GenerateShare {
+            wallet_name,
+            session_id,
+            sighash,
+            share_output,
+        }) => match key.code {
+            KeyCode::Esc => {
+                // Non-aggregator done
+                app.send_form = SendFormData::new();
+                app.state = AppState::Home;
+            }
+            KeyCode::Char('c') => {
+                app.set_message("Signature share copied to clipboard (simulated)");
+            }
+            KeyCode::Enter => {
+                // Go to aggregator mode
+                app.send_form.shares_input = crate::tui::components::TextArea::new(
+                    "Paste signature shares from other parties",
+                );
+                app.send_form.shares_input.handle_paste(&share_output);
+                app.state = AppState::Send(SendState::CombineShares {
+                    wallet_name,
+                    session_id,
+                    sighash,
+                });
+            }
+            _ => {}
+        },
+        AppState::Send(SendState::CombineShares {
+            wallet_name,
+            ..
+        }) => match key.code {
+            KeyCode::Esc => {
+                app.state = AppState::Send(SendState::GenerateShare {
+                    wallet_name,
+                    session_id: app.send_form.session_id.clone(),
+                    sighash: app.send_form.sighash.clone(),
+                    share_output: app.send_form.share_output.clone(),
+                });
+            }
+            KeyCode::Enter => {
+                let shares_data = app.send_form.shares_input.content();
+                if shares_data.trim().is_empty() {
+                    app.send_form.error_message = Some("Paste signature shares first".to_string());
+                    return;
+                }
+
+                // Combine signatures
+                let state_dir = keygen::get_state_dir(&wallet_name);
+                match FileStorage::new(&state_dir) {
+                    Ok(storage) => {
+                        match signing::combine_signatures_core(&shares_data, &storage) {
+                            Ok(result) => {
+                                app.send_form.final_signature = result.result.clone();
+                                app.send_form.error_message = None;
+                                app.state = AppState::Send(SendState::Complete {
+                                    txid: result.result,
+                                });
+                            }
+                            Err(e) => {
+                                app.send_form.error_message = Some(format!("Error: {}", e));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        app.send_form.error_message = Some(format!("Storage error: {}", e));
+                    }
+                }
+            }
+            _ => {
+                app.send_form.shares_input.handle_key(key);
+            }
+        },
+        AppState::Send(SendState::Complete { .. }) => match key.code {
+            KeyCode::Esc | KeyCode::Enter => {
+                app.send_form = SendFormData::new();
+                app.state = AppState::Home;
+            }
+            _ => {}
+        },
+        _ => {}
     }
 }
 
@@ -610,7 +904,7 @@ fn ui(frame: &mut Frame, app: &App) {
         }
         AppState::Keygen(_) => screens::render_keygen(frame, app, &app.keygen_form, chunks[1]),
         AppState::Reshare(_) => screens::render_reshare(frame, app, &app.reshare_form, chunks[1]),
-        AppState::Send(_) => screens::render_send(frame, app, chunks[1]),
+        AppState::Send(_) => screens::render_send(frame, app, &app.send_form, chunks[1]),
     }
 
     // Help bar

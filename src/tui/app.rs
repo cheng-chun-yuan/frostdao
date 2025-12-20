@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use crate::keygen::{list_wallets, WalletSummary};
 use crate::storage::{FileStorage, Storage};
-use crate::tui::screens::{KeygenFormData, ReshareFormData};
+use crate::tui::screens::{KeygenFormData, ReshareFormData, SendFormData};
 use crate::tui::state::{AppState, NetworkSelection};
 
 /// Balance information for a wallet
@@ -49,6 +49,9 @@ pub struct App {
 
     /// Reshare wizard form data
     pub reshare_form: ReshareFormData,
+
+    /// Send wizard form data
+    pub send_form: SendFormData,
 }
 
 impl App {
@@ -71,6 +74,7 @@ impl App {
             chain_selector_index: 0,
             keygen_form: KeygenFormData::new(),
             reshare_form: ReshareFormData::new(),
+            send_form: SendFormData::new(),
         })
     }
 
