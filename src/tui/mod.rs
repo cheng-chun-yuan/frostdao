@@ -29,10 +29,11 @@ use ratatui::{
 use std::io;
 
 use app::App;
-use state::{AppState, KeygenState};
+use state::{AppState, KeygenState, ReshareState};
 
 use crate::keygen;
-use crate::storage::FileStorage;
+use crate::reshare;
+use crate::storage::{FileStorage, Storage};
 
 /// Run the terminal UI
 pub fn run_tui() -> Result<()> {
@@ -81,7 +82,7 @@ fn run_app<B: ratatui::backend::Backend>(
                     AppState::Home => handle_home_keys(app, key.code),
                     AppState::ChainSelect => handle_chain_select_keys(app, key.code),
                     AppState::Keygen(_) => handle_keygen_keys(app, key),
-                    AppState::Reshare(_) => handle_reshare_keys(app, key.code),
+                    AppState::Reshare(_) => handle_reshare_keys(app, key),
                     AppState::Send(_) => handle_send_keys(app, key.code),
                 }
             }
@@ -351,12 +352,230 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
     }
 }
 
-fn handle_reshare_keys(app: &mut App, code: KeyCode) {
-    match code {
-        KeyCode::Esc => app.state = AppState::Home,
-        _ => {
-            // Will be implemented in Commit 4
-        }
+fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
+    use state::{ReshareFormField, ReshareFinalizeField};
+    use screens::ReshareFormData;
+
+    let state = app.state.clone();
+    match state {
+        AppState::Reshare(ReshareState::Round1Setup) => match key.code {
+            KeyCode::Esc => {
+                app.reshare_form = ReshareFormData::new();
+                app.state = AppState::Home;
+            }
+            KeyCode::Tab | KeyCode::Down => {
+                app.reshare_form.focused_field = app.reshare_form.focused_field.next();
+            }
+            KeyCode::BackTab | KeyCode::Up => {
+                // For SourceWallet, up/down changes the selection
+                if app.reshare_form.focused_field == ReshareFormField::SourceWallet {
+                    if app.reshare_form.source_wallet_index > 0 {
+                        app.reshare_form.source_wallet_index -= 1;
+                    } else if !app.wallets.is_empty() {
+                        app.reshare_form.source_wallet_index = app.wallets.len() - 1;
+                    }
+                } else {
+                    app.reshare_form.focused_field = app.reshare_form.focused_field.prev();
+                }
+            }
+            KeyCode::Char('j') if app.reshare_form.focused_field == ReshareFormField::SourceWallet => {
+                if !app.wallets.is_empty() {
+                    app.reshare_form.source_wallet_index =
+                        (app.reshare_form.source_wallet_index + 1) % app.wallets.len();
+                }
+            }
+            KeyCode::Char('k') if app.reshare_form.focused_field == ReshareFormField::SourceWallet => {
+                if app.reshare_form.source_wallet_index > 0 {
+                    app.reshare_form.source_wallet_index -= 1;
+                } else if !app.wallets.is_empty() {
+                    app.reshare_form.source_wallet_index = app.wallets.len() - 1;
+                }
+            }
+            KeyCode::Enter => {
+                // Validate and run reshare round 1
+                if app.wallets.is_empty() {
+                    app.reshare_form.error_message = Some("No wallets available".to_string());
+                    return;
+                }
+
+                let wallet_name = app.wallets[app.reshare_form.source_wallet_index].name.clone();
+                let new_threshold: u32 = app.reshare_form.new_threshold.value().parse().unwrap_or(0);
+                let new_n_parties: u32 = app.reshare_form.new_n_parties.value().parse().unwrap_or(0);
+
+                if new_threshold == 0 || new_threshold > new_n_parties {
+                    app.reshare_form.error_message = Some("Invalid threshold".to_string());
+                    return;
+                }
+
+                // Get my_old_index from the source wallet
+                let state_dir = keygen::get_state_dir(&wallet_name);
+                match FileStorage::new(&state_dir) {
+                    Ok(storage) => {
+                        // Load paired secret share to get my old index
+                        match storage.read("paired_secret_share.bin") {
+                            Ok(bytes) => {
+                                use schnorr_fun::frost::PairedSecretShare;
+                                use schnorr_fun::fun::marker::EvenY;
+
+                                let paired_share: PairedSecretShare<EvenY> =
+                                    bincode::deserialize(&bytes).unwrap();
+
+                                // Extract party index from Scalar (hack from signing.rs)
+                                let my_old_index = {
+                                    let mut u32_index_bytes = [0u8; 4];
+                                    u32_index_bytes.copy_from_slice(&paired_share.index().to_bytes()[28..]);
+                                    u32::from_be_bytes(u32_index_bytes)
+                                };
+
+                                match reshare::reshare_round1_core(
+                                    &wallet_name,
+                                    new_threshold,
+                                    new_n_parties,
+                                    my_old_index,
+                                ) {
+                                    Ok(result) => {
+                                        app.reshare_form.round1_output = result.result;
+                                        app.reshare_form.error_message = None;
+                                        app.state = AppState::Reshare(ReshareState::Round1Output {
+                                            output_json: app.reshare_form.round1_output.clone(),
+                                        });
+                                    }
+                                    Err(e) => {
+                                        app.reshare_form.error_message = Some(format!("Error: {}", e));
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                app.reshare_form.error_message = Some(format!("Cannot read wallet: {}", e));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        app.reshare_form.error_message = Some(format!("Storage error: {}", e));
+                    }
+                }
+            }
+            _ => {
+                // Handle text input based on focused field
+                match app.reshare_form.focused_field {
+                    ReshareFormField::SourceWallet => {
+                        // Arrow keys handled above
+                    }
+                    ReshareFormField::NewThreshold => {
+                        app.reshare_form.new_threshold.handle_key(key);
+                    }
+                    ReshareFormField::NewNParties => {
+                        app.reshare_form.new_n_parties.handle_key(key);
+                    }
+                }
+            }
+        },
+        AppState::Reshare(ReshareState::Round1Output { .. }) => match key.code {
+            KeyCode::Esc => {
+                // Old party: done, go home
+                app.reshare_form = ReshareFormData::new();
+                app.state = AppState::Home;
+            }
+            KeyCode::Enter => {
+                // New party: go to finalize
+                app.state = AppState::Reshare(ReshareState::FinalizeInput);
+            }
+            KeyCode::Char('c') => {
+                app.set_message("Output copied to clipboard (simulated)");
+            }
+            _ => {}
+        },
+        AppState::Reshare(ReshareState::FinalizeInput) => match key.code {
+            KeyCode::Esc => {
+                app.state = AppState::Reshare(ReshareState::Round1Output {
+                    output_json: app.reshare_form.round1_output.clone(),
+                });
+            }
+            KeyCode::Tab => {
+                app.reshare_form.finalize_field = app.reshare_form.finalize_field.next();
+            }
+            KeyCode::BackTab => {
+                app.reshare_form.finalize_field = app.reshare_form.finalize_field.prev();
+            }
+            KeyCode::Char(' ') if app.reshare_form.finalize_field == ReshareFinalizeField::Hierarchical => {
+                app.reshare_form.hierarchical = !app.reshare_form.hierarchical;
+            }
+            KeyCode::Enter => {
+                // Run reshare finalize
+                let source_wallet = if !app.wallets.is_empty() {
+                    app.wallets[app.reshare_form.source_wallet_index].name.clone()
+                } else {
+                    String::new()
+                };
+                let target_name = app.reshare_form.target_name.value().to_string();
+                let my_new_index: u32 = app.reshare_form.my_new_index.value().parse().unwrap_or(0);
+                let my_rank: u32 = app.reshare_form.my_rank.value().parse().unwrap_or(0);
+                let hierarchical = app.reshare_form.hierarchical;
+                let data = app.reshare_form.finalize_input.content();
+
+                if target_name.is_empty() {
+                    app.reshare_form.error_message = Some("Wallet name is required".to_string());
+                    return;
+                }
+                if my_new_index == 0 {
+                    app.reshare_form.error_message = Some("Invalid new index".to_string());
+                    return;
+                }
+                if data.trim().is_empty() {
+                    app.reshare_form.error_message = Some("Paste round 1 outputs first".to_string());
+                    return;
+                }
+
+                match reshare::reshare_finalize_core(
+                    &source_wallet,
+                    &target_name,
+                    my_new_index,
+                    my_rank,
+                    hierarchical,
+                    &data,
+                    false,
+                ) {
+                    Ok(_) => {
+                        app.reshare_form.error_message = None;
+                        app.state = AppState::Reshare(ReshareState::Complete {
+                            wallet_name: target_name.clone(),
+                        });
+                        app.reload_wallets();
+                    }
+                    Err(e) => {
+                        app.reshare_form.error_message = Some(format!("Error: {}", e));
+                    }
+                }
+            }
+            _ => {
+                // Handle text input based on focused field
+                match app.reshare_form.finalize_field {
+                    ReshareFinalizeField::TargetName => {
+                        app.reshare_form.target_name.handle_key(key);
+                    }
+                    ReshareFinalizeField::MyIndex => {
+                        app.reshare_form.my_new_index.handle_key(key);
+                    }
+                    ReshareFinalizeField::MyRank => {
+                        app.reshare_form.my_rank.handle_key(key);
+                    }
+                    ReshareFinalizeField::Hierarchical => {
+                        // Space handled above
+                    }
+                    ReshareFinalizeField::DataInput => {
+                        app.reshare_form.finalize_input.handle_key(key);
+                    }
+                }
+            }
+        },
+        AppState::Reshare(ReshareState::Complete { .. }) => match key.code {
+            KeyCode::Esc | KeyCode::Enter => {
+                app.reshare_form = ReshareFormData::new();
+                app.state = AppState::Home;
+            }
+            _ => {}
+        },
+        _ => {}
     }
 }
 
@@ -390,7 +609,7 @@ fn ui(frame: &mut Frame, app: &App) {
             screens::render_chain_select(frame, app, frame.area());
         }
         AppState::Keygen(_) => screens::render_keygen(frame, app, &app.keygen_form, chunks[1]),
-        AppState::Reshare(_) => screens::render_reshare(frame, app, chunks[1]),
+        AppState::Reshare(_) => screens::render_reshare(frame, app, &app.reshare_form, chunks[1]),
         AppState::Send(_) => screens::render_send(frame, app, chunks[1]),
     }
 
