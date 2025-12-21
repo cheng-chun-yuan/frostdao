@@ -556,7 +556,15 @@ fn main() -> Result<()> {
             data,
             force,
         } => {
-            recovery::recover_finalize(&source, &target, my_index, rank, hierarchical, &data, force)?;
+            recovery::recover_finalize(
+                &source,
+                &target,
+                my_index,
+                rank,
+                hierarchical,
+                &data,
+                force,
+            )?;
         }
         Commands::Tui => {
             tui::run_tui()?;

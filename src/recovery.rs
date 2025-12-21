@@ -85,10 +85,19 @@ pub fn recover_round1(source_wallet: &str, lost_index: u32) -> Result<()> {
     println!("📋 Share this with the recovering party:");
     println!("{}\n", cmd_result.result);
     println!("⚠️  SECURITY WARNING: This protocol exposes your raw share value!");
-    println!("    After recovery, party {} will know {} shares (theirs + helpers').", result.lost_index, htss.threshold);
-    println!("    With {} shares, they could theoretically reconstruct the group secret.", htss.threshold);
+    println!(
+        "    After recovery, party {} will know {} shares (theirs + helpers').",
+        result.lost_index, htss.threshold
+    );
+    println!(
+        "    With {} shares, they could theoretically reconstruct the group secret.",
+        htss.threshold
+    );
     println!("    Only use this with TRUSTED parties who were already part of the group.\n");
-    println!("    The lost party needs {} helper outputs to recover.", htss.threshold);
+    println!(
+        "    The lost party needs {} helper outputs to recover.",
+        htss.threshold
+    );
 
     Ok(())
 }
@@ -102,7 +111,9 @@ pub fn recover_round1_core(
     let mut out = String::new();
 
     out.push_str("Share Recovery - Generate Helper Sub-share\n\n");
-    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n",
+    );
 
     // Load HTSS metadata
     let htss_json = String::from_utf8(storage.read("htss_metadata.json")?)?;
@@ -206,7 +217,7 @@ pub fn recover_finalize_core(
     source_wallet: &str,
     target_wallet: &str,
     my_index: u32,
-    _my_rank: u32,       // IGNORED - use source wallet's rank to prevent privilege escalation
+    _my_rank: u32, // IGNORED - use source wallet's rank to prevent privilege escalation
     _hierarchical: bool, // IGNORED - use source wallet's setting to prevent tampering
     round1_data: &str,
     force_overwrite: bool,
@@ -214,7 +225,9 @@ pub fn recover_finalize_core(
     let mut out = String::new();
 
     out.push_str("Share Recovery - Combine Sub-shares\n\n");
-    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n",
+    );
 
     // Parse round1 outputs
     let round1_outputs: Vec<RecoveryRound1Output> =
@@ -238,14 +251,18 @@ pub fn recover_finalize_core(
     let n_parties = source_htss.party_ranks.len() as u32;
 
     // SECURITY: Get the original rank from source wallet to prevent privilege escalation
-    let original_rank = source_htss.party_ranks.get(&my_index).copied().unwrap_or_else(|| {
-        // If party wasn't in original config, this is suspicious but allow with rank 0 warning
-        out.push_str(&format!(
+    let original_rank = source_htss
+        .party_ranks
+        .get(&my_index)
+        .copied()
+        .unwrap_or_else(|| {
+            // If party wasn't in original config, this is suspicious but allow with rank 0 warning
+            out.push_str(&format!(
             "⚠️  WARNING: Party {} not found in original configuration. Using default rank 0.\n\n",
             my_index
         ));
-        0
-    });
+            0
+        });
 
     // SECURITY: Use hierarchical setting from source wallet, not user input
     let hierarchical = source_htss.hierarchical;
@@ -277,7 +294,10 @@ pub fn recover_finalize_core(
         "Received sub-shares from {} helper parties\n",
         round1_outputs.len()
     ));
-    out.push_str(&format!("Recovering index: {} (original rank: {})\n\n", my_index, original_rank));
+    out.push_str(&format!(
+        "Recovering index: {} (original rank: {})\n\n",
+        my_index, original_rank
+    ));
 
     // Verify we have enough sub-shares
     if (round1_outputs.len() as u32) < threshold {
@@ -307,7 +327,10 @@ pub fn recover_finalize_core(
         out.push_str("🧠 Birkhoff interpolation for HTSS recovery:\n");
         out.push_str(&format!("   Helpers: {:?}\n", helper_indices));
         out.push_str(&format!("   Helper ranks: {:?}\n", helper_ranks));
-        out.push_str(&format!("   Target index: {}, rank: {}\n\n", my_index, original_rank));
+        out.push_str(&format!(
+            "   Target index: {}, rank: {}\n\n",
+            my_index, original_rank
+        ));
     } else {
         out.push_str("🧠 Lagrange interpolation at x = your_index:\n");
         out.push_str(&format!("   Helpers: {:?}\n", helper_indices));
@@ -366,8 +389,11 @@ pub fn recover_finalize_core(
                 .ok_or_else(|| anyhow::anyhow!("Invalid sub-share scalar"))?;
 
             // Compute Lagrange coefficient at x = my_index
-            let lagrange_coeff =
-                crate::crypto_helpers::lagrange_coefficient_at(output.helper_index, &helper_indices, my_index)?;
+            let lagrange_coeff = crate::crypto_helpers::lagrange_coefficient_at(
+                output.helper_index,
+                &helper_indices,
+                my_index,
+            )?;
 
             // Add weighted sub-share
             let current: Scalar<Secret, Zero> =
@@ -403,8 +429,11 @@ pub fn recover_finalize_core(
         .ok_or_else(|| anyhow::anyhow!("Invalid recovered share bytes"))?;
     let share_nonzero = crate::crypto_helpers::share_to_nonzero(share_scalar)?;
 
-    let paired_share =
-        crate::crypto_helpers::construct_paired_secret_share(my_index, share_nonzero, &group_public_key)?;
+    let paired_share = crate::crypto_helpers::construct_paired_secret_share(
+        my_index,
+        share_nonzero,
+        &group_public_key,
+    )?;
     let paired_bytes = bincode::serialize(&paired_share)?;
 
     target_storage.write("paired_secret_share.bin", &paired_bytes)?;
@@ -418,7 +447,7 @@ pub fn recover_finalize_core(
         my_index,
         my_rank: original_rank, // Use original rank from source wallet
         threshold,
-        hierarchical,          // Already set from source_htss.hierarchical
+        hierarchical, // Already set from source_htss.hierarchical
         party_ranks,
     };
 
@@ -454,14 +483,26 @@ pub fn recover_finalize_core(
     )?;
 
     // Save share in hex for verification
-    target_storage.write("share_hex.txt", hex::encode(recovered_share_bytes).as_bytes())?;
+    target_storage.write(
+        "share_hex.txt",
+        hex::encode(recovered_share_bytes).as_bytes(),
+    )?;
 
-    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n",
+    );
     out.push_str("✅ Share recovery complete!\n\n");
     out.push_str(&format!("Recovered wallet: {}\n", target_wallet));
-    out.push_str(&format!("Config: {}-of-{} ({})\n", threshold, n_parties,
-        if hierarchical { "HTSS" } else { "TSS" }));
-    out.push_str(&format!("Your index: {} (rank {} - preserved from original)\n\n", my_index, original_rank));
+    out.push_str(&format!(
+        "Config: {}-of-{} ({})\n",
+        threshold,
+        n_parties,
+        if hierarchical { "HTSS" } else { "TSS" }
+    ));
+    out.push_str(&format!(
+        "Your index: {} (rank {} - preserved from original)\n\n",
+        my_index, original_rank
+    ));
     out.push_str(&format!("Public Key: {}\n", pubkey_hex));
     out.push_str(&format!("Testnet Address: {}\n\n", address_testnet));
     out.push_str("⚠️  The public key and address are the SAME as the original wallet!\n");
@@ -537,8 +578,8 @@ mod tests {
         let two: Scalar<Secret, Zero> = Scalar::from(2u32);
         let three: Scalar<Secret, Zero> = Scalar::from(3u32);
 
-        let share1 = s!(secret + one * coeff);  // f(1)
-        let share2 = s!(secret + two * coeff);  // f(2)
+        let share1 = s!(secret + one * coeff); // f(1)
+        let share2 = s!(secret + two * coeff); // f(2)
         let share3 = s!(secret + three * coeff); // f(3) - the one we want to recover
 
         // Recover share 3 using shares 1 and 2

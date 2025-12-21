@@ -204,7 +204,11 @@ mod tests {
         }
 
         let one: Scalar<Secret, Zero> = Scalar::from(1u32);
-        assert_eq!(sum.to_bytes(), one.to_bytes(), "Lagrange coefficients should sum to 1");
+        assert_eq!(
+            sum.to_bytes(),
+            one.to_bytes(),
+            "Lagrange coefficients should sum to 1"
+        );
     }
 
     #[test]
@@ -246,7 +250,11 @@ mod tests {
         }
 
         let one: Scalar<Secret, Zero> = Scalar::from(1u32);
-        assert_eq!(sum.to_bytes(), one.to_bytes(), "15-party Lagrange should work");
+        assert_eq!(
+            sum.to_bytes(),
+            one.to_bytes(),
+            "15-party Lagrange should work"
+        );
     }
 
     #[test]

@@ -78,7 +78,9 @@ fn compute_tweaked_pubkey(internal_pubkey: &Point<EvenY>) -> (Point<EvenY>, bool
     let tweak = compute_taptweak(&pubkey_bytes);
     let tweaked = g!({ *internal_pubkey } + tweak * G).normalize();
     // Convert to NonZero and then to EvenY, tracking whether negation occurred
-    let tweaked_nonzero = tweaked.non_zero().expect("tweaked point should not be zero");
+    let tweaked_nonzero = tweaked
+        .non_zero()
+        .expect("tweaked point should not be zero");
     let (even_y_point, parity_flip) = tweaked_nonzero.into_point_with_even_y();
     (even_y_point, parity_flip)
 }
@@ -181,7 +183,14 @@ pub fn build_unsigned_tx(
 ) -> Result<()> {
     let state_dir = get_state_dir(wallet_name);
     let storage = FileStorage::new(&state_dir)?;
-    let cmd_result = build_unsigned_tx_core(wallet_name, to_address, amount_sats, fee_rate, network, &storage)?;
+    let cmd_result = build_unsigned_tx_core(
+        wallet_name,
+        to_address,
+        amount_sats,
+        fee_rate,
+        network,
+        &storage,
+    )?;
 
     println!("{}", cmd_result.output);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -203,7 +212,9 @@ pub fn build_unsigned_tx_core(
     let mut out = String::new();
 
     out.push_str("DKG Transaction Builder\n\n");
-    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n",
+    );
 
     // Load DKG shared key
     let shared_key_bytes = storage
@@ -359,7 +370,9 @@ pub fn build_unsigned_tx_core(
 
     out.push_str("🧠 Next steps:\n");
     out.push_str("   1. Share the session_id and sighash with all signing parties\n");
-    out.push_str("   2. Each party runs: frostdao dkg-nonce --name <wallet> --session <session_id>\n");
+    out.push_str(
+        "   2. Each party runs: frostdao dkg-nonce --name <wallet> --session <session_id>\n",
+    );
     out.push_str("   3. Exchange nonces, then run: frostdao dkg-sign ...\n");
     out.push_str("   4. Coordinator runs: frostdao dkg-broadcast ...\n");
 
@@ -413,13 +426,22 @@ pub fn dkg_generate_nonce_core(
         serde_json::from_str(&metadata_json)?
     };
 
-    let mode_name = if htss_metadata.hierarchical { "HTSS" } else { "TSS" };
+    let mode_name = if htss_metadata.hierarchical {
+        "HTSS"
+    } else {
+        "TSS"
+    };
 
     out.push_str(&format!("DKG Nonce Generation ({})\n\n", mode_name));
-    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n",
+    );
     out.push_str(&format!("Wallet: {}\n", wallet_name));
     out.push_str(&format!("Session: {}\n", session_id));
-    out.push_str(&format!("Your index: {} (rank {})\n\n", htss_metadata.my_index, htss_metadata.my_rank));
+    out.push_str(&format!(
+        "Your index: {} (rank {})\n\n",
+        htss_metadata.my_index, htss_metadata.my_rank
+    ));
 
     // Load paired secret share
     let paired_share_bytes = storage
@@ -431,7 +453,8 @@ pub fn dkg_generate_nonce_core(
     let frost = frost::new_with_synthetic_nonces::<Sha256, rand::rngs::ThreadRng>();
 
     // Seed nonce RNG with session ID
-    let mut nonce_rng: rand_chacha::ChaCha20Rng = frost.seed_nonce_rng(paired_share, session_id.as_bytes());
+    let mut nonce_rng: rand_chacha::ChaCha20Rng =
+        frost.seed_nonce_rng(paired_share, session_id.as_bytes());
 
     // Generate nonce
     let nonce = frost.gen_nonce(&mut nonce_rng);
@@ -501,10 +524,16 @@ pub fn dkg_sign_core(
         serde_json::from_str(&metadata_json)?
     };
 
-    let mode_name = if htss_metadata.hierarchical { "HTSS" } else { "TSS" };
+    let mode_name = if htss_metadata.hierarchical {
+        "HTSS"
+    } else {
+        "TSS"
+    };
 
     out.push_str(&format!("DKG Signature Share Creation ({})\n\n", mode_name));
-    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n",
+    );
 
     // Load nonce
     let nonce_bytes = storage
@@ -593,11 +622,17 @@ pub fn dkg_sign_core(
     // Save session data for combine step
     let final_nonce = coord_session.final_nonce();
     let final_nonce_bytes = bincode::serialize(&final_nonce)?;
-    storage.write(&format!("dkg_final_nonce_{}.bin", session_id), &final_nonce_bytes)?;
+    storage.write(
+        &format!("dkg_final_nonce_{}.bin", session_id),
+        &final_nonce_bytes,
+    )?;
 
     // Save tweaked pubkey for broadcast step
     let tweaked_pubkey_bytes = tweaked_pubkey.to_xonly_bytes();
-    storage.write(&format!("dkg_tweaked_pubkey_{}.bin", session_id), &tweaked_pubkey_bytes)?;
+    storage.write(
+        &format!("dkg_tweaked_pubkey_{}.bin", session_id),
+        &tweaked_pubkey_bytes,
+    )?;
 
     // Save parity flag for broadcast step - CRITICAL for correct signature combination
     storage.write(
@@ -606,7 +641,10 @@ pub fn dkg_sign_core(
     )?;
 
     let nonces_json = serde_json::to_string(&nonce_outputs)?;
-    storage.write(&format!("dkg_session_nonces_{}.json", session_id), nonces_json.as_bytes())?;
+    storage.write(
+        &format!("dkg_session_nonces_{}.json", session_id),
+        nonces_json.as_bytes(),
+    )?;
 
     out.push_str("✓ Signature share created\n");
 
@@ -639,7 +677,14 @@ pub fn dkg_broadcast(
 ) -> Result<()> {
     let state_dir = get_state_dir(wallet_name);
     let storage = FileStorage::new(&state_dir)?;
-    let cmd_result = dkg_broadcast_core(wallet_name, session_id, unsigned_tx_hex, shares_data, network, &storage)?;
+    let cmd_result = dkg_broadcast_core(
+        wallet_name,
+        session_id,
+        unsigned_tx_hex,
+        shares_data,
+        network,
+        &storage,
+    )?;
 
     println!("{}", cmd_result.output);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -661,16 +706,17 @@ pub fn dkg_broadcast_core(
     let mut out = String::new();
 
     out.push_str("DKG Transaction Broadcast\n\n");
-    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n",
+    );
 
     // Load shared key
     let shared_key_bytes = storage.read("shared_key.bin")?;
     let shared_key: SharedKey<EvenY> = bincode::deserialize(&shared_key_bytes)?;
 
     // Load session data
-    let session_json = String::from_utf8(
-        storage.read(&format!("dkg_session_{}.json", session_id))?
-    )?;
+    let session_json =
+        String::from_utf8(storage.read(&format!("dkg_session_{}.json", session_id))?)?;
     let session_data: serde_json::Value = serde_json::from_str(&session_json)?;
     let sighash_hex = session_data["sighash"].as_str().unwrap();
     let sighash_bytes: [u8; 32] = hex::decode(sighash_hex)?
@@ -678,15 +724,15 @@ pub fn dkg_broadcast_core(
         .map_err(|_| anyhow::anyhow!("Invalid sighash"))?;
 
     // Parse signature shares
-    let share_outputs: Vec<DkgSignatureShareOutput> = crate::keygen::parse_space_separated_json(shares_data)?;
+    let share_outputs: Vec<DkgSignatureShareOutput> =
+        crate::keygen::parse_space_separated_json(shares_data)?;
 
     out.push_str(&format!("Session: {}\n", session_id));
     out.push_str(&format!("Shares received: {}\n\n", share_outputs.len()));
 
     // Load saved nonces
-    let nonces_json = String::from_utf8(
-        storage.read(&format!("dkg_session_nonces_{}.json", session_id))?
-    )?;
+    let nonces_json =
+        String::from_utf8(storage.read(&format!("dkg_session_nonces_{}.json", session_id))?)?;
     let nonce_outputs: Vec<NonceOutput> = serde_json::from_str(&nonces_json)?;
 
     // Rebuild nonces map

@@ -239,7 +239,10 @@ pub fn reshare_finalize(
             .ok_or_else(|| anyhow::anyhow!("Invalid sub-share scalar"))?;
 
         // Compute Lagrange coefficient for this old party at x=0
-        let lagrange_coeff = crate::crypto_helpers::lagrange_coefficient_at_zero(output.old_party_index, &old_indices)?;
+        let lagrange_coeff = crate::crypto_helpers::lagrange_coefficient_at_zero(
+            output.old_party_index,
+            &old_indices,
+        )?;
 
         // Add weighted sub-share to result
         let current: Scalar<Secret, Zero> =
@@ -524,7 +527,10 @@ pub fn reshare_finalize_core(
         let sub_share: Scalar<Secret, Zero> = Scalar::from_bytes(sub_share_bytes)
             .ok_or_else(|| anyhow::anyhow!("Invalid sub-share scalar"))?;
 
-        let lagrange_coeff = crate::crypto_helpers::lagrange_coefficient_at_zero(output.old_party_index, &old_indices)?;
+        let lagrange_coeff = crate::crypto_helpers::lagrange_coefficient_at_zero(
+            output.old_party_index,
+            &old_indices,
+        )?;
 
         let current: Scalar<Secret, Zero> =
             Scalar::from_bytes(new_share_bytes).unwrap_or(Scalar::zero());

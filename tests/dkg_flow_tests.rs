@@ -450,11 +450,16 @@ fn test_full_2_of_3_htss_flow() {
     let r1_p1 = Command::new(FROSTDAO)
         .args([
             "keygen-round1",
-            "--name", &wallet1,
-            "--threshold", "2",
-            "--n-parties", "3",
-            "--my-index", "1",
-            "--rank", "0",
+            "--name",
+            &wallet1,
+            "--threshold",
+            "2",
+            "--n-parties",
+            "3",
+            "--my-index",
+            "1",
+            "--rank",
+            "0",
             "--hierarchical",
         ])
         .output()
@@ -464,42 +469,52 @@ fn test_full_2_of_3_htss_flow() {
         "HTSS Party 1 round1 failed: {}",
         String::from_utf8_lossy(&r1_p1.stderr)
     );
-    let commit1 = extract_json(&String::from_utf8_lossy(&r1_p1.stdout))
-        .expect("No JSON from HTSS party 1");
+    let commit1 =
+        extract_json(&String::from_utf8_lossy(&r1_p1.stdout)).expect("No JSON from HTSS party 1");
 
     // Party 2: rank 1 (lower authority)
     let r1_p2 = Command::new(FROSTDAO)
         .args([
             "keygen-round1",
-            "--name", &wallet2,
-            "--threshold", "2",
-            "--n-parties", "3",
-            "--my-index", "2",
-            "--rank", "1",
+            "--name",
+            &wallet2,
+            "--threshold",
+            "2",
+            "--n-parties",
+            "3",
+            "--my-index",
+            "2",
+            "--rank",
+            "1",
             "--hierarchical",
         ])
         .output()
         .expect("Failed to run keygen-round1 for party 2");
     assert!(r1_p2.status.success(), "HTSS Party 2 round1 failed");
-    let commit2 = extract_json(&String::from_utf8_lossy(&r1_p2.stdout))
-        .expect("No JSON from HTSS party 2");
+    let commit2 =
+        extract_json(&String::from_utf8_lossy(&r1_p2.stdout)).expect("No JSON from HTSS party 2");
 
     // Party 3: rank 1 (same as party 2)
     let r1_p3 = Command::new(FROSTDAO)
         .args([
             "keygen-round1",
-            "--name", &wallet3,
-            "--threshold", "2",
-            "--n-parties", "3",
-            "--my-index", "3",
-            "--rank", "1",
+            "--name",
+            &wallet3,
+            "--threshold",
+            "2",
+            "--n-parties",
+            "3",
+            "--my-index",
+            "3",
+            "--rank",
+            "1",
             "--hierarchical",
         ])
         .output()
         .expect("Failed to run keygen-round1 for party 3");
     assert!(r1_p3.status.success(), "HTSS Party 3 round1 failed");
-    let commit3 = extract_json(&String::from_utf8_lossy(&r1_p3.stdout))
-        .expect("No JSON from HTSS party 3");
+    let commit3 =
+        extract_json(&String::from_utf8_lossy(&r1_p3.stdout)).expect("No JSON from HTSS party 3");
 
     let all_commits = format!("{} {} {}", commit1, commit2, commit3);
 
@@ -513,24 +528,24 @@ fn test_full_2_of_3_htss_flow() {
         "HTSS Party 1 round2 failed: {}",
         String::from_utf8_lossy(&r2_p1.stderr)
     );
-    let shares1 = extract_json(&String::from_utf8_lossy(&r2_p1.stdout))
-        .expect("No shares from HTSS party 1");
+    let shares1 =
+        extract_json(&String::from_utf8_lossy(&r2_p1.stdout)).expect("No shares from HTSS party 1");
 
     let r2_p2 = Command::new(FROSTDAO)
         .args(["keygen-round2", "--name", &wallet2, "--data", &all_commits])
         .output()
         .expect("Failed to run keygen-round2 for party 2");
     assert!(r2_p2.status.success(), "HTSS Party 2 round2 failed");
-    let shares2 = extract_json(&String::from_utf8_lossy(&r2_p2.stdout))
-        .expect("No shares from HTSS party 2");
+    let shares2 =
+        extract_json(&String::from_utf8_lossy(&r2_p2.stdout)).expect("No shares from HTSS party 2");
 
     let r2_p3 = Command::new(FROSTDAO)
         .args(["keygen-round2", "--name", &wallet3, "--data", &all_commits])
         .output()
         .expect("Failed to run keygen-round2 for party 3");
     assert!(r2_p3.status.success(), "HTSS Party 3 round2 failed");
-    let shares3 = extract_json(&String::from_utf8_lossy(&r2_p3.stdout))
-        .expect("No shares from HTSS party 3");
+    let shares3 =
+        extract_json(&String::from_utf8_lossy(&r2_p3.stdout)).expect("No shares from HTSS party 3");
 
     let all_shares = format!("{} {} {}", shares1, shares2, shares3);
 
@@ -606,7 +621,10 @@ fn test_full_2_of_3_htss_flow() {
 
     let htss_content = fs::read_to_string(&htss_path1).expect("Failed to read htss_metadata.json");
     let htss: serde_json::Value = serde_json::from_str(&htss_content).unwrap();
-    assert_eq!(htss["hierarchical"], true, "Should be marked as hierarchical");
+    assert_eq!(
+        htss["hierarchical"], true,
+        "Should be marked as hierarchical"
+    );
     assert_eq!(htss["my_rank"], 0, "Party 1 should have rank 0");
 
     cleanup_wallet(&prefix);

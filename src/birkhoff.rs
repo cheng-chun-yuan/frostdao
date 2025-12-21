@@ -346,9 +346,7 @@ pub fn birkhoff_coefficient_to_scalar(coeff: f64) -> Scalar<Secret, Zero> {
     // Compute modular inverse of SCALE and multiply to get correct coefficient
     // This is equivalent to dividing by SCALE in the finite field
     let scale_scalar: Scalar<Secret, Zero> = Scalar::from(SCALE);
-    let scale_nonzero = scale_scalar
-        .non_zero()
-        .expect("SCALE is non-zero constant");
+    let scale_nonzero = scale_scalar.non_zero().expect("SCALE is non-zero constant");
     let scale_inverse = scale_nonzero.invert();
 
     // result = scaled_value / SCALE = scaled_value * SCALE^(-1)
@@ -434,14 +432,14 @@ mod tests {
         // For helpers at x=1, x=2 recovering x=3:
         // λ_1(3) = (3-2)/(1-2) = -1
         // λ_2(3) = (3-1)/(2-1) = 2
-        let params = vec![
-            BirkhoffParameter::new(1, 0),
-            BirkhoffParameter::new(2, 0),
-        ];
+        let params = vec![BirkhoffParameter::new(1, 0), BirkhoffParameter::new(2, 0)];
 
         let coeffs = compute_birkhoff_recovery_coefficients(3, 0, &params).unwrap();
 
-        println!("Recovery at x=3 from x=1,2: [{:.6}, {:.6}]", coeffs[0], coeffs[1]);
+        println!(
+            "Recovery at x=3 from x=1,2: [{:.6}, {:.6}]",
+            coeffs[0], coeffs[1]
+        );
 
         // λ_1(3) should be -1
         assert!(
@@ -506,10 +504,7 @@ mod tests {
         // Helper 1: index=1, rank=0 (has f(1))
         // Helper 2: index=2, rank=0 (has f(2))
         // Target: index=3, rank=1 (want to recover f'(3))
-        let params = vec![
-            BirkhoffParameter::new(1, 0),
-            BirkhoffParameter::new(2, 0),
-        ];
+        let params = vec![BirkhoffParameter::new(1, 0), BirkhoffParameter::new(2, 0)];
 
         let coeffs = compute_birkhoff_recovery_coefficients(3, 1, &params).unwrap();
         println!(
@@ -649,8 +644,8 @@ mod tests {
         let one: Scalar<Secret, Zero> = Scalar::from(1u32);
         let three: Scalar<Secret, Zero> = Scalar::from(3u32);
 
-        let f_1 = s!(a + one * b);     // f(1) = a + b
-        let f_prime_2 = s!(b);          // f'(2) = b (constant for linear polynomial)
+        let f_1 = s!(a + one * b); // f(1) = a + b
+        let f_prime_2 = s!(b); // f'(2) = b (constant for linear polynomial)
         let f_3_expected = s!(a + three * b); // f(3) = a + 3b
 
         // Recover using Birkhoff coefficients
