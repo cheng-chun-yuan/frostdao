@@ -3,6 +3,7 @@ use wasm_bindgen::prelude::*;
 pub mod birkhoff;
 pub mod bitcoin_schnorr;
 pub mod bitcoin_tx;
+pub mod crypto_helpers;
 pub mod dkg_tx;
 pub mod keygen;
 pub mod recovery;

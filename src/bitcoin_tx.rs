@@ -21,7 +21,7 @@ use bitcoin::{Amount, Network, OutPoint, Sequence, Transaction, TxIn, TxOut, Txi
 use reqwest::blocking::Client;
 use secp256kfun::prelude::*;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+// sha2 no longer needed - using shared tagged_hash from crypto_helpers
 use std::str::FromStr;
 
 const STATE_DIR: &str = ".frost_state";
@@ -125,15 +125,8 @@ fn network_name(network: Network) -> &'static str {
     }
 }
 
-/// BIP340 tagged hash
-fn tagged_hash(tag: &str, msg: &[u8]) -> [u8; 32] {
-    let tag_hash = Sha256::digest(tag.as_bytes());
-    let mut hasher = Sha256::new();
-    hasher.update(&tag_hash);
-    hasher.update(&tag_hash);
-    hasher.update(msg);
-    hasher.finalize().into()
-}
+// Use shared tagged_hash from crypto_helpers
+use crate::crypto_helpers::tagged_hash;
 
 /// BIP340/challenge hash
 fn challenge_hash(r_bytes: &[u8; 32], pubkey_bytes: &[u8; 32], message: &[u8]) -> [u8; 32] {

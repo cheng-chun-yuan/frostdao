@@ -8,17 +8,27 @@
 //! For a t-of-n wallet where party j has lost their share:
 //!
 //! 1. At least t helper parties (who still have shares) participate
-//! 2. Each helper party i evaluates their share at the lost party's index: sub_share_{i,j} = s_i (just the share value)
+//! 2. Each helper party i shares their share value as sub_share
 //! 3. Lost party j collects sub_shares from >= t helpers
-//! 4. Lost party j computes: s_j = Σ (λ_i(j) * sub_share_{i,j})
-//!    where λ_i(j) are Lagrange coefficients evaluated at x=j (not x=0!)
+//! 4. Lost party j computes their share using interpolation
 //!
-//! Key difference from resharing:
-//! - Resharing uses Lagrange at x=0 to reconstruct the secret, then re-shares
-//! - Recovery uses Lagrange at x=j to directly compute the lost share
+//! ## Interpolation Methods
+//!
+//! - **Standard TSS (all ranks = 0)**: Uses Lagrange interpolation at x=j
+//!   s_j = Σ (λ_i(j) * sub_share_i) where λ_i(j) = Π_{k≠i} (j-k)/(i-k)
+//!
+//! - **HTSS with mixed ranks**: Uses Birkhoff interpolation
+//!   Birkhoff generalizes Lagrange by incorporating derivative information (ranks).
+//!   When recovering a rank-r share at index j, we compute coefficients that
+//!   evaluate f^(r)(j) from the helper shares with their respective ranks.
+//!
+//! Key insight: When all ranks are 0, Birkhoff reduces to Lagrange!
 //!
 //! Result: The lost party gets their original share s_j back!
 
+use crate::birkhoff::{
+    birkhoff_coefficient_to_scalar, compute_birkhoff_recovery_coefficients, BirkhoffParameter,
+};
 use crate::keygen::{get_state_dir, GroupInfo, HtssMetadata};
 use crate::storage::{FileStorage, Storage};
 use crate::CommandResult;
@@ -285,37 +295,90 @@ pub fn recover_finalize_core(
     ));
     out.push_str(&format!("Total parties: {}\n\n", n_parties));
 
-    // Collect helper indices
+    // Collect helper info (indices and ranks)
     let helper_indices: Vec<u32> = round1_outputs.iter().map(|o| o.helper_index).collect();
+    let helper_ranks: Vec<u32> = round1_outputs.iter().map(|o| o.helper_rank).collect();
 
-    out.push_str("🧠 Lagrange interpolation at x = your_index:\n");
-    out.push_str(&format!("   Helpers: {:?}\n", helper_indices));
-    out.push_str(&format!("   Target x: {}\n\n", my_index));
+    // Check if we need Birkhoff (HTSS with any non-zero ranks) or can use Lagrange (all rank 0)
+    let any_nonzero_rank = helper_ranks.iter().any(|&r| r > 0) || original_rank > 0;
+    let use_birkhoff = hierarchical && any_nonzero_rank;
 
-    // Compute recovered share using Lagrange interpolation at x = my_index
-    // s_j = Σ λ_i(j) * s_i  where λ_i(j) = Π_{k≠i} (j - k) / (i - k)
-    let mut recovered_share_bytes = [0u8; 32];
-
-    for output in &round1_outputs {
-        // Parse sub-share
-        let sub_share_bytes: [u8; 32] = hex::decode(&output.sub_share)?
-            .try_into()
-            .map_err(|_| anyhow::anyhow!("Invalid sub-share length"))?;
-
-        let sub_share: Scalar<Secret, Zero> = Scalar::from_bytes(sub_share_bytes)
-            .ok_or_else(|| anyhow::anyhow!("Invalid sub-share scalar"))?;
-
-        // Compute Lagrange coefficient at x = my_index
-        let lagrange_coeff =
-            compute_lagrange_coefficient_at_x(output.helper_index, &helper_indices, my_index)?;
-
-        // Add weighted sub-share
-        let current: Scalar<Secret, Zero> =
-            Scalar::from_bytes(recovered_share_bytes).unwrap_or(Scalar::zero());
-        let weighted = s!(lagrange_coeff * sub_share);
-        let sum = s!(current + weighted);
-        recovered_share_bytes = sum.to_bytes();
+    if use_birkhoff {
+        out.push_str("🧠 Birkhoff interpolation for HTSS recovery:\n");
+        out.push_str(&format!("   Helpers: {:?}\n", helper_indices));
+        out.push_str(&format!("   Helper ranks: {:?}\n", helper_ranks));
+        out.push_str(&format!("   Target index: {}, rank: {}\n\n", my_index, original_rank));
+    } else {
+        out.push_str("🧠 Lagrange interpolation at x = your_index:\n");
+        out.push_str(&format!("   Helpers: {:?}\n", helper_indices));
+        out.push_str(&format!("   Target x: {}\n\n", my_index));
     }
+
+    // Compute recovered share using appropriate interpolation method
+    let recovered_share_bytes = if use_birkhoff {
+        // Build Birkhoff parameters from helper data
+        let params: Vec<BirkhoffParameter> = round1_outputs
+            .iter()
+            .map(|o| BirkhoffParameter::new(o.helper_index, o.helper_rank))
+            .collect();
+
+        // Compute Birkhoff recovery coefficients
+        let birkhoff_coeffs =
+            compute_birkhoff_recovery_coefficients(my_index, original_rank, &params)?;
+
+        out.push_str("   Birkhoff coefficients: ");
+        for (i, c) in birkhoff_coeffs.iter().enumerate() {
+            out.push_str(&format!("{:.4} ", c));
+            if i < birkhoff_coeffs.len() - 1 {
+                out.push_str(", ");
+            }
+        }
+        out.push_str("\n\n");
+
+        // Combine sub-shares using Birkhoff coefficients
+        let mut recovered: Scalar<Secret, Zero> = Scalar::zero();
+        for (i, output) in round1_outputs.iter().enumerate() {
+            let sub_share_bytes: [u8; 32] = hex::decode(&output.sub_share)?
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("Invalid sub-share length"))?;
+
+            let sub_share: Scalar<Secret, Zero> = Scalar::from_bytes(sub_share_bytes)
+                .ok_or_else(|| anyhow::anyhow!("Invalid sub-share scalar"))?;
+
+            let coeff = birkhoff_coefficient_to_scalar(birkhoff_coeffs[i]);
+            let weighted = s!(coeff * sub_share);
+            recovered = s!(recovered + weighted);
+        }
+
+        recovered.to_bytes()
+    } else {
+        // Standard Lagrange interpolation at x = my_index
+        // s_j = Σ λ_i(j) * s_i  where λ_i(j) = Π_{k≠i} (j - k) / (i - k)
+        let mut share_bytes = [0u8; 32];
+
+        for output in &round1_outputs {
+            // Parse sub-share
+            let sub_share_bytes: [u8; 32] = hex::decode(&output.sub_share)?
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("Invalid sub-share length"))?;
+
+            let sub_share: Scalar<Secret, Zero> = Scalar::from_bytes(sub_share_bytes)
+                .ok_or_else(|| anyhow::anyhow!("Invalid sub-share scalar"))?;
+
+            // Compute Lagrange coefficient at x = my_index
+            let lagrange_coeff =
+                crate::crypto_helpers::lagrange_coefficient_at(output.helper_index, &helper_indices, my_index)?;
+
+            // Add weighted sub-share
+            let current: Scalar<Secret, Zero> =
+                Scalar::from_bytes(share_bytes).unwrap_or(Scalar::zero());
+            let weighted = s!(lagrange_coeff * sub_share);
+            let sum = s!(current + weighted);
+            share_bytes = sum.to_bytes();
+        }
+
+        share_bytes
+    };
 
     out.push_str("✓ Computed recovered share\n\n");
 
@@ -335,25 +398,14 @@ pub fn recover_finalize_core(
 
     let target_storage = FileStorage::new(&target_state_dir)?;
 
-    // Create PairedSecretShare in the same format as keygen
-    // The bincode format is: [index: 32 bytes][share: 32 bytes][public_key: 32 bytes]
-    let index_scalar = Scalar::<Secret, Zero>::from(my_index)
-        .non_zero()
-        .ok_or_else(|| anyhow::anyhow!("Party index cannot be zero"))?;
-
+    // Create PairedSecretShare using helper function
     let share_scalar: Scalar<Secret, Zero> = Scalar::from_bytes(recovered_share_bytes)
         .ok_or_else(|| anyhow::anyhow!("Invalid recovered share bytes"))?;
-    let share_nonzero = share_scalar
-        .non_zero()
-        .ok_or_else(|| anyhow::anyhow!("Recovered share is zero (extremely unlikely)"))?;
+    let share_nonzero = crate::crypto_helpers::share_to_nonzero(share_scalar)?;
 
-    // Construct paired_secret_share.bin bytes matching bincode serialization format:
-    // SecretShare { index: Scalar<Public, NonZero>, share: Scalar<Secret, NonZero> }
-    // PairedSecretShare { secret_share: SecretShare, public_key: Point<EvenY> }
-    let mut paired_bytes = Vec::with_capacity(96);
-    paired_bytes.extend_from_slice(&index_scalar.to_bytes()); // index: 32 bytes
-    paired_bytes.extend_from_slice(&share_nonzero.to_bytes()); // share: 32 bytes
-    paired_bytes.extend_from_slice(&group_public_key.to_xonly_bytes()); // public_key: 32 bytes
+    let paired_share =
+        crate::crypto_helpers::construct_paired_secret_share(my_index, share_nonzero, &group_public_key)?;
+    let paired_bytes = bincode::serialize(&paired_share)?;
 
     target_storage.write("paired_secret_share.bin", &paired_bytes)?;
     target_storage.write("shared_key.bin", &shared_key_bytes)?;
@@ -424,53 +476,12 @@ pub fn recover_finalize_core(
     })
 }
 
-/// Compute Lagrange coefficient for party_index at x = target_x
-/// λ_i(x) = Π_{j≠i} (x - j) / (i - j)
-///
-/// Uses field arithmetic directly to avoid integer overflow for large party counts.
-/// Previous implementation used i64 accumulation then truncated to u32, which silently
-/// corrupted results for 14+ parties (13! = 6,227,020,800 > u32::MAX).
-fn compute_lagrange_coefficient_at_x(
-    party_index: u32,
-    all_indices: &[u32],
-    target_x: u32,
-) -> Result<Scalar<Secret, Zero>> {
-    // Accumulate directly as field elements to avoid integer overflow
-    let mut numerator: Scalar<Secret, Zero> = Scalar::from(1u32);
-    let mut denominator: Scalar<Secret, Zero> = Scalar::from(1u32);
-
-    let i_scalar: Scalar<Secret, Zero> = Scalar::from(party_index);
-    let x_scalar: Scalar<Secret, Zero> = Scalar::from(target_x);
-
-    for &other_index in all_indices {
-        if other_index == party_index {
-            continue;
-        }
-
-        let j_scalar: Scalar<Secret, Zero> = Scalar::from(other_index);
-
-        // numerator *= (x - j)
-        let x_minus_j = s!(x_scalar - j_scalar);
-        numerator = s!(numerator * x_minus_j);
-
-        // denominator *= (i - j)
-        let i_minus_j = s!(i_scalar - j_scalar);
-        denominator = s!(denominator * i_minus_j);
-    }
-
-    // Invert denominator and multiply
-    let denom_nonzero = denominator
-        .non_zero()
-        .ok_or_else(|| anyhow::anyhow!("Lagrange denominator is zero"))?;
-    let denom_inv = denom_nonzero.invert();
-    let result = s!(numerator * denom_inv);
-
-    Ok(result)
-}
+// Lagrange coefficient computation is now in crypto_helpers module
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::crypto_helpers::lagrange_coefficient_at;
 
     #[test]
     fn test_lagrange_at_different_x() {
@@ -481,8 +492,8 @@ mod tests {
 
         let indices = vec![1u32, 2];
 
-        let lambda1 = compute_lagrange_coefficient_at_x(1, &indices, 3).unwrap();
-        let lambda2 = compute_lagrange_coefficient_at_x(2, &indices, 3).unwrap();
+        let lambda1 = lagrange_coefficient_at(1, &indices, 3).unwrap();
+        let lambda2 = lagrange_coefficient_at(2, &indices, 3).unwrap();
 
         // Sum should equal 1
         let sum = s!(lambda1 + lambda2);
@@ -532,8 +543,8 @@ mod tests {
 
         // Recover share 3 using shares 1 and 2
         let indices = vec![1u32, 2];
-        let lambda1 = compute_lagrange_coefficient_at_x(1, &indices, 3).unwrap();
-        let lambda2 = compute_lagrange_coefficient_at_x(2, &indices, 3).unwrap();
+        let lambda1 = lagrange_coefficient_at(1, &indices, 3).unwrap();
+        let lambda2 = lagrange_coefficient_at(2, &indices, 3).unwrap();
 
         let recovered = s!(lambda1 * share1 + lambda2 * share2);
 

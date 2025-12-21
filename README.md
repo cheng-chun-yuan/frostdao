@@ -21,13 +21,15 @@ FrostDAO implements FROST threshold signatures with **Hierarchical Threshold Sec
 5. [Threshold Signatures (DKG)](#threshold-signatures-dkg)
 6. [Hierarchical TSS (HTSS)](#hierarchical-tss-htss)
 7. [Resharing (Proactive Security)](#resharing-proactive-security)
-8. [Bitcoin Transactions](#bitcoin-transactions)
-9. [Terminal UI (TUI)](#terminal-ui-tui)
-10. [CLI Reference](#cli-reference)
-11. [Web UI](#web-ui)
-12. [Architecture](#architecture)
-13. [Use Cases](#use-cases)
-14. [Security](#security)
+8. [Share Recovery](#share-recovery)
+9. [Bitcoin Transactions](#bitcoin-transactions)
+10. [DKG Threshold Transactions](#dkg-threshold-transactions)
+11. [Terminal UI (TUI)](#terminal-ui-tui)
+12. [CLI Reference](#cli-reference)
+13. [Web UI](#web-ui)
+14. [Architecture](#architecture)
+15. [Use Cases](#use-cases)
+16. [Security](#security)
 
 ---
 
@@ -39,6 +41,8 @@ FrostDAO implements FROST threshold signatures with **Hierarchical Threshold Sec
 | **Threshold Signatures** | FROST-based t-of-n multisig without trusted dealer |
 | **Hierarchical TSS** | Rank-based signing authority (CEO must approve) |
 | **Resharing** | Proactive secret sharing - refresh shares without changing address |
+| **Share Recovery** | Reconstruct lost party's share from t other parties |
+| **DKG Transactions** | Multi-party threshold signing for Bitcoin transactions |
 | **Bitcoin Integration** | Taproot addresses, transaction building, broadcasting |
 | **On-Chain Transactions** | UTXO fetching, signing, and broadcasting via mempool.space |
 | **Terminal UI** | Interactive TUI for wallet management and balance checking |
@@ -324,6 +328,85 @@ frostdao dkg-address --name wallet_refreshed
 
 ---
 
+## Share Recovery
+
+If a party loses their share, it can be reconstructed from `t` other parties without changing the group public key or Bitcoin address.
+
+### How Recovery Works
+
+```
+Helper Party 1  ──→  sub_share_{1→lost}  ─┐
+Helper Party 2  ──→  sub_share_{2→lost}  ─┼─→  Lost Party combines  ──→  Recovered Share
+Helper Party 3  ──→  sub_share_{3→lost}  ─┘
+
+                     (need t helpers)           s_lost = Σ λᵢ * sub_shareᵢ
+```
+
+Each helper evaluates their share polynomial at the lost party's index using **Lagrange interpolation** (or **Birkhoff interpolation** for HTSS with mixed ranks).
+
+### Commands
+
+```bash
+# Step 1: Each helper party generates sub-share for the lost party
+frostdao recover-round1 \
+  --name treasury \
+  --lost-index 3
+
+# Step 2: Lost party combines sub-shares to recover
+frostdao recover-finalize \
+  --source treasury \
+  --target treasury_recovered \
+  --my-index 3 \
+  --data '<sub-shares JSON>'
+```
+
+### Example: Recover Party 3 in a 2-of-3 Wallet
+
+```bash
+# Party 1 (helper) generates sub-share for party 3
+P1_SUB=$(frostdao recover-round1 --name wallet --lost-index 3)
+
+# Party 2 (helper) generates sub-share for party 3
+P2_SUB=$(frostdao recover-round1 --name wallet --lost-index 3)
+
+# Party 3 (lost) combines sub-shares to recover
+frostdao recover-finalize \
+  --source wallet \
+  --target wallet_recovered \
+  --my-index 3 \
+  --data "$P1_SUB $P2_SUB"
+
+# Verify: addresses should match!
+frostdao dkg-address --name wallet
+frostdao dkg-address --name wallet_recovered
+```
+
+### HTSS Recovery with Birkhoff
+
+For hierarchical wallets with mixed ranks, recovery uses **Birkhoff interpolation** which accounts for rank derivatives:
+
+```bash
+# HTSS wallet: CEO(rank 0), CFO(rank 1), COO(rank 1)
+# If CFO loses share, CEO and COO can help recover
+
+# CEO generates sub-share (rank 0 → evaluates value)
+CEO_SUB=$(frostdao recover-round1 --name corp --lost-index 2)
+
+# COO generates sub-share (rank 1 → evaluates derivative)
+COO_SUB=$(frostdao recover-round1 --name corp --lost-index 2)
+
+# CFO recovers (needs rank 1 at their index)
+frostdao recover-finalize \
+  --source corp \
+  --target corp_recovered \
+  --my-index 2 \
+  --rank 1 \
+  --hierarchical \
+  --data "$CEO_SUB $COO_SUB"
+```
+
+---
+
 ## Terminal UI (TUI)
 
 FrostDAO includes an interactive terminal UI for wallet management.
@@ -427,6 +510,102 @@ frostdao btc-send \
 
 ---
 
+## DKG Threshold Transactions
+
+Send Bitcoin from a DKG threshold wallet. Requires `t` parties to cooperate for signing.
+
+### Transaction Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         DKG Threshold Transaction                        │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  Coordinator              Signer 2                Signer 3               │
+│       │                       │                       │                  │
+│  1. dkg-build-tx              │                       │                  │
+│       │ (sighash, session)    │                       │                  │
+│       ├───────────────────────┼───────────────────────┤ share sighash    │
+│       ▼                       ▼                       ▼                  │
+│  2. dkg-nonce             dkg-nonce               dkg-nonce              │
+│       │                       │                       │                  │
+│       └───────────────────────┼───────────────────────┘ exchange nonces  │
+│                               ▼                                          │
+│  3. dkg-sign              dkg-sign                dkg-sign               │
+│       │                       │                       │                  │
+│       └───────────────────────┼───────────────────────┘ exchange shares  │
+│                               ▼                                          │
+│  4. dkg-broadcast             │                       │                  │
+│       │                       │                       │                  │
+│       ▼                       │                       │                  │
+│     txid                      │                       │                  │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Commands
+
+```bash
+# Step 1: Coordinator builds unsigned transaction
+frostdao dkg-build-tx \
+  --name treasury \
+  --to tb1p... \
+  --amount 10000 \
+  --fee-rate 2
+
+# Output: session_id, sighash, unsigned_tx
+
+# Step 2: Each signer generates nonce (share session_id)
+frostdao dkg-nonce --name treasury --session <session_id>
+
+# Step 3: Each signer creates signature share (need all nonces)
+frostdao dkg-sign \
+  --name treasury \
+  --session <session_id> \
+  --sighash <sighash_hex> \
+  --data '<nonces_json>'
+
+# Step 4: Coordinator combines shares and broadcasts
+frostdao dkg-broadcast \
+  --name treasury \
+  --unsigned-tx <tx_hex> \
+  --data '<signature_shares_json>'
+```
+
+### Example: 2-of-3 Threshold Send
+
+```bash
+# 1. Party 1 (coordinator) builds the transaction
+BUILD_OUT=$(frostdao dkg-build-tx --name treasury --to tb1p... --amount 10000)
+SESSION=$(echo $BUILD_OUT | jq -r '.session_id')
+SIGHASH=$(echo $BUILD_OUT | jq -r '.sighash')
+UNSIGNED_TX=$(echo $BUILD_OUT | jq -r '.unsigned_tx')
+
+# 2. Parties 1 and 2 generate nonces (share session_id)
+NONCE1=$(frostdao dkg-nonce --name treasury --session $SESSION)
+NONCE2=$(frostdao dkg-nonce --name treasury --session $SESSION)
+
+# 3. Parties 1 and 2 create signature shares (exchange nonces)
+NONCES="[$NONCE1, $NONCE2]"
+SHARE1=$(frostdao dkg-sign --name treasury --session $SESSION --sighash $SIGHASH --data "$NONCES")
+SHARE2=$(frostdao dkg-sign --name treasury --session $SESSION --sighash $SIGHASH --data "$NONCES")
+
+# 4. Coordinator broadcasts
+SHARES="[$SHARE1, $SHARE2]"
+frostdao dkg-broadcast --name treasury --unsigned-tx $UNSIGNED_TX --data "$SHARES"
+# Output: txid
+```
+
+### Taproot Parity Handling
+
+The DKG signing automatically handles Taproot key tweaking and parity. When the tweaked public key has odd Y coordinate, the signing logic:
+1. Negates secret shares during signing
+2. Adjusts the tweak contribution in the final signature
+
+This ensures ~100% signature success rate (previously ~50% when parity was ignored).
+
+---
+
 ## CLI Reference
 
 ### Key Management
@@ -489,6 +668,22 @@ frostdao btc-send \
 | `reshare-round1 --source <wallet> ...` | Generate sub-shares for resharing |
 | `reshare-finalize --source <old> --target <new> ...` | Combine sub-shares into new wallet |
 
+### Share Recovery
+
+| Command | Description |
+|---------|-------------|
+| `recover-round1 --name <wallet> --lost-index <i>` | Helper generates sub-share for lost party |
+| `recover-finalize --source <wallet> --target <new> ...` | Lost party combines sub-shares to recover |
+
+### DKG Transactions
+
+| Command | Description |
+|---------|-------------|
+| `dkg-build-tx --name <wallet> --to <addr> --amount <sats>` | Build unsigned transaction |
+| `dkg-nonce --name <wallet> --session <id>` | Generate signing nonce |
+| `dkg-sign --name <wallet> --session <id> --sighash <hex> --data <json>` | Create signature share |
+| `dkg-broadcast --name <wallet> --unsigned-tx <hex> --data <json>` | Combine and broadcast |
+
 ### Wallet Management
 
 | Command | Description |
@@ -528,11 +723,15 @@ frostdao/
 │   ├── keygen.rs             # DKG implementation
 │   ├── signing.rs            # Threshold signing
 │   ├── reshare.rs            # Resharing protocol
-│   ├── tui.rs                # Terminal UI
+│   ├── recovery.rs           # Share recovery protocol
+│   ├── dkg_tx.rs             # DKG threshold transactions
+│   ├── crypto_helpers.rs     # Shared cryptographic utilities
 │   ├── birkhoff.rs           # HTSS Birkhoff interpolation
 │   ├── bitcoin_schnorr.rs    # BIP340 & addresses
-│   ├── bitcoin_tx.rs         # Transactions & broadcasting
+│   ├── bitcoin_tx.rs         # Single-signer transactions
 │   ├── storage.rs            # Key storage
+│   ├── tui.rs                # Terminal UI entry
+│   ├── tui/                  # Terminal UI components
 │   └── wasm.rs               # WebAssembly bindings
 ├── tests/                    # Integration tests
 │   ├── reshare_tests.rs      # Resharing protocol tests
@@ -551,6 +750,20 @@ frostdao/
 ├── README.md
 └── Cargo.toml
 ```
+
+### Core Modules
+
+| Module | Purpose |
+|--------|---------|
+| `crypto_helpers.rs` | Shared utilities: tagged_hash, Lagrange coefficients, taproot parity |
+| `birkhoff.rs` | Birkhoff interpolation for HTSS (rank-based recovery) |
+| `keygen.rs` | Distributed Key Generation (DKG) protocol |
+| `signing.rs` | FROST threshold signing |
+| `reshare.rs` | Proactive share refresh without changing address |
+| `recovery.rs` | Recover lost party's share from t other parties |
+| `dkg_tx.rs` | Multi-party Bitcoin transactions with threshold signing |
+| `bitcoin_schnorr.rs` | BIP340 Schnorr signatures and Taproot addresses |
+| `bitcoin_tx.rs` | Single-signer transaction building and broadcasting |
 
 ### Storage
 

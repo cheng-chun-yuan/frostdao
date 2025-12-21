@@ -239,7 +239,7 @@ pub fn reshare_finalize(
             .ok_or_else(|| anyhow::anyhow!("Invalid sub-share scalar"))?;
 
         // Compute Lagrange coefficient for this old party at x=0
-        let lagrange_coeff = compute_lagrange_coefficient(output.old_party_index, &old_indices)?;
+        let lagrange_coeff = crate::crypto_helpers::lagrange_coefficient_at_zero(output.old_party_index, &old_indices)?;
 
         // Add weighted sub-share to result
         let current: Scalar<Secret, Zero> =
@@ -271,23 +271,17 @@ pub fn reshare_finalize(
 
     let target_storage = FileStorage::new(&target_state_dir)?;
 
-    // Create PairedSecretShare in the same format as keygen
-    // The bincode format is: [index: 32 bytes][share: 32 bytes][public_key: 32 bytes]
-    let index_scalar = Scalar::<Secret, Zero>::from(my_new_index)
-        .non_zero()
-        .ok_or_else(|| anyhow::anyhow!("Party index cannot be zero"))?;
-
+    // Create PairedSecretShare using helper function
     let share_scalar: Scalar<Secret, Zero> = Scalar::from_bytes(new_share_bytes)
         .ok_or_else(|| anyhow::anyhow!("Invalid computed share"))?;
-    let share_nonzero = share_scalar
-        .non_zero()
-        .ok_or_else(|| anyhow::anyhow!("Computed share is zero (extremely unlikely)"))?;
+    let share_nonzero = crate::crypto_helpers::share_to_nonzero(share_scalar)?;
 
-    // Construct paired_secret_share.bin bytes matching bincode serialization format
-    let mut paired_bytes = Vec::with_capacity(96);
-    paired_bytes.extend_from_slice(&index_scalar.to_bytes()); // index: 32 bytes
-    paired_bytes.extend_from_slice(&share_nonzero.to_bytes()); // share: 32 bytes
-    paired_bytes.extend_from_slice(&group_public_key.to_xonly_bytes()); // public_key: 32 bytes
+    let paired_share = crate::crypto_helpers::construct_paired_secret_share(
+        my_new_index,
+        share_nonzero,
+        &group_public_key,
+    )?;
+    let paired_bytes = bincode::serialize(&paired_share)?;
 
     target_storage.write("paired_secret_share.bin", &paired_bytes)?;
     target_storage.write("shared_key.bin", &shared_key_bytes)?;
@@ -365,47 +359,7 @@ pub fn reshare_finalize(
     Ok(())
 }
 
-/// Compute Lagrange coefficient for party_index at x=0
-/// λ_i(0) = Π_{j≠i} (0 - j) / (i - j) = Π_{j≠i} (-j) / (i - j)
-///
-/// Uses field arithmetic directly to avoid integer overflow for large party counts.
-/// Previous implementation used i64 accumulation then truncated to u32, which silently
-/// corrupted results for 14+ parties (13! = 6,227,020,800 > u32::MAX).
-fn compute_lagrange_coefficient(
-    party_index: u32,
-    all_indices: &[u32],
-) -> Result<Scalar<Secret, Zero>> {
-    // Accumulate directly as field elements to avoid integer overflow
-    let mut numerator: Scalar<Secret, Zero> = Scalar::from(1u32);
-    let mut denominator: Scalar<Secret, Zero> = Scalar::from(1u32);
-
-    let i_scalar: Scalar<Secret, Zero> = Scalar::from(party_index);
-
-    for &other_index in all_indices {
-        if other_index == party_index {
-            continue;
-        }
-
-        let j_scalar: Scalar<Secret, Zero> = Scalar::from(other_index);
-
-        // numerator *= (0 - j) = -j
-        let neg_j = s!(-j_scalar);
-        numerator = s!(numerator * neg_j);
-
-        // denominator *= (i - j)
-        let i_minus_j = s!(i_scalar - j_scalar);
-        denominator = s!(denominator * i_minus_j);
-    }
-
-    // Invert denominator and multiply
-    let denom_nonzero = denominator
-        .non_zero()
-        .ok_or_else(|| anyhow::anyhow!("Lagrange denominator is zero"))?;
-    let denom_inv = denom_nonzero.invert();
-    let result = s!(numerator * denom_inv);
-
-    Ok(result)
-}
+// Lagrange coefficient computation is now in crypto_helpers module
 
 // ============================================================================
 // Core functions for TUI integration
@@ -570,7 +524,7 @@ pub fn reshare_finalize_core(
         let sub_share: Scalar<Secret, Zero> = Scalar::from_bytes(sub_share_bytes)
             .ok_or_else(|| anyhow::anyhow!("Invalid sub-share scalar"))?;
 
-        let lagrange_coeff = compute_lagrange_coefficient(output.old_party_index, &old_indices)?;
+        let lagrange_coeff = crate::crypto_helpers::lagrange_coefficient_at_zero(output.old_party_index, &old_indices)?;
 
         let current: Scalar<Secret, Zero> =
             Scalar::from_bytes(new_share_bytes).unwrap_or(Scalar::zero());
@@ -595,22 +549,17 @@ pub fn reshare_finalize_core(
 
     let target_storage = FileStorage::new(&target_state_dir)?;
 
-    // Create PairedSecretShare in the same format as keygen
-    let index_scalar = Scalar::<Secret, Zero>::from(my_new_index)
-        .non_zero()
-        .ok_or_else(|| anyhow::anyhow!("Party index cannot be zero"))?;
-
+    // Create PairedSecretShare using helper function
     let share_scalar: Scalar<Secret, Zero> = Scalar::from_bytes(new_share_bytes)
         .ok_or_else(|| anyhow::anyhow!("Invalid computed share"))?;
-    let share_nonzero = share_scalar
-        .non_zero()
-        .ok_or_else(|| anyhow::anyhow!("Computed share is zero (extremely unlikely)"))?;
+    let share_nonzero = crate::crypto_helpers::share_to_nonzero(share_scalar)?;
 
-    // Construct paired_secret_share.bin bytes matching bincode serialization format
-    let mut paired_bytes = Vec::with_capacity(96);
-    paired_bytes.extend_from_slice(&index_scalar.to_bytes());
-    paired_bytes.extend_from_slice(&share_nonzero.to_bytes());
-    paired_bytes.extend_from_slice(&group_public_key.to_xonly_bytes());
+    let paired_share = crate::crypto_helpers::construct_paired_secret_share(
+        my_new_index,
+        share_nonzero,
+        &group_public_key,
+    )?;
+    let paired_bytes = bincode::serialize(&paired_share)?;
 
     target_storage.write("paired_secret_share.bin", &paired_bytes)?;
     target_storage.write("shared_key.bin", &shared_key_bytes)?;
@@ -685,13 +634,15 @@ mod tests {
 
     #[test]
     fn test_lagrange_coefficients_sum_to_one() {
+        use crate::crypto_helpers::lagrange_coefficient_at_zero;
+
         // Test that Lagrange coefficients for indices {1,2,3} at x=0 sum to 1
         // This is a fundamental property: Σ λ_i(x) = 1 for any x
         let indices = vec![1, 2, 3];
 
         let mut sum: Scalar<Secret, Zero> = Scalar::zero();
         for &idx in &indices {
-            let coeff = compute_lagrange_coefficient(idx, &indices).unwrap();
+            let coeff = lagrange_coefficient_at_zero(idx, &indices).unwrap();
             sum = s!(sum + coeff);
         }
 
@@ -702,6 +653,8 @@ mod tests {
 
     #[test]
     fn test_resharing_preserves_secret() {
+        use crate::crypto_helpers::lagrange_coefficient_at_zero;
+
         // Simulate resharing: old shares combine to same secret
         // Original secret: s
         // Old shares: s_1, s_2, s_3 (2-of-3 Shamir)
@@ -720,8 +673,8 @@ mod tests {
 
         // Reconstruct secret using Lagrange at x=0 with shares 1 and 2
         let indices = vec![1, 2];
-        let lambda1 = compute_lagrange_coefficient(1, &indices).unwrap();
-        let lambda2 = compute_lagrange_coefficient(2, &indices).unwrap();
+        let lambda1 = lagrange_coefficient_at_zero(1, &indices).unwrap();
+        let lambda2 = lagrange_coefficient_at_zero(2, &indices).unwrap();
 
         let reconstructed = s!(lambda1 * share1 + lambda2 * share2);
 
@@ -731,8 +684,8 @@ mod tests {
 
         // Also verify with indices 2 and 3
         let indices = vec![2, 3];
-        let lambda2 = compute_lagrange_coefficient(2, &indices).unwrap();
-        let lambda3 = compute_lagrange_coefficient(3, &indices).unwrap();
+        let lambda2 = lagrange_coefficient_at_zero(2, &indices).unwrap();
+        let lambda3 = lagrange_coefficient_at_zero(3, &indices).unwrap();
 
         let reconstructed2 = s!(lambda2 * share2 + lambda3 * share3);
         assert_eq!(reconstructed2.to_bytes(), secret_zero.to_bytes());

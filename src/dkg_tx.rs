@@ -53,15 +53,8 @@ use std::str::FromStr;
 // Taproot Helper Functions
 // ============================================================================
 
-/// Compute BIP340 tagged hash: SHA256(SHA256(tag) || SHA256(tag) || data)
-fn tagged_hash(tag: &str, data: &[u8]) -> [u8; 32] {
-    let tag_hash = Sha256::digest(tag.as_bytes());
-    let mut hasher = Sha256::new();
-    hasher.update(&tag_hash);
-    hasher.update(&tag_hash);
-    hasher.update(data);
-    hasher.finalize().into()
-}
+// Use shared tagged_hash from crypto_helpers
+use crate::crypto_helpers::tagged_hash;
 
 /// Compute the taptweak for a given internal public key (no script tree)
 /// tweak = tagged_hash("TapTweak", internal_pubkey)
@@ -71,13 +64,23 @@ fn compute_taptweak(internal_pubkey: &[u8; 32]) -> Scalar<Public, Zero> {
 }
 
 /// Compute the tweaked public key Q = P + t*G for P2TR addresses
-fn compute_tweaked_pubkey(internal_pubkey: &Point<EvenY>) -> Point<EvenY> {
+///
+/// Returns (tweaked_pubkey, parity_flip) where:
+/// - tweaked_pubkey: The tweaked key with even Y (for BIP340)
+/// - parity_flip: true if the tweaked key was negated to achieve even Y
+///
+/// IMPORTANT for threshold signing:
+/// - If parity_flip is false: signature = σ + e*t (add tweak contribution)
+/// - If parity_flip is true: signature = σ - e*t (subtract tweak contribution)
+///   AND secret shares must be negated before signing
+fn compute_tweaked_pubkey(internal_pubkey: &Point<EvenY>) -> (Point<EvenY>, bool) {
     let pubkey_bytes: [u8; 32] = internal_pubkey.to_xonly_bytes();
     let tweak = compute_taptweak(&pubkey_bytes);
     let tweaked = g!({ *internal_pubkey } + tweak * G).normalize();
-    // Convert to NonZero and then to EvenY
+    // Convert to NonZero and then to EvenY, tracking whether negation occurred
     let tweaked_nonzero = tweaked.non_zero().expect("tweaked point should not be zero");
-    tweaked_nonzero.into_point_with_even_y().0
+    let (even_y_point, parity_flip) = tweaked_nonzero.into_point_with_even_y();
+    (even_y_point, parity_flip)
 }
 
 // ============================================================================
@@ -560,7 +563,7 @@ pub fn dkg_sign_core(
     // The P2TR address is derived from Q = P + H("TapTweak", P) * G
     // The signature must verify as: s*G = R + e*Q where e = H("BIP0340/challenge", R || Q || m)
     let internal_pubkey = shared_key.public_key();
-    let tweaked_pubkey = compute_tweaked_pubkey(&internal_pubkey);
+    let (tweaked_pubkey, parity_flip) = compute_tweaked_pubkey(&internal_pubkey);
 
     // Create coordinator session (still uses internal key for nonce aggregation)
     let coord_session = frost.coordinator_sign_session(&shared_key, nonces_map.clone(), msg);
@@ -570,9 +573,22 @@ pub fn dkg_sign_core(
     let parties = coord_session.parties();
     let sign_session = frost.party_sign_session(tweaked_pubkey, parties.clone(), agg_binonce, msg);
 
-    // Create signature share (computed with challenge using tweaked key)
-    let sig_share = sign_session.sign(&paired_share, nonce);
+    // CRITICAL: Handle taproot parity
+    // If parity_flip is true, the tweaked key was negated to achieve even Y.
+    // In this case, we need to sign with the NEGATED secret share.
+    // This ensures: σ = k - e*p (instead of k + e*p) when combined,
+    // which allows the final signature s = σ - e*t = k - e*p - e*t = k - e*(p+t) to verify.
+    let sig_share = if parity_flip {
+        let negated_paired = crate::crypto_helpers::negate_paired_secret_share(&paired_share)?;
+        sign_session.sign(&negated_paired, nonce)
+    } else {
+        sign_session.sign(&paired_share, nonce)
+    };
     let sig_share_hex = hex::encode(bincode::serialize(&sig_share)?);
+
+    if parity_flip {
+        out.push_str("📝 Note: Tweaked key has odd Y - using negated secret share\n\n");
+    }
 
     // Save session data for combine step
     let final_nonce = coord_session.final_nonce();
@@ -582,6 +598,12 @@ pub fn dkg_sign_core(
     // Save tweaked pubkey for broadcast step
     let tweaked_pubkey_bytes = tweaked_pubkey.to_xonly_bytes();
     storage.write(&format!("dkg_tweaked_pubkey_{}.bin", session_id), &tweaked_pubkey_bytes)?;
+
+    // Save parity flag for broadcast step - CRITICAL for correct signature combination
+    storage.write(
+        &format!("dkg_parity_flip_{}.bin", session_id),
+        &[if parity_flip { 1u8 } else { 0u8 }],
+    )?;
 
     let nonces_json = serde_json::to_string(&nonce_outputs)?;
     storage.write(&format!("dkg_session_nonces_{}.json", session_id), nonces_json.as_bytes())?;
@@ -688,8 +710,17 @@ pub fn dkg_broadcast_core(
     // Compute the tweaked public key (same as in dkg_sign)
     let internal_pubkey = shared_key.public_key();
     let internal_pubkey_bytes: [u8; 32] = internal_pubkey.to_xonly_bytes();
-    let tweaked_pubkey = compute_tweaked_pubkey(&internal_pubkey);
+    let (tweaked_pubkey, _) = compute_tweaked_pubkey(&internal_pubkey);
     let taptweak = compute_taptweak(&internal_pubkey_bytes);
+
+    // Load parity flag saved during dkg_sign
+    // CRITICAL: This determines whether to add or subtract the tweak contribution
+    let parity_bytes = storage.read(&format!("dkg_parity_flip_{}.bin", session_id))?;
+    let parity_flip = parity_bytes.first().copied().unwrap_or(0) == 1;
+
+    if parity_flip {
+        out.push_str("📝 Parity flip detected - will subtract tweak contribution\n\n");
+    }
 
     // Recreate coordinator session
     let coord_session = frost.coordinator_sign_session(&shared_key, nonces_map, msg);
@@ -711,8 +742,6 @@ pub fn dkg_broadcast_core(
     let sig_r_bytes = final_nonce.to_xonly_bytes();
 
     // Apply taptweak adjustment to s
-    // Signature shares were computed with challenge e = H("BIP0340/challenge", R || Q || m)
-    // But s = k + e*x (using internal key x), we need s' = k + e*(x + t) = s + e*t
     // Compute e = H("BIP0340/challenge", R || Q || m)
     let mut challenge_input = Vec::with_capacity(96);
     challenge_input.extend_from_slice(&sig_r_bytes);
@@ -721,12 +750,25 @@ pub fn dkg_broadcast_core(
     let challenge_hash = tagged_hash("BIP0340/challenge", &challenge_input);
     let challenge: Scalar<Public, Zero> = Scalar::from_bytes_mod_order(challenge_hash);
 
-    // s_final = s + e * t
+    // Compute e * t (the tweak contribution)
     let tweak_contribution = s!(challenge * taptweak);
-    let sig_s_final = s!(sig_shares_sum + tweak_contribution);
+
+    // CRITICAL: Handle parity correctly
+    // - If parity_flip is false (Q had even Y): s = σ + e*t
+    //   Combined shares σ = k + e*p, final s = k + e*p + e*t = k + e*(p+t) ✓
+    // - If parity_flip is true (Q had odd Y, was negated):  s = σ - e*t
+    //   Combined shares σ = k - e*p (shares were negated), final s = k - e*p - e*t = k - e*(p+t) ✓
+    let sig_s_final = if parity_flip {
+        s!(sig_shares_sum - tweak_contribution)
+    } else {
+        s!(sig_shares_sum + tweak_contribution)
+    };
     let sig_s_bytes = sig_s_final.to_bytes();
 
-    out.push_str("✓ Signature computed with taptweak!\n\n");
+    out.push_str(&format!(
+        "✓ Signature computed with taptweak (parity_flip={})!\n\n",
+        parity_flip
+    ));
 
     // Combine R and s into 64-byte BIP340 signature
     let mut sig_64 = [0u8; 64];

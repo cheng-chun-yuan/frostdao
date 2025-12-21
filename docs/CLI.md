@@ -373,6 +373,194 @@ frostdao verify \
 
 ---
 
+## Resharing Commands
+
+### reshare-round1
+
+Generate sub-shares for new parties (run by old parties).
+
+```bash
+frostdao reshare-round1 \
+  --source <wallet_name> \
+  --new-threshold <t> \
+  --new-n-parties <n> \
+  --my-index <i>
+```
+
+**Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `--source` | Source wallet name |
+| `--new-threshold` | New threshold for reshared wallet |
+| `--new-n-parties` | New total number of parties |
+| `--my-index` | Your party index in the original wallet |
+
+---
+
+### reshare-finalize
+
+Combine sub-shares to create new wallet (run by new parties).
+
+```bash
+frostdao reshare-finalize \
+  --source <old_wallet> \
+  --target <new_wallet> \
+  --my-index <i> \
+  --data '<round1_outputs_json>'
+```
+
+**Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `--source` | Source wallet name (for metadata) |
+| `--target` | New wallet name to create |
+| `--my-index` | Your new party index |
+| `--data` | JSON with round1 outputs from old parties |
+
+---
+
+## Share Recovery Commands
+
+### recover-round1
+
+Helper party generates sub-share for a lost party.
+
+```bash
+frostdao recover-round1 \
+  --name <wallet_name> \
+  --lost-index <i>
+```
+
+**Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `--name` | Wallet name |
+| `--lost-index` | Index of the party who lost their share |
+
+**Output:** JSON with `helper_index`, `lost_index`, `sub_share`, `rank`
+
+---
+
+### recover-finalize
+
+Lost party combines sub-shares to recover their share.
+
+```bash
+frostdao recover-finalize \
+  --source <wallet_name> \
+  --target <new_wallet> \
+  --my-index <i> \
+  [--rank <r>] \
+  [--hierarchical] \
+  --data '<sub_shares_json>'
+```
+
+**Parameters:**
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `--source` | Source wallet name (for metadata) | Required |
+| `--target` | New wallet name to create | Required |
+| `--my-index` | Your party index (the one being recovered) | Required |
+| `--rank` | Your HTSS rank | 0 |
+| `--hierarchical` | Enable hierarchical mode | false |
+| `--data` | JSON with sub-shares from helper parties | Required |
+
+**Note:** For HTSS wallets with mixed ranks, uses Birkhoff interpolation.
+
+---
+
+## DKG Transaction Commands
+
+### dkg-build-tx
+
+Build an unsigned transaction for DKG threshold signing.
+
+```bash
+frostdao dkg-build-tx \
+  --name <wallet_name> \
+  --to <recipient_address> \
+  --amount <satoshis> \
+  [--fee-rate <sats_per_vbyte>]
+```
+
+**Parameters:**
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `--name` | DKG wallet name | Required |
+| `--to` | Recipient Taproot address | Required |
+| `--amount` | Amount in satoshis | Required |
+| `--fee-rate` | Fee rate (sats/vbyte) | Auto |
+
+**Output:** JSON with `session_id`, `sighash`, `unsigned_tx`
+
+---
+
+### dkg-nonce
+
+Generate a signing nonce for DKG transaction.
+
+```bash
+frostdao dkg-nonce \
+  --name <wallet_name> \
+  --session <session_id>
+```
+
+**Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `--name` | DKG wallet name |
+| `--session` | Session ID from dkg-build-tx |
+
+**Output:** JSON with nonce data for this party
+
+---
+
+### dkg-sign
+
+Create a signature share for DKG transaction.
+
+```bash
+frostdao dkg-sign \
+  --name <wallet_name> \
+  --session <session_id> \
+  --sighash <hex> \
+  --data '<nonces_json>'
+```
+
+**Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `--name` | DKG wallet name |
+| `--session` | Session ID |
+| `--sighash` | Transaction sighash (32-byte hex) |
+| `--data` | JSON array of nonces from all signers |
+
+**Output:** JSON with signature share
+
+---
+
+### dkg-broadcast
+
+Combine signature shares and broadcast transaction.
+
+```bash
+frostdao dkg-broadcast \
+  --name <wallet_name> \
+  --unsigned-tx <hex> \
+  --data '<signature_shares_json>'
+```
+
+**Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `--name` | DKG wallet name |
+| `--unsigned-tx` | Unsigned transaction hex from dkg-build-tx |
+| `--data` | JSON array of signature shares |
+
+**Output:** JSON with `txid` and broadcast status
+
+---
+
 ## Storage Locations
 
 DKG wallets are stored in named folders under `.frost_state/`:

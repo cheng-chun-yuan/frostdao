@@ -13,6 +13,7 @@ pub struct CommandResult {
 mod birkhoff;
 mod bitcoin_schnorr;
 mod bitcoin_tx;
+mod crypto_helpers;
 mod dkg_tx;
 mod keygen;
 mod recovery;
