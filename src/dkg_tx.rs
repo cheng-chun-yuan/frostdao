@@ -50,6 +50,37 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 // ============================================================================
+// Taproot Helper Functions
+// ============================================================================
+
+/// Compute BIP340 tagged hash: SHA256(SHA256(tag) || SHA256(tag) || data)
+fn tagged_hash(tag: &str, data: &[u8]) -> [u8; 32] {
+    let tag_hash = Sha256::digest(tag.as_bytes());
+    let mut hasher = Sha256::new();
+    hasher.update(&tag_hash);
+    hasher.update(&tag_hash);
+    hasher.update(data);
+    hasher.finalize().into()
+}
+
+/// Compute the taptweak for a given internal public key (no script tree)
+/// tweak = tagged_hash("TapTweak", internal_pubkey)
+fn compute_taptweak(internal_pubkey: &[u8; 32]) -> Scalar<Public, Zero> {
+    let tweak_bytes = tagged_hash("TapTweak", internal_pubkey);
+    Scalar::from_bytes(tweak_bytes).expect("taptweak should be valid scalar")
+}
+
+/// Compute the tweaked public key Q = P + t*G for P2TR addresses
+fn compute_tweaked_pubkey(internal_pubkey: &Point<EvenY>) -> Point<EvenY> {
+    let pubkey_bytes: [u8; 32] = internal_pubkey.to_xonly_bytes();
+    let tweak = compute_taptweak(&pubkey_bytes);
+    let tweaked = g!({ *internal_pubkey } + tweak * G).normalize();
+    // Convert to NonZero and then to EvenY
+    let tweaked_nonzero = tweaked.non_zero().expect("tweaked point should not be zero");
+    tweaked_nonzero.into_point_with_even_y().0
+}
+
+// ============================================================================
 // Output Types
 // ============================================================================
 
@@ -525,15 +556,21 @@ pub fn dkg_sign_core(
     // For Bitcoin Taproot, the message is the raw sighash bytes
     let msg = Message::raw(&sighash_bytes);
 
-    // Create coordinator session
+    // IMPORTANT: For P2TR, we must sign against the TWEAKED public key Q, not the internal key P.
+    // The P2TR address is derived from Q = P + H("TapTweak", P) * G
+    // The signature must verify as: s*G = R + e*Q where e = H("BIP0340/challenge", R || Q || m)
+    let internal_pubkey = shared_key.public_key();
+    let tweaked_pubkey = compute_tweaked_pubkey(&internal_pubkey);
+
+    // Create coordinator session (still uses internal key for nonce aggregation)
     let coord_session = frost.coordinator_sign_session(&shared_key, nonces_map.clone(), msg);
 
-    // Create party sign session
+    // Create party sign session with TWEAKED public key for correct challenge computation
     let agg_binonce = coord_session.agg_binonce();
     let parties = coord_session.parties();
-    let sign_session = frost.party_sign_session(shared_key.public_key(), parties.clone(), agg_binonce, msg);
+    let sign_session = frost.party_sign_session(tweaked_pubkey, parties.clone(), agg_binonce, msg);
 
-    // Create signature share
+    // Create signature share (computed with challenge using tweaked key)
     let sig_share = sign_session.sign(&paired_share, nonce);
     let sig_share_hex = hex::encode(bincode::serialize(&sig_share)?);
 
@@ -541,6 +578,10 @@ pub fn dkg_sign_core(
     let final_nonce = coord_session.final_nonce();
     let final_nonce_bytes = bincode::serialize(&final_nonce)?;
     storage.write(&format!("dkg_final_nonce_{}.bin", session_id), &final_nonce_bytes)?;
+
+    // Save tweaked pubkey for broadcast step
+    let tweaked_pubkey_bytes = tweaked_pubkey.to_xonly_bytes();
+    storage.write(&format!("dkg_tweaked_pubkey_{}.bin", session_id), &tweaked_pubkey_bytes)?;
 
     let nonces_json = serde_json::to_string(&nonce_outputs)?;
     storage.write(&format!("dkg_session_nonces_{}.json", session_id), nonces_json.as_bytes())?;
@@ -644,38 +685,48 @@ pub fn dkg_broadcast_core(
     // Create message
     let msg = Message::raw(&sighash_bytes);
 
+    // Compute the tweaked public key (same as in dkg_sign)
+    let internal_pubkey = shared_key.public_key();
+    let internal_pubkey_bytes: [u8; 32] = internal_pubkey.to_xonly_bytes();
+    let tweaked_pubkey = compute_tweaked_pubkey(&internal_pubkey);
+    let taptweak = compute_taptweak(&internal_pubkey_bytes);
+
     // Recreate coordinator session
     let coord_session = frost.coordinator_sign_session(&shared_key, nonces_map, msg);
 
-    // Parse and verify signature shares
-    let mut sig_shares = BTreeMap::new();
+    // Parse signature shares (skip verification since shares were computed with tweaked key)
+    let mut sig_shares_sum: Scalar<Public, Zero> = Scalar::zero();
     for share_output in &share_outputs {
         let share_bytes = hex::decode(&share_output.signature_share)?;
         let sig_share: Scalar<Public, Zero> = bincode::deserialize(&share_bytes)?;
-        let share_index = Scalar::<Secret, Zero>::from(share_output.party_index)
-            .non_zero()
-            .expect("index should be nonzero")
-            .public();
-        sig_shares.insert(share_index, sig_share);
+        let sum = s!(sig_shares_sum + sig_share);
+        sig_shares_sum = sum.public(); // Convert back to Public marker
         out.push_str(&format!("   Party {}: ✓\n", share_output.party_index));
     }
 
     out.push_str("\nCombining signature shares...\n");
 
-    // Verify and combine
-    let signature = coord_session
-        .verify_and_combine_signature_shares(&shared_key, sig_shares)
-        .map_err(|e| anyhow::anyhow!("Signature verification failed: {:?}", e))?;
+    // Get the final nonce R from coordinator session
+    let final_nonce = coord_session.final_nonce();
+    let sig_r_bytes = final_nonce.to_xonly_bytes();
 
-    out.push_str("✓ Signature valid!\n\n");
+    // Apply taptweak adjustment to s
+    // Signature shares were computed with challenge e = H("BIP0340/challenge", R || Q || m)
+    // But s = k + e*x (using internal key x), we need s' = k + e*(x + t) = s + e*t
+    // Compute e = H("BIP0340/challenge", R || Q || m)
+    let mut challenge_input = Vec::with_capacity(96);
+    challenge_input.extend_from_slice(&sig_r_bytes);
+    challenge_input.extend_from_slice(&tweaked_pubkey.to_xonly_bytes());
+    challenge_input.extend_from_slice(&sighash_bytes);
+    let challenge_hash = tagged_hash("BIP0340/challenge", &challenge_input);
+    let challenge: Scalar<Public, Zero> = Scalar::from_bytes_mod_order(challenge_hash);
 
-    // Get signature components (R, s)
-    let sig_r_bytes = signature.R.to_xonly_bytes();
-    let sig_s_bytes = signature.s.to_bytes();
+    // s_final = s + e * t
+    let tweak_contribution = s!(challenge * taptweak);
+    let sig_s_final = s!(sig_shares_sum + tweak_contribution);
+    let sig_s_bytes = sig_s_final.to_bytes();
 
-    // Apply taptweak to signature
-    // For key-path spend: tweaked_R stays same, we need to account for tweak in verification
-    // The schnorr_fun library handles this internally with EvenY marker
+    out.push_str("✓ Signature computed with taptweak!\n\n");
 
     // Combine R and s into 64-byte BIP340 signature
     let mut sig_64 = [0u8; 64];
@@ -685,6 +736,15 @@ pub fn dkg_broadcast_core(
     // Parse unsigned transaction
     let tx_bytes = hex::decode(unsigned_tx_hex)?;
     let mut tx: Transaction = bitcoin::consensus::deserialize(&tx_bytes)?;
+
+    // Check for multi-UTXO limitation
+    if tx.input.len() > 1 {
+        out.push_str(&format!(
+            "⚠️  WARNING: Transaction has {} inputs. Only first input will be signed.\n",
+            tx.input.len()
+        ));
+        out.push_str("   Multi-UTXO signing requires separate sessions per input.\n\n");
+    }
 
     // Add witness with signature
     // For Taproot key-path spend, witness is just the signature

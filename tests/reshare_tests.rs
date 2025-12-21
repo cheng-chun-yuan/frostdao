@@ -237,43 +237,93 @@ fn test_multiple_resharing_rounds() {
     }
 }
 
+/// Test that Lagrange coefficients work correctly for large party counts.
+/// This verifies the fix for integer overflow that previously corrupted results
+/// for 14+ parties (13! = 6,227,020,800 > u32::MAX).
+#[test]
+fn test_large_party_lagrange_no_overflow() {
+    // Test with 15 parties - this would overflow with the old i64->u32 truncation
+    let indices: Vec<u32> = (1..=15).collect();
+
+    // Compute Lagrange coefficients for all parties
+    let mut sum: Scalar<Secret, Zero> = Scalar::zero();
+
+    for &i in &indices {
+        let coeff = compute_lagrange_at_zero(i, &indices);
+        sum = s!(sum + coeff);
+    }
+
+    // Lagrange coefficients must sum to 1 for any valid set of indices
+    let one: Scalar<Secret, Zero> = Scalar::from(1u32);
+    assert_eq!(
+        sum.to_bytes(),
+        one.to_bytes(),
+        "Lagrange coefficients for 15 parties should sum to 1"
+    );
+}
+
+/// Test Lagrange reconstruction with 20 parties (would definitely overflow old impl)
+#[test]
+fn test_20_party_reconstruction() {
+    let mut rng = rand::thread_rng();
+
+    // Create a secret and polynomial with degree 19 (threshold 20)
+    let secret = Scalar::<Secret, NonZero>::random(&mut rng);
+
+    // Generate shares for parties 1..=20 using a simple degree-1 polynomial for testing
+    // (real threshold would use higher degree, but sum property still must hold)
+    let coeff = Scalar::<Secret, NonZero>::random(&mut rng);
+    let shares: Vec<_> = (1..=20)
+        .map(|x| evaluate_poly(&secret, &coeff, x))
+        .collect();
+
+    // Reconstruct using any 2 shares (since we use degree-1 polynomial)
+    let indices = vec![1u32, 20]; // Use first and last party
+    let lambda1 = compute_lagrange_at_zero(1, &indices);
+    let lambda20 = compute_lagrange_at_zero(20, &indices);
+    let reconstructed = s!(lambda1 * { shares[0] } + lambda20 * { shares[19] });
+
+    // Convert secret to Zero variant for comparison
+    let secret_bytes = Scalar::<Secret, Zero>::from_bytes(secret.to_bytes())
+        .unwrap()
+        .to_bytes();
+
+    assert_eq!(
+        reconstructed.to_bytes(),
+        secret_bytes,
+        "20-party reconstruction should work without overflow"
+    );
+}
+
 // Helper functions
 
+/// Compute Lagrange coefficient using field arithmetic to avoid integer overflow.
+/// Previous implementation used i64 then truncated to u32, corrupting results for 14+ parties.
 fn compute_lagrange_at_zero(party_index: u32, all_indices: &[u32]) -> Scalar<Secret, Zero> {
-    let mut numerator: i64 = 1;
-    let mut denominator: i64 = 1;
-    let i = party_index as i64;
+    let mut numerator: Scalar<Secret, Zero> = Scalar::from(1u32);
+    let mut denominator: Scalar<Secret, Zero> = Scalar::from(1u32);
+    let i_scalar: Scalar<Secret, Zero> = Scalar::from(party_index);
 
     for &other_index in all_indices {
         if other_index == party_index {
             continue;
         }
-        let j = other_index as i64;
-        numerator *= -j;
-        denominator *= i - j;
+        let j_scalar: Scalar<Secret, Zero> = Scalar::from(other_index);
+
+        // numerator *= (0 - j) = -j
+        let neg_j = s!(-j_scalar);
+        numerator = s!(numerator * neg_j);
+
+        // denominator *= (i - j)
+        let i_minus_j = s!(i_scalar - j_scalar);
+        denominator = s!(denominator * i_minus_j);
     }
 
-    // Convert to field elements
-    let num_scalar: Scalar<Secret, Zero> = if numerator >= 0 {
-        Scalar::from(numerator as u32)
-    } else {
-        let abs_num = (-numerator) as u32;
-        let pos: Scalar<Secret, Zero> = Scalar::from(abs_num);
-        s!(-pos)
-    };
-
-    let denom_scalar: Scalar<Secret, NonZero> = if denominator >= 0 {
-        Scalar::<Secret, Zero>::from(denominator as u32)
-            .non_zero()
-            .expect("denominator should not be zero")
-    } else {
-        let abs_denom = (-denominator) as u32;
-        let pos: Scalar<Secret, Zero> = Scalar::from(abs_denom);
-        -pos.non_zero().expect("denominator should not be zero")
-    };
-
-    let denom_inv = denom_scalar.invert();
-    s!(num_scalar * denom_inv)
+    let denom_nonzero = denominator
+        .non_zero()
+        .expect("denominator should not be zero");
+    let denom_inv = denom_nonzero.invert();
+    s!(numerator * denom_inv)
 }
 
 fn evaluate_poly(

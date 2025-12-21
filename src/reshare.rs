@@ -271,21 +271,25 @@ pub fn reshare_finalize(
 
     let target_storage = FileStorage::new(&target_state_dir)?;
 
-    // Save the new share in a format compatible with our signing flow
-    // We'll create a minimal paired secret share structure
+    // Create PairedSecretShare in the same format as keygen
+    // The bincode format is: [index: 32 bytes][share: 32 bytes][public_key: 32 bytes]
+    let index_scalar = Scalar::<Secret, Zero>::from(my_new_index)
+        .non_zero()
+        .ok_or_else(|| anyhow::anyhow!("Party index cannot be zero"))?;
 
-    // For now, save the raw share bytes and metadata
-    // The paired_secret_share.bin format needs to match what finalize_core creates
-    // We need to construct a proper PairedSecretShare
-
-    // Validate the computed share
-    let _new_share_scalar: Scalar<Secret, Zero> = Scalar::from_bytes(new_share_bytes)
+    let share_scalar: Scalar<Secret, Zero> = Scalar::from_bytes(new_share_bytes)
         .ok_or_else(|| anyhow::anyhow!("Invalid computed share"))?;
+    let share_nonzero = share_scalar
+        .non_zero()
+        .ok_or_else(|| anyhow::anyhow!("Computed share is zero (extremely unlikely)"))?;
 
-    // Save share as raw bytes for now (simpler format)
-    target_storage.write("secret_share.bin", &new_share_bytes)?;
+    // Construct paired_secret_share.bin bytes matching bincode serialization format
+    let mut paired_bytes = Vec::with_capacity(96);
+    paired_bytes.extend_from_slice(&index_scalar.to_bytes()); // index: 32 bytes
+    paired_bytes.extend_from_slice(&share_nonzero.to_bytes()); // share: 32 bytes
+    paired_bytes.extend_from_slice(&group_public_key.to_xonly_bytes()); // public_key: 32 bytes
 
-    // Copy shared key from source
+    target_storage.write("paired_secret_share.bin", &paired_bytes)?;
     target_storage.write("shared_key.bin", &shared_key_bytes)?;
 
     // Create new HTSS metadata
@@ -362,60 +366,43 @@ pub fn reshare_finalize(
 }
 
 /// Compute Lagrange coefficient for party_index at x=0
+/// λ_i(0) = Π_{j≠i} (0 - j) / (i - j) = Π_{j≠i} (-j) / (i - j)
+///
+/// Uses field arithmetic directly to avoid integer overflow for large party counts.
+/// Previous implementation used i64 accumulation then truncated to u32, which silently
+/// corrupted results for 14+ parties (13! = 6,227,020,800 > u32::MAX).
 fn compute_lagrange_coefficient(
     party_index: u32,
     all_indices: &[u32],
 ) -> Result<Scalar<Secret, Zero>> {
-    // λ_i(0) = Π_{j≠i} (0 - j) / (i - j) = Π_{j≠i} (-j) / (i - j)
+    // Accumulate directly as field elements to avoid integer overflow
+    let mut numerator: Scalar<Secret, Zero> = Scalar::from(1u32);
+    let mut denominator: Scalar<Secret, Zero> = Scalar::from(1u32);
 
-    let mut numerator: i64 = 1;
-    let mut denominator: i64 = 1;
-
-    let i = party_index as i64;
+    let i_scalar: Scalar<Secret, Zero> = Scalar::from(party_index);
 
     for &other_index in all_indices {
         if other_index == party_index {
             continue;
         }
 
-        let j = other_index as i64;
+        let j_scalar: Scalar<Secret, Zero> = Scalar::from(other_index);
 
         // numerator *= (0 - j) = -j
-        numerator *= -j;
+        let neg_j = s!(-j_scalar);
+        numerator = s!(numerator * neg_j);
 
         // denominator *= (i - j)
-        denominator *= i - j;
+        let i_minus_j = s!(i_scalar - j_scalar);
+        denominator = s!(denominator * i_minus_j);
     }
 
-    // Compute the ratio as a field element
-    // We need to compute numerator * denominator^(-1) mod p (the curve order)
-
-    // Convert to scalars - use Secret marker for internal computation
-    let num_scalar: Scalar<Secret, Zero> = if numerator >= 0 {
-        Scalar::from(numerator as u32)
-    } else {
-        let abs_num = (-numerator) as u32;
-        let pos: Scalar<Secret, Zero> = Scalar::from(abs_num);
-        s!(-pos)
-    };
-
-    let denom_scalar: Scalar<Secret, NonZero> = if denominator >= 0 {
-        Scalar::<Secret, Zero>::from(denominator as u32)
-            .non_zero()
-            .ok_or_else(|| anyhow::anyhow!("Lagrange denominator is zero"))?
-    } else {
-        let abs_denom = (-denominator) as u32;
-        let pos: Scalar<Secret, Zero> = Scalar::from(abs_denom);
-        pos.non_zero()
-            .map(|s| -s)
-            .ok_or_else(|| anyhow::anyhow!("Lagrange denominator is zero"))?
-    };
-
-    // Compute inverse of denominator
-    let denom_inv = denom_scalar.invert();
-
-    // Result = numerator * denom_inv
-    let result = s!(num_scalar * denom_inv);
+    // Invert denominator and multiply
+    let denom_nonzero = denominator
+        .non_zero()
+        .ok_or_else(|| anyhow::anyhow!("Lagrange denominator is zero"))?;
+    let denom_inv = denom_nonzero.invert();
+    let result = s!(numerator * denom_inv);
 
     Ok(result)
 }
@@ -608,8 +595,24 @@ pub fn reshare_finalize_core(
 
     let target_storage = FileStorage::new(&target_state_dir)?;
 
-    // Save share
-    target_storage.write("secret_share.bin", &new_share_bytes)?;
+    // Create PairedSecretShare in the same format as keygen
+    let index_scalar = Scalar::<Secret, Zero>::from(my_new_index)
+        .non_zero()
+        .ok_or_else(|| anyhow::anyhow!("Party index cannot be zero"))?;
+
+    let share_scalar: Scalar<Secret, Zero> = Scalar::from_bytes(new_share_bytes)
+        .ok_or_else(|| anyhow::anyhow!("Invalid computed share"))?;
+    let share_nonzero = share_scalar
+        .non_zero()
+        .ok_or_else(|| anyhow::anyhow!("Computed share is zero (extremely unlikely)"))?;
+
+    // Construct paired_secret_share.bin bytes matching bincode serialization format
+    let mut paired_bytes = Vec::with_capacity(96);
+    paired_bytes.extend_from_slice(&index_scalar.to_bytes());
+    paired_bytes.extend_from_slice(&share_nonzero.to_bytes());
+    paired_bytes.extend_from_slice(&group_public_key.to_xonly_bytes());
+
+    target_storage.write("paired_secret_share.bin", &paired_bytes)?;
     target_storage.write("shared_key.bin", &shared_key_bytes)?;
 
     // Create HTSS metadata
