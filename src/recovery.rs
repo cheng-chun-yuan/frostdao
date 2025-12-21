@@ -61,12 +61,24 @@ pub fn recover_round1(source_wallet: &str, lost_index: u32) -> Result<()> {
     let storage = FileStorage::new(&state_dir)?;
     let cmd_result = recover_round1_core(source_wallet, lost_index, &storage)?;
 
+    // Parse result to get threshold for message
+    let result: RecoveryRound1Output = serde_json::from_str(&cmd_result.result)?;
+
+    // Load HTSS metadata to get threshold
+    let state_dir = get_state_dir(source_wallet);
+    let storage = FileStorage::new(&state_dir)?;
+    let htss_json = String::from_utf8(storage.read("htss_metadata.json")?)?;
+    let htss: HtssMetadata = serde_json::from_str(&htss_json)?;
+
     println!("{}", cmd_result.output);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("📋 Share this with the recovering party:");
     println!("{}\n", cmd_result.result);
-    println!("⚠️  This reveals NO secret information about the group key!");
-    println!("    The lost party needs {} helper outputs to recover.", cmd_result.output.lines().find(|l| l.contains("threshold")).unwrap_or("threshold"));
+    println!("⚠️  SECURITY WARNING: This protocol exposes your raw share value!");
+    println!("    After recovery, party {} will know {} shares (theirs + helpers').", result.lost_index, htss.threshold);
+    println!("    With {} shares, they could theoretically reconstruct the group secret.", htss.threshold);
+    println!("    Only use this with TRUSTED parties who were already part of the group.\n");
+    println!("    The lost party needs {} helper outputs to recover.", htss.threshold);
 
     Ok(())
 }
@@ -176,12 +188,16 @@ pub fn recover_finalize(
 }
 
 /// Core function for recovery finalize
+///
+/// Note: my_rank and hierarchical parameters are IGNORED for security.
+/// The original rank and hierarchical setting are preserved from the source wallet
+/// to prevent privilege escalation attacks.
 pub fn recover_finalize_core(
     source_wallet: &str,
     target_wallet: &str,
     my_index: u32,
-    my_rank: u32,
-    hierarchical: bool,
+    _my_rank: u32,       // IGNORED - use source wallet's rank to prevent privilege escalation
+    _hierarchical: bool, // IGNORED - use source wallet's setting to prevent tampering
     round1_data: &str,
     force_overwrite: bool,
 ) -> Result<CommandResult> {
@@ -197,6 +213,32 @@ pub fn recover_finalize_core(
     if round1_outputs.is_empty() {
         anyhow::bail!("No recovery round1 data provided");
     }
+
+    // Load source wallet metadata FIRST to get original configuration
+    let source_state_dir = get_state_dir(source_wallet);
+    let source_storage = FileStorage::new(&source_state_dir)?;
+
+    let shared_key_bytes = source_storage.read("shared_key.bin")?;
+    let shared_key: SharedKey<EvenY> = bincode::deserialize(&shared_key_bytes)?;
+    let group_public_key = shared_key.public_key();
+
+    let source_htss_json = String::from_utf8(source_storage.read("htss_metadata.json")?)?;
+    let source_htss: HtssMetadata = serde_json::from_str(&source_htss_json)?;
+    let threshold = source_htss.threshold;
+    let n_parties = source_htss.party_ranks.len() as u32;
+
+    // SECURITY: Get the original rank from source wallet to prevent privilege escalation
+    let original_rank = source_htss.party_ranks.get(&my_index).copied().unwrap_or_else(|| {
+        // If party wasn't in original config, this is suspicious but allow with rank 0 warning
+        out.push_str(&format!(
+            "⚠️  WARNING: Party {} not found in original configuration. Using default rank 0.\n\n",
+            my_index
+        ));
+        0
+    });
+
+    // SECURITY: Use hierarchical setting from source wallet, not user input
+    let hierarchical = source_htss.hierarchical;
 
     // Verify all outputs are for the same lost index and wallet
     let expected_lost_index = my_index;
@@ -225,20 +267,7 @@ pub fn recover_finalize_core(
         "Received sub-shares from {} helper parties\n",
         round1_outputs.len()
     ));
-    out.push_str(&format!("Recovering index: {}\n\n", my_index));
-
-    // Load source wallet metadata to get threshold and group key
-    let source_state_dir = get_state_dir(source_wallet);
-    let source_storage = FileStorage::new(&source_state_dir)?;
-
-    let shared_key_bytes = source_storage.read("shared_key.bin")?;
-    let shared_key: SharedKey<EvenY> = bincode::deserialize(&shared_key_bytes)?;
-    let group_public_key = shared_key.public_key();
-
-    let source_htss_json = String::from_utf8(source_storage.read("htss_metadata.json")?)?;
-    let source_htss: HtssMetadata = serde_json::from_str(&source_htss_json)?;
-    let threshold = source_htss.threshold;
-    let n_parties = source_htss.party_ranks.len() as u32;
+    out.push_str(&format!("Recovering index: {} (original rank: {})\n\n", my_index, original_rank));
 
     // Verify we have enough sub-shares
     if (round1_outputs.len() as u32) < threshold {
@@ -329,15 +358,15 @@ pub fn recover_finalize_core(
     target_storage.write("paired_secret_share.bin", &paired_bytes)?;
     target_storage.write("shared_key.bin", &shared_key_bytes)?;
 
-    // Create HTSS metadata (same config as source, but with our index)
-    let mut party_ranks: BTreeMap<u32, u32> = source_htss.party_ranks.clone();
-    party_ranks.insert(my_index, my_rank);
+    // Create HTSS metadata preserving original configuration
+    // Use source wallet's party_ranks (already includes this party's original rank)
+    let party_ranks: BTreeMap<u32, u32> = source_htss.party_ranks.clone();
 
     let new_htss = HtssMetadata {
         my_index,
-        my_rank,
+        my_rank: original_rank, // Use original rank from source wallet
         threshold,
-        hierarchical,
+        hierarchical,          // Already set from source_htss.hierarchical
         party_ranks,
     };
 
@@ -378,12 +407,16 @@ pub fn recover_finalize_core(
     out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
     out.push_str("✅ Share recovery complete!\n\n");
     out.push_str(&format!("Recovered wallet: {}\n", target_wallet));
-    out.push_str(&format!("Config: {}-of-{}\n", threshold, n_parties));
-    out.push_str(&format!("Your index: {} (rank {})\n\n", my_index, my_rank));
+    out.push_str(&format!("Config: {}-of-{} ({})\n", threshold, n_parties,
+        if hierarchical { "HTSS" } else { "TSS" }));
+    out.push_str(&format!("Your index: {} (rank {} - preserved from original)\n\n", my_index, original_rank));
     out.push_str(&format!("Public Key: {}\n", pubkey_hex));
     out.push_str(&format!("Testnet Address: {}\n\n", address_testnet));
     out.push_str("⚠️  The public key and address are the SAME as the original wallet!\n");
-    out.push_str("    Your recovered share is now compatible with the group.\n");
+    out.push_str("    Your recovered share is now compatible with the group.\n\n");
+    out.push_str("🔐 SECURITY NOTE: This simplified recovery protocol exposed helper shares.\n");
+    out.push_str("    You now know enough shares to reconstruct the group secret.\n");
+    out.push_str("    A production system should use blinded sub-shares (like resharing).\n");
 
     Ok(CommandResult {
         output: out,
