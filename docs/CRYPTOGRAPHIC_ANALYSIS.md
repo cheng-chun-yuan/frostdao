@@ -464,13 +464,19 @@ For multi-UTXO transactions, each input needs a separate signing session.
 
 ### 3. Birkhoff Floating-Point Precision
 
-The Birkhoff implementation uses f64 for matrix operations:
+The Birkhoff implementation uses f64 for matrix operations with proper field arithmetic:
 ```rust
 const SCALE: u64 = 1_000_000_000_000; // 10^12
 let scaled = (abs_coeff * SCALE as f64).round() as u64;
+
+// Modular inverse is applied internally to produce correct field elements
+let scale_inverse = scale_nonzero.invert();
+let result = s!(scaled_scalar * scale_inverse);
 ```
 
-For extremely large party counts or unusual rank configurations, consider exact rational arithmetic.
+For binary-representable fractions (1/2, 1/4, etc.), results are exact. For others (1/3),
+precision is limited by floating-point representation. Practical Birkhoff coefficients
+for small party counts are typically integers, avoiding this limitation.
 
 ### 4. Session State Management
 

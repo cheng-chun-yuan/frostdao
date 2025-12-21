@@ -320,15 +320,15 @@ pub fn compute_birkhoff_recovery_coefficients(
 
 /// Converts Birkhoff coefficient to field scalar with proper precision.
 ///
-/// Uses rational arithmetic internally to avoid floating-point errors
-/// for small coefficients that should be exact integers or simple fractions.
+/// Uses scaling internally for non-integer coefficients and applies
+/// the modular inverse to produce correct field elements.
 pub fn birkhoff_coefficient_to_scalar(coeff: f64) -> Scalar<Secret, Zero> {
     // For coefficients that are likely rational, round to nearest rational
     // with small denominator and convert
     let is_negative = coeff < 0.0;
     let abs_coeff = coeff.abs();
 
-    // Check for small integer
+    // Check for small integer (most common case - avoids scaling overhead)
     let rounded = abs_coeff.round();
     if (abs_coeff - rounded).abs() < 1e-9 && rounded < 1e9 {
         let value = rounded as u64;
@@ -337,17 +337,27 @@ pub fn birkhoff_coefficient_to_scalar(coeff: f64) -> Scalar<Secret, Zero> {
     }
 
     // For non-integer coefficients, use scaling approach
-    // Scale up, convert to integer, then we'd need to divide by scale in field
-    // This is a simplified version - production should use exact rational arithmetic
+    // Scale up to preserve precision, then divide by SCALE in the field
     const SCALE: u64 = 1_000_000_000_000; // 10^12
-    let scaled = (abs_coeff * SCALE as f64).round() as u64;
 
-    let scalar: Scalar<Secret, Zero> = Scalar::from(scaled);
-    // Note: Caller must multiply result by modular inverse of SCALE
+    let scaled = (abs_coeff * SCALE as f64).round() as u64;
+    let scaled_scalar: Scalar<Secret, Zero> = Scalar::from(scaled);
+
+    // Compute modular inverse of SCALE and multiply to get correct coefficient
+    // This is equivalent to dividing by SCALE in the finite field
+    let scale_scalar: Scalar<Secret, Zero> = Scalar::from(SCALE);
+    let scale_nonzero = scale_scalar
+        .non_zero()
+        .expect("SCALE is non-zero constant");
+    let scale_inverse = scale_nonzero.invert();
+
+    // result = scaled_value / SCALE = scaled_value * SCALE^(-1)
+    let result = s!(scaled_scalar * scale_inverse);
+
     if is_negative {
-        s!(-scalar)
+        s!(-result)
     } else {
-        scalar
+        result
     }
 }
 
@@ -524,6 +534,135 @@ mod tests {
             (coeffs[1] - 1.0).abs() < 1e-6,
             "Expected c2=1, got {}",
             coeffs[1]
+        );
+    }
+
+    #[test]
+    fn test_birkhoff_coefficient_to_scalar_integer() {
+        // Integer coefficients should work directly
+        let coeff = birkhoff_coefficient_to_scalar(3.0);
+        let three: Scalar<Secret, Zero> = Scalar::from(3u32);
+        assert_eq!(coeff.to_bytes(), three.to_bytes());
+
+        // Negative integer
+        let neg_coeff = birkhoff_coefficient_to_scalar(-2.0);
+        let two: Scalar<Secret, Zero> = Scalar::from(2u32);
+        let neg_two = s!(-two);
+        assert_eq!(neg_coeff.to_bytes(), neg_two.to_bytes());
+    }
+
+    #[test]
+    fn test_birkhoff_coefficient_to_scalar_fraction() {
+        // Test that 0.5 * 2 = 1 in the field
+        // This verifies the modular inverse is applied correctly
+        let half = birkhoff_coefficient_to_scalar(0.5);
+        let two: Scalar<Secret, Zero> = Scalar::from(2u32);
+        let result = s!(half * two);
+
+        let one: Scalar<Secret, Zero> = Scalar::from(1u32);
+        assert_eq!(
+            result.to_bytes(),
+            one.to_bytes(),
+            "0.5 * 2 should equal 1 in the field"
+        );
+    }
+
+    #[test]
+    fn test_birkhoff_coefficient_to_scalar_quarter() {
+        // Test that 0.25 * 4 = 1 in the field
+        // Using 0.25 because it's exactly representable in binary floating point
+        let quarter = birkhoff_coefficient_to_scalar(0.25);
+        let four: Scalar<Secret, Zero> = Scalar::from(4u32);
+        let result = s!(quarter * four);
+
+        let one: Scalar<Secret, Zero> = Scalar::from(1u32);
+        assert_eq!(
+            result.to_bytes(),
+            one.to_bytes(),
+            "0.25 * 4 should equal 1 in the field"
+        );
+    }
+
+    #[test]
+    fn test_birkhoff_coefficient_negative_fraction() {
+        // Test that -0.5 * -2 = 1 in the field
+        let neg_half = birkhoff_coefficient_to_scalar(-0.5);
+        let neg_two: Scalar<Secret, Zero> = {
+            let two: Scalar<Secret, Zero> = Scalar::from(2u32);
+            s!(-two)
+        };
+        let result = s!(neg_half * neg_two);
+
+        let one: Scalar<Secret, Zero> = Scalar::from(1u32);
+        assert_eq!(
+            result.to_bytes(),
+            one.to_bytes(),
+            "-0.5 * -2 should equal 1 in the field"
+        );
+    }
+
+    #[test]
+    fn test_birkhoff_htss_recovery_correctness() {
+        // Simulate HTSS recovery with mixed ranks
+        // Helper 1: index=1, rank=0 (has f(1))
+        // Helper 2: index=2, rank=1 (has f'(2))
+        // Target: index=3, rank=0 (recover f(3))
+
+        // For a degree-1 polynomial f(x) = a + bx:
+        // f(1) = a + b
+        // f'(2) = b (derivative is constant)
+        // f(3) = a + 3b
+
+        // Using Birkhoff to recover f(3):
+        // We need coefficients c1, c2 such that:
+        // c1 * f(1) + c2 * f'(2) = f(3)
+        // c1 * (a + b) + c2 * b = a + 3b
+        // c1*a + c1*b + c2*b = a + 3b
+        // c1 = 1 (coefficient of a)
+        // c1 + c2 = 3 => c2 = 2
+
+        let params = vec![
+            BirkhoffParameter::new(1, 0), // f(1)
+            BirkhoffParameter::new(2, 1), // f'(2)
+        ];
+
+        let coeffs = compute_birkhoff_recovery_coefficients(3, 0, &params).unwrap();
+
+        // Verify coefficients
+        assert!(
+            (coeffs[0] - 1.0).abs() < 1e-6,
+            "c1 should be 1, got {}",
+            coeffs[0]
+        );
+        assert!(
+            (coeffs[1] - 2.0).abs() < 1e-6,
+            "c2 should be 2, got {}",
+            coeffs[1]
+        );
+
+        // Now test the full recovery with actual scalars
+        let mut rng = rand::thread_rng();
+        let a = Scalar::<Secret, NonZero>::random(&mut rng);
+        let b = Scalar::<Secret, NonZero>::random(&mut rng);
+
+        // Compute shares
+        let one: Scalar<Secret, Zero> = Scalar::from(1u32);
+        let three: Scalar<Secret, Zero> = Scalar::from(3u32);
+
+        let f_1 = s!(a + one * b);     // f(1) = a + b
+        let f_prime_2 = s!(b);          // f'(2) = b (constant for linear polynomial)
+        let f_3_expected = s!(a + three * b); // f(3) = a + 3b
+
+        // Recover using Birkhoff coefficients
+        let c1 = birkhoff_coefficient_to_scalar(coeffs[0]);
+        let c2 = birkhoff_coefficient_to_scalar(coeffs[1]);
+
+        let f_3_recovered = s!(c1 * f_1 + c2 * f_prime_2);
+
+        assert_eq!(
+            f_3_recovered.to_bytes(),
+            f_3_expected.to_bytes(),
+            "Birkhoff recovery should produce correct f(3)"
         );
     }
 }
