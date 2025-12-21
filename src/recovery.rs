@@ -251,18 +251,20 @@ pub fn recover_finalize_core(
     let n_parties = source_htss.party_ranks.len() as u32;
 
     // SECURITY: Get the original rank from source wallet to prevent privilege escalation
+    // If party wasn't in original config, this is a security violation - reject
     let original_rank = source_htss
         .party_ranks
         .get(&my_index)
         .copied()
-        .unwrap_or_else(|| {
-            // If party wasn't in original config, this is suspicious but allow with rank 0 warning
-            out.push_str(&format!(
-            "⚠️  WARNING: Party {} not found in original configuration. Using default rank 0.\n\n",
-            my_index
-        ));
-            0
-        });
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "SECURITY ERROR: Party index {} not found in original wallet configuration.\n\
+             Recovery is only allowed for parties that were part of the original group.\n\
+             Original party indices: {:?}",
+                my_index,
+                source_htss.party_ranks.keys().collect::<Vec<_>>()
+            )
+        })?;
 
     // SECURITY: Use hierarchical setting from source wallet, not user input
     let hierarchical = source_htss.hierarchical;

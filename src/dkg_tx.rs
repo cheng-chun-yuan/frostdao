@@ -646,6 +646,12 @@ pub fn dkg_sign_core(
         nonces_json.as_bytes(),
     )?;
 
+    // SECURITY: Delete nonce after use to prevent dangerous reuse
+    // Reusing a nonce with different messages exposes the secret share!
+    let nonce_file = format!("dkg_nonce_{}.bin", session_id);
+    storage.delete(&nonce_file)?;
+    out.push_str("🔒 Nonce consumed and deleted (single-use enforced)\n");
+
     out.push_str("✓ Signature share created\n");
 
     let output = DkgSignatureShareOutput {
@@ -718,10 +724,12 @@ pub fn dkg_broadcast_core(
     let session_json =
         String::from_utf8(storage.read(&format!("dkg_session_{}.json", session_id))?)?;
     let session_data: serde_json::Value = serde_json::from_str(&session_json)?;
-    let sighash_hex = session_data["sighash"].as_str().unwrap();
+    let sighash_hex = session_data["sighash"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("Session file missing or invalid 'sighash' field"))?;
     let sighash_bytes: [u8; 32] = hex::decode(sighash_hex)?
         .try_into()
-        .map_err(|_| anyhow::anyhow!("Invalid sighash"))?;
+        .map_err(|_| anyhow::anyhow!("Invalid sighash length in session file"))?;
 
     // Parse signature shares
     let share_outputs: Vec<DkgSignatureShareOutput> =
@@ -754,15 +762,12 @@ pub fn dkg_broadcast_core(
     let msg = Message::raw(&sighash_bytes);
 
     // Compute the tweaked public key (same as in dkg_sign)
+    // IMPORTANT: Use the computed parity directly instead of reading from file.
+    // This allows non-signing coordinators to broadcast without having run dkg_sign.
     let internal_pubkey = shared_key.public_key();
     let internal_pubkey_bytes: [u8; 32] = internal_pubkey.to_xonly_bytes();
-    let (tweaked_pubkey, _) = compute_tweaked_pubkey(&internal_pubkey);
+    let (tweaked_pubkey, parity_flip) = compute_tweaked_pubkey(&internal_pubkey);
     let taptweak = compute_taptweak(&internal_pubkey_bytes);
-
-    // Load parity flag saved during dkg_sign
-    // CRITICAL: This determines whether to add or subtract the tweak contribution
-    let parity_bytes = storage.read(&format!("dkg_parity_flip_{}.bin", session_id))?;
-    let parity_flip = parity_bytes.first().copied().unwrap_or(0) == 1;
 
     if parity_flip {
         out.push_str("📝 Parity flip detected - will subtract tweak contribution\n\n");

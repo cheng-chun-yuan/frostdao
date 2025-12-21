@@ -1,793 +1,1834 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Frostsnap Workshop - Web Tools</title>
-    <link rel="stylesheet" href="/style.css" />
-  </head>
-  <body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FrostDAO - FROST Threshold Signatures</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+            padding: 20px;
+        }
+
+        .container { max-width: 900px; margin: 0 auto; }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 8px;
+            font-size: 2.5em;
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf, #ff6b6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 25px;
+            font-size: 14px;
+        }
+
+        /* Main Navigation Tabs */
+        .main-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 25px;
+            background: rgba(0,0,0,0.3);
+            padding: 8px;
+            border-radius: 14px;
+        }
+
+        .main-tab {
+            flex: 1;
+            padding: 14px 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            background: transparent;
+            color: #888;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        .main-tab:hover { border-color: rgba(255, 255, 255, 0.25); color: #aaa; }
+
+        .main-tab.active {
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(123, 44, 191, 0.15));
+            border-color: #00d4ff;
+            color: #fff;
+        }
+
+        .main-tab-content { display: none; }
+        .main-tab-content.active { display: block; }
+
+        /* Sub-tabs */
+        .sub-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .sub-tab {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.03);
+            color: #888;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .sub-tab:hover { border-color: rgba(255, 255, 255, 0.2); }
+
+        .sub-tab.active {
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(123, 44, 191, 0.1));
+            border-color: #00d4ff;
+            color: #fff;
+        }
+
+        .sub-tab-content { display: none; }
+        .sub-tab-content.active { display: block; }
+
+        /* Cards */
+        .card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            margin-bottom: 16px;
+            color: #fff;
+        }
+
+        /* Badges */
+        .network-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background: rgba(255, 165, 0, 0.15);
+            border: 1px solid rgba(255, 165, 0, 0.3);
+            border-radius: 20px;
+            font-size: 11px;
+            color: #ffa500;
+            margin-bottom: 15px;
+        }
+
+        .frost-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            background: linear-gradient(90deg, rgba(0, 212, 255, 0.2), rgba(123, 44, 191, 0.2));
+            border-radius: 4px;
+            font-size: 10px;
+            color: #00d4ff;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+        /* Status indicators */
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        .status-dot.active { background: #00ff88; box-shadow: 0 0 8px #00ff88; }
+        .status-dot.inactive { background: #666; }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #666;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .status-indicator.connected { background: #00d4ff; box-shadow: 0 0 8px #00d4ff; }
+
+        /* Balance display */
+        .wallet-section { text-align: center; padding: 10px 0; }
+
+        .balance {
+            font-size: 42px;
+            font-weight: 700;
+            margin: 10px 0;
+            background: linear-gradient(90deg, #fff, #ccc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .balance-btc { color: #666; font-size: 14px; margin-bottom: 15px; }
+
+        .address-box {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 12px;
+            margin: 15px 0;
+        }
+
+        .address-label { font-size: 11px; color: #666; margin-bottom: 6px; }
+
+        .address {
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 11px;
+            color: #00d4ff;
+            word-break: break-all;
+            line-height: 1.5;
+        }
+
+        /* Buttons */
+        .btn-row { display: flex; gap: 10px; margin-top: 15px; }
+
+        .btn {
+            padding: 12px 24px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn:hover { background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.2); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #00d4ff, #7b2cbf);
+            border: none;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 212, 255, 0.3);
+        }
+
+        .btn-secondary {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .btn-fund {
+            background: linear-gradient(135deg, #ff9500, #ff6b00);
+            border: none;
+        }
+
+        .btn-fund:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(255, 149, 0, 0.3); }
+
+        /* Forms */
+        .form-group { margin-bottom: 20px; }
+
+        label { display: block; margin-bottom: 8px; font-size: 13px; color: #888; }
+
+        input, textarea {
+            width: 100%;
+            padding: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            color: #fff;
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input:focus, textarea:focus { border-color: #00d4ff; }
+        input::placeholder, textarea::placeholder { color: #444; }
+
+        .amount-wrapper { position: relative; }
+        .amount-wrapper input { padding-right: 70px; }
+        .amount-suffix {
+            position: absolute;
+            right: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #666;
+            font-size: 14px;
+        }
+
+        .quick-amounts { display: flex; gap: 8px; margin-top: 10px; }
+
+        .quick-btn {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            background: transparent;
+            color: #666;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .quick-btn:hover { border-color: #00d4ff; color: #00d4ff; }
+
+        /* Command box */
+        .command-box {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 14px;
+            margin-top: 20px;
+        }
+
+        .command-label { font-size: 11px; color: #666; margin-bottom: 8px; }
+
+        .command-text {
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 12px;
+            color: #00ff88;
+            word-break: break-all;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        .copy-btn {
+            background: transparent;
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            color: #00ff88;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 11px;
+            margin-top: 10px;
+        }
+
+        .copy-btn:hover { background: rgba(0, 255, 136, 0.1); }
+
+        /* Results */
+        .result {
+            margin-top: 20px;
+            padding: 16px;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .result.success {
+            display: block;
+            background: rgba(0, 255, 136, 0.08);
+            border: 1px solid rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+        }
+
+        .result.error {
+            display: block;
+            background: rgba(255, 68, 68, 0.08);
+            border: 1px solid rgba(255, 68, 68, 0.2);
+            color: #ff6b6b;
+        }
+
+        /* DKG Info */
+        .dkg-info {
+            background: rgba(123, 44, 191, 0.1);
+            border: 1px solid rgba(123, 44, 191, 0.2);
+            border-radius: 10px;
+            padding: 14px;
+            margin-bottom: 15px;
+        }
+
+        .dkg-info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            font-size: 13px;
+        }
+
+        .dkg-info-label { color: #888; }
+        .dkg-info-value { color: #fff; font-family: monospace; }
+
+        /* HTSS Demo Styles */
+        .hierarchy {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin: 16px 0;
+        }
+
+        .rank-group {
+            background: rgba(0,0,0,0.2);
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .rank-group h3 {
+            font-size: 0.85em;
+            color: #888;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .rank-group.rank-0 { border-left: 4px solid #e74c3c; }
+        .rank-group.rank-1 { border-left: 4px solid #f39c12; }
+        .rank-group.rank-2 { border-left: 4px solid #3498db; }
+
+        .party-btn {
+            display: block;
+            width: 100%;
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            background: rgba(255,255,255,0.05);
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 1em;
+            text-align: left;
+        }
+
+        .party-btn:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
+        .party-btn.selected { background: rgba(46, 204, 113, 0.2); border-color: #2ecc71; }
+        .party-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .party-btn .rank-badge {
+            float: right;
+            background: rgba(255,255,255,0.1);
+            padding: 2px 10px;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+
+        .selected-display {
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 16px;
+            margin: 16px 0;
+            min-height: 60px;
+        }
+
+        .signer-chip {
+            display: inline-block;
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
+            padding: 8px 16px;
+            border-radius: 20px;
+            margin: 4px;
+            font-weight: 500;
+        }
+
+        .validation-box { padding: 16px; border-radius: 10px; margin: 16px 0; }
+        .validation-box.valid { background: rgba(46, 204, 113, 0.15); border: 2px solid #2ecc71; }
+        .validation-box.invalid { background: rgba(231, 76, 60, 0.15); border: 2px solid #e74c3c; }
+        .validation-box.pending { background: rgba(255,255,255,0.05); border: 2px dashed rgba(255,255,255,0.2); }
+
+        .validation-rule {
+            font-family: monospace;
+            background: rgba(0,0,0,0.3);
+            padding: 6px 12px;
+            border-radius: 4px;
+            margin: 6px 0;
+            display: inline-block;
+        }
+
+        .rule-check { padding: 4px 0; display: inline-block; margin-right: 16px; }
+        .rule-check.pass { color: #2ecc71; }
+        .rule-check.fail { color: #e74c3c; }
+
+        .combo-btns { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+
+        .combo-btn {
+            padding: 8px 16px;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 20px;
+            background: rgba(255,255,255,0.05);
+            color: #fff;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.2s;
+        }
+
+        .combo-btn:hover { background: rgba(255,255,255,0.1); }
+        .combo-btn.valid { border-color: rgba(46, 204, 113, 0.5); }
+        .combo-btn.invalid { border-color: rgba(231, 76, 60, 0.5); }
+
+        /* Key display */
+        .key-display {
+            background: #0d1117;
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.85em;
+            word-break: break-all;
+            margin: 16px 0;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .key-display label {
+            display: block;
+            color: #888;
+            font-size: 0.8em;
+            margin-bottom: 8px;
+            font-family: -apple-system, sans-serif;
+        }
+
+        .key-display .value { color: #2ecc71; }
+
+        /* Log box */
+        .log-box {
+            background: #0d1117;
+            border-radius: 8px;
+            padding: 16px;
+            font-family: monospace;
+            font-size: 0.8em;
+            max-height: 250px;
+            overflow-y: auto;
+            margin-top: 16px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        .log-box .success { color: #2ecc71; }
+        .log-box .error { color: #e74c3c; }
+        .log-box .info { color: #3498db; }
+
+        /* Result box */
+        .result-box {
+            background: rgba(46, 204, 113, 0.1);
+            border: 2px solid #2ecc71;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .result-box h3 { color: #2ecc71; margin-bottom: 16px; font-size: 1.3em; }
+        .result-box.error { background: rgba(231, 76, 60, 0.1); border-color: #e74c3c; }
+        .result-box.error h3 { color: #e74c3c; }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .info-item {
+            background: rgba(0,0,0,0.2);
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .info-item label { display: block; color: #888; font-size: 0.8em; margin-bottom: 4px; }
+        .info-item value { display: block; font-family: monospace; word-break: break-all; }
+
+        .signature-display {
+            background: #0d1117;
+            padding: 16px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.85em;
+            word-break: break-all;
+            color: #2ecc71;
+            margin-top: 12px;
+        }
+
+        /* Workshop/Nostr styles */
+        .config-section {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .config-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .config-field label {
+            display: block;
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 6px;
+        }
+
+        .config-field input {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        .warning {
+            background: rgba(255, 165, 0, 0.1);
+            border: 1px solid rgba(255, 165, 0, 0.3);
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            color: #ffa500;
+        }
+
+        .phase-section {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .phase-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .phase-title { font-size: 16px; font-weight: 600; color: #00d4ff; }
+        .phase-count { color: #888; font-size: 14px; }
+
+        .post-box { margin-bottom: 16px; }
+        .post-label { font-size: 12px; color: #888; margin-bottom: 8px; }
+
+        .post-textarea {
+            width: 100%;
+            min-height: 80px;
+            padding: 12px;
+            border-radius: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            resize: vertical;
+            margin-bottom: 10px;
+        }
+
+        .entries-container {
+            background: rgba(0,0,0,0.2);
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 16px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .empty-state { color: #666; text-align: center; padding: 20px; }
+
+        .entry {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+
+        .entry:last-child { margin-bottom: 0; }
+
+        .entry-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .entry-party { color: #00d4ff; font-weight: 600; }
+        .entry-time { color: #666; font-size: 12px; }
+
+        .entry-data {
+            font-family: monospace;
+            font-size: 11px;
+            color: #888;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .copy-section {
+            background: rgba(0,0,0,0.2);
+            border-radius: 10px;
+            padding: 16px;
+            display: none;
+        }
+
+        .copy-label { font-size: 12px; color: #888; margin-bottom: 8px; }
+
+        .copy-output {
+            background: #0d1117;
+            border-radius: 8px;
+            padding: 12px;
+            font-family: monospace;
+            font-size: 11px;
+            color: #00ff88;
+            word-break: break-all;
+            margin-bottom: 10px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        /* Loading spinner */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: #00d4ff;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hierarchy { grid-template-columns: 1fr; }
+            .info-grid { grid-template-columns: 1fr; }
+            .config-grid { grid-template-columns: 1fr; }
+            .main-tabs { flex-wrap: wrap; }
+            .main-tab { flex: 1 1 45%; }
+        }
+
+        /* Divider */
+        .divider {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.05);
+            margin: 20px 0;
+        }
+
+        /* Section header */
+        .section-header {
+            font-size: 20px;
+            color: #00d4ff;
+            margin: 30px 0 20px 0;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+        }
+
+        code {
+            background: rgba(0,0,0,0.3);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        pre {
+            background: rgba(0,0,0,0.3);
+            padding: 12px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+
+        a { color: #00d4ff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
     <div class="container">
-      <div class="logo-box">
-        <a href="https://frostsnap.com" target="_blank">
-          <img
-            src="https://frostsnap.com/assets/frostsnap-logo.svg"
-            alt="Frostsnap Logo"
-            class="logo"
-          />
-        </a>
-      </div>
-      <h1><a href="/">Frostsnap BTC++ Workshop</a></h1>
-      <div class="subtitle">
-        Distributed Key Generation & Threshold Signing Coordination
-      </div>
+        <h1>FrostDAO</h1>
+        <p class="subtitle">FROST Threshold Signatures for Bitcoin</p>
 
-      <!-- Instructions -->
-      <div class="instructions-section">
-        <div class="phase-header">
-          <div class="phase-title">Instructions</div>
+        <!-- Main Navigation -->
+        <div class="main-tabs">
+            <button class="main-tab active" onclick="switchMainTab('wallet')">
+                Bitcoin Wallet
+            </button>
+            <button class="main-tab" onclick="switchMainTab('htss')">
+                HTSS Demo
+                <span class="frost-badge">FROST</span>
+            </button>
+            <button class="main-tab" onclick="switchMainTab('workshop')">
+                Workshop
+            </button>
+            <button class="main-tab" onclick="switchMainTab('verify')">
+                Verify
+            </button>
         </div>
-        <p></p>
-        <ol>
-          <li>
-            Download and build:
-            <div class="header-links">
-              <b
-                ><a href="https://github.com/nickfarrow/yushan" target="_blank"
-                  >Workshop CLI Tool</a
-                >
-              </b>
-              <code>
-                <pre>
-git clone https://github.com/nickfarrow/yushan
-cd yushan
-cargo install --path .
-</pre
-                >
-              </code>
-              or,
-              <a href="/cli.html"
-                >im allergic to crab shells (use browser tools)</a
-              >
+
+        <!-- ============================================ -->
+        <!-- BITCOIN WALLET TAB -->
+        <!-- ============================================ -->
+        <div id="wallet-content" class="main-tab-content active">
+            <!-- Sub-tabs for Single/Threshold -->
+            <div class="sub-tabs">
+                <div class="sub-tab active" onclick="switchSubTab('wallet', 'single')">
+                    <span class="status-dot active"></span>
+                    Single Signer
+                </div>
+                <div class="sub-tab" onclick="switchSubTab('wallet', 'threshold')">
+                    <span class="status-dot inactive" id="dkgStatus"></span>
+                    Threshold (DKG)
+                    <span class="frost-badge">FROST</span>
+                </div>
             </div>
-          </li>
-          <li>
-            Check out the commands available by running
-            <code>yushan --help</code>
-          </li>
-          <li>
-            Find one or more people to partner up with (N) and agree upon a
-            threshold (T).
-          </li>
-          <li>
-            Choose a unique room ID (enter below) which will be used to share
-            messages.
-          </li>
-          <li>
-            Run the first command (keygen-round1) and share your contribution
-            with your group.
-          </li>
-          <li>
-            After receiving input from all parties, use this data as input for
-            the next round, e.g.
-            <code>
-              <pre>
-yushan keygen-round2 --data '{PARTY1_JSON} {PARTY2_JSON} ...'
-</pre
-              >
-            </code>
-          </li>
-          <li>
-            Repeat the same with the following steps. Look at console output,
-            ask questions.
-          </li>
-          <li>Finish creating your FROST key, sign things!</li>
-          <li style="color: var(--bg-secondary)">
-            9. cry to nick if things are broken
-          </li>
-        </ol>
-        <b> Challenge: can you sign a nostr event? </b>
-      </div>
 
-      <h1>Extremely Public Bulletin Board</h1>
-      <br />
+            <!-- Single Signer -->
+            <div id="wallet-single" class="sub-tab-content active">
+                <div class="card">
+                    <div class="wallet-section">
+                        <span class="network-badge">TESTNET</span>
+                        <div class="balance" id="singleBalance">-- sats</div>
+                        <div class="balance-btc" id="singleBalanceBtc">Loading...</div>
 
-      <!-- Config Section -->
-      <div class="config-section">
-        <div class="config-header">
-          <span class="status-indicator" id="status-indicator"></span>
-          <span>Configuration</span>
-          <span id="status-text" style="margin-left: auto; font-size: 0.8em"
-            >Disconnected</span
-          >
+                        <div class="address-box">
+                            <div class="address-label">Your Taproot Address</div>
+                            <div class="address" id="singleAddress">Loading...</div>
+                        </div>
+
+                        <div class="btn-row" style="justify-content: center;">
+                            <button class="btn" onclick="refreshSingleBalance()">Refresh</button>
+                            <button class="btn btn-fund" onclick="fundAddress('single')">Fund via Faucet</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="section-title">Send Bitcoin</div>
+
+                    <div class="form-group">
+                        <label>Recipient Address</label>
+                        <input type="text" id="singleRecipient" placeholder="tb1p..."
+                               value="tb1p3e44guscrytuum9q36tlx5kez9zvdheuwxlq9k9y4kud3hyckhtq63fz34">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Amount</label>
+                        <div class="amount-wrapper">
+                            <input type="number" id="singleAmount" placeholder="0" min="546">
+                            <span class="amount-suffix">sats</span>
+                        </div>
+                        <div class="quick-amounts">
+                            <button class="quick-btn" onclick="setAmount('single', 1000)">1,000</button>
+                            <button class="quick-btn" onclick="setAmount('single', 5000)">5,000</button>
+                            <button class="quick-btn" onclick="setAmount('single', 10000)">10,000</button>
+                            <button class="quick-btn" onclick="setMax('single')">MAX</button>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary" style="width: 100%;" onclick="prepareSend('single')">
+                        Prepare Transaction
+                    </button>
+
+                    <div class="command-box" id="singleCommand" style="display: none;">
+                        <div class="command-label">Run this command to send:</div>
+                        <div class="command-text" id="singleCommandText"></div>
+                        <button class="copy-btn" onclick="copyCommand('single')">Copy Command</button>
+                    </div>
+
+                    <div class="result" id="singleResult"></div>
+                </div>
+            </div>
+
+            <!-- Threshold/DKG -->
+            <div id="wallet-threshold" class="sub-tab-content">
+                <div class="card">
+                    <div class="card-title">DKG Group Wallet</div>
+
+                    <div class="dkg-info" id="dkgInfo">
+                        <div class="dkg-info-row">
+                            <span class="dkg-info-label">Threshold</span>
+                            <span class="dkg-info-value" id="dkgThreshold">--</span>
+                        </div>
+                        <div class="dkg-info-row">
+                            <span class="dkg-info-label">Your Index</span>
+                            <span class="dkg-info-value" id="dkgIndex">--</span>
+                        </div>
+                        <div class="dkg-info-row">
+                            <span class="dkg-info-label">Your Rank</span>
+                            <span class="dkg-info-value" id="dkgRank">--</span>
+                        </div>
+                    </div>
+
+                    <div class="wallet-section">
+                        <span class="network-badge">TESTNET</span>
+                        <div class="balance" id="dkgBalance">-- sats</div>
+                        <div class="balance-btc" id="dkgBalanceBtc">Run DKG first</div>
+
+                        <div class="address-box">
+                            <div class="address-label">Group Taproot Address (Aggregated Public Key)</div>
+                            <div class="address" id="dkgAddress">Complete DKG to see address</div>
+                        </div>
+
+                        <div class="btn-row" style="justify-content: center;">
+                            <button class="btn" onclick="refreshDkgBalance()">Refresh</button>
+                            <button class="btn btn-fund" onclick="fundAddress('dkg')">Fund via Faucet</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="section-title">Send Bitcoin (Threshold)</div>
+
+                    <div class="form-group">
+                        <label>Recipient Address</label>
+                        <input type="text" id="dkgRecipient" placeholder="tb1p..."
+                               value="tb1p3e44guscrytuum9q36tlx5kez9zvdheuwxlq9k9y4kud3hyckhtq63fz34">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Amount</label>
+                        <div class="amount-wrapper">
+                            <input type="number" id="dkgAmount" placeholder="0" min="546">
+                            <span class="amount-suffix">sats</span>
+                        </div>
+                        <div class="quick-amounts">
+                            <button class="quick-btn" onclick="setAmount('dkg', 1000)">1,000</button>
+                            <button class="quick-btn" onclick="setAmount('dkg', 5000)">5,000</button>
+                            <button class="quick-btn" onclick="setAmount('dkg', 10000)">10,000</button>
+                            <button class="quick-btn" onclick="setMax('dkg')">MAX</button>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary" style="width: 100%;" onclick="prepareSend('dkg')">
+                        Prepare Threshold Transaction
+                    </button>
+
+                    <div class="command-box" id="dkgCommand" style="display: none;">
+                        <div class="command-label">Threshold signing requires coordination. Run these steps:</div>
+                        <div class="command-text" id="dkgCommandText"></div>
+                        <button class="copy-btn" onclick="copyCommand('dkg')">Copy Commands</button>
+                    </div>
+
+                    <div class="result" id="dkgResult"></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">DKG Setup Commands</div>
+                    <div class="command-box" style="margin-top: 0;">
+                        <div class="command-text"># Step 1: Each party generates Round 1
+frostdao keygen-round1 --threshold 2 --n-parties 3 --my-index 1
+
+# Step 2: Share commitments, run Round 2
+frostdao keygen-round2 --data '&lt;commitments_json&gt;'
+
+# Step 3: Share shares, finalize
+frostdao keygen-finalize --data '&lt;shares_json&gt;'</div>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <div class="config-grid">
-          <div class="config-field">
-            <label>Room ID</label>
-            <input
-              type="text"
-              id="room-id"
-              placeholder="e.g., table-1, my-frost-session"
-              value="stayfrosty"
-            />
-          </div>
-          <div class="config-field">
-            <label>Threshold (t)</label>
-            <input
-              type="number"
-              id="threshold"
-              placeholder="Minimum signers"
-              value="2"
-              min="1"
-            />
-          </div>
-          <div class="config-field">
-            <label>Total Parties (n)</label>
-            <input
-              type="number"
-              id="n-parties"
-              placeholder="Total participants"
-              value="3"
-              min="1"
-            />
-          </div>
+        <!-- ============================================ -->
+        <!-- HTSS DEMO TAB -->
+        <!-- ============================================ -->
+        <div id="htss-content" class="main-tab-content">
+            <p class="subtitle">Hierarchical Threshold Signature Scheme - 3-of-5 with Ranks</p>
+
+            <!-- Step 1: DKG -->
+            <div class="card">
+                <div class="section-title"><span style="color:#f39c12">Step 1:</span> Generate Keys (DKG)</div>
+                <p style="color: #aaa; margin-bottom: 16px;">
+                    Run Distributed Key Generation for 5 parties with ranks [0,1,1,2,2]
+                </p>
+                <button class="btn btn-primary" id="htss-dkgBtn" onclick="htssRunDKG()">
+                    Run DKG for All Parties
+                </button>
+                <button class="btn btn-secondary" onclick="htssClearAll()">Clear All</button>
+
+                <div id="htss-dkgResult" style="display: none;">
+                    <div class="key-display">
+                        <label>Shared Public Key (Schnorr)</label>
+                        <div class="value" id="htss-publicKeyDisplay"></div>
+                    </div>
+                    <div class="log-box" id="htss-dkgLog"></div>
+                </div>
+            </div>
+
+            <!-- Step 2: Select Signers -->
+            <div class="card">
+                <div class="section-title"><span style="color:#f39c12">Step 2:</span> Select 3 Signers</div>
+
+                <p style="color: #aaa; margin-bottom: 12px;">Quick combinations:</p>
+                <div class="combo-btns">
+                    <button class="combo-btn valid" onclick="htssSelectCombo(['ceo','cfo','coo'])">CEO+CFO+COO [0,1,1]</button>
+                    <button class="combo-btn valid" onclick="htssSelectCombo(['ceo','cfo','director'])">CEO+CFO+Dir [0,1,2]</button>
+                    <button class="combo-btn valid" onclick="htssSelectCombo(['ceo','coo','manager'])">CEO+COO+Mgr [0,1,2]</button>
+                    <button class="combo-btn invalid" onclick="htssSelectCombo(['cfo','coo','director'])">CFO+COO+Dir [1,1,2]</button>
+                    <button class="combo-btn invalid" onclick="htssSelectCombo(['cfo','director','manager'])">CFO+Dir+Mgr [1,2,2]</button>
+                </div>
+
+                <div class="hierarchy">
+                    <div class="rank-group rank-0">
+                        <h3>Rank 0 - Executive</h3>
+                        <button class="party-btn" data-party="ceo" data-rank="0" onclick="htssToggleSigner(this)" disabled>
+                            CEO <span class="rank-badge">Rank 0</span>
+                        </button>
+                    </div>
+                    <div class="rank-group rank-1">
+                        <h3>Rank 1 - C-Suite</h3>
+                        <button class="party-btn" data-party="cfo" data-rank="1" onclick="htssToggleSigner(this)" disabled>
+                            CFO <span class="rank-badge">Rank 1</span>
+                        </button>
+                        <button class="party-btn" data-party="coo" data-rank="1" onclick="htssToggleSigner(this)" disabled>
+                            COO <span class="rank-badge">Rank 1</span>
+                        </button>
+                    </div>
+                    <div class="rank-group rank-2">
+                        <h3>Rank 2 - Management</h3>
+                        <button class="party-btn" data-party="director" data-rank="2" onclick="htssToggleSigner(this)" disabled>
+                            Director <span class="rank-badge">Rank 2</span>
+                        </button>
+                        <button class="party-btn" data-party="manager" data-rank="2" onclick="htssToggleSigner(this)" disabled>
+                            Manager <span class="rank-badge">Rank 2</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="selected-display">
+                    <strong>Selected:</strong>
+                    <span id="htss-selectedDisplay" style="color: #888;">Run DKG first...</span>
+                </div>
+
+                <div class="validation-box pending" id="htss-validationBox">
+                    <div id="htss-validationContent">
+                        <strong>HTSS Rule:</strong> For sorted ranks, r<sub>i</sub> &le; i
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3: Sign -->
+            <div class="card">
+                <div class="section-title"><span style="color:#f39c12">Step 3:</span> Sign Message</div>
+                <input type="text" id="htss-messageInput" placeholder="Enter message..." value="Transfer 10 BTC to vendor" style="margin-bottom: 16px;">
+                <button class="btn btn-primary" id="htss-signBtn" onclick="htssSignMessage()" disabled>
+                    Create Threshold Signature
+                </button>
+                <button class="btn btn-secondary" onclick="htssClearSignature()">Clear</button>
+                <div id="htss-signResult" style="display: none;"></div>
+            </div>
+
+            <!-- How HTSS Works -->
+            <div class="card">
+                <div class="section-title">How HTSS Works</div>
+                <div style="color: #aaa; line-height: 1.8;">
+                    <p><strong style="color: #f39c12;">The Rule:</strong> For sorted ranks [r<sub>0</sub>, r<sub>1</sub>, r<sub>2</sub>], valid iff r<sub>i</sub> &le; i for all i</p>
+                    <ul style="margin: 12px 0 0 20px;">
+                        <li style="color: #2ecc71;">[0,1,1] or [0,1,2] - Valid (CEO at position 0)</li>
+                        <li style="color: #e74c3c;">[1,1,2] or [1,2,2] - Invalid (no rank-0 at position 0)</li>
+                    </ul>
+                    <p style="margin-top: 12px;"><strong style="color: #e74c3c;">CEO is cryptographically required!</strong> Without a rank-0 signer, the Birkhoff interpolation matrix is singular.</p>
+                    <p style="margin-top: 8px;"><strong style="color: #3498db;">Threshold: 3-of-5</strong> with ranks [0, 1, 1, 2, 2]</p>
+                </div>
+            </div>
         </div>
 
-        <button class="btn" onclick="updateConfig()">Update & Subscribe</button>
-        <button
-          class="btn btn-secondary"
-          onclick="clearAll()"
-          style="margin-left: 10px"
-        >
-          Clear All Data
-        </button>
-      </div>
+        <!-- ============================================ -->
+        <!-- WORKSHOP TAB -->
+        <!-- ============================================ -->
+        <div id="workshop-content" class="main-tab-content">
+            <p class="subtitle">Distributed Key Generation & Threshold Signing Coordination</p>
 
-      <div class="warning">
-        ⚠ Everyone must agree on the same threshold and n_parties values for the
-        protocol to work!
-      </div>
+            <!-- Instructions -->
+            <div class="card">
+                <div class="section-title">Instructions</div>
+                <ol style="color: #aaa; line-height: 2; margin-left: 20px;">
+                    <li>Download and build the <a href="https://github.com/nickfarrow/yushan" target="_blank">Workshop CLI Tool</a>
+                        <pre>git clone https://github.com/nickfarrow/yushan
+cd yushan
+cargo install --path .</pre>
+                    </li>
+                    <li>Check commands with <code>yushan --help</code></li>
+                    <li>Find partners and agree on threshold (t) and total parties (n)</li>
+                    <li>Choose a unique room ID below to share messages</li>
+                    <li>Run commands and broadcast outputs to coordinate</li>
+                </ol>
+            </div>
 
-      <h1>Part I: Distributed Key Generation</h1>
+            <h2 class="section-header">Coordination Board</h2>
 
-      <!-- Keygen Round 1 -->
-      <div class="phase-section">
-        <div class="phase-header">
-          <div class="phase-title">Distributed Keygen Round 1: Commitments</div>
-          <div class="phase-count" id="round1-count">0 / 0</div>
+            <!-- Config Section -->
+            <div class="config-section">
+                <div class="config-header">
+                    <span class="status-indicator" id="nostr-status-indicator"></span>
+                    <span>Configuration</span>
+                    <span id="nostr-status-text" style="margin-left: auto; font-size: 0.8em; color: #888;">Disconnected</span>
+                </div>
+
+                <div class="config-grid">
+                    <div class="config-field">
+                        <label>Room ID</label>
+                        <input type="text" id="room-id" placeholder="e.g., table-1" value="frostdao-demo">
+                    </div>
+                    <div class="config-field">
+                        <label>Threshold (t)</label>
+                        <input type="number" id="nostr-threshold" placeholder="2" value="2" min="1">
+                    </div>
+                    <div class="config-field">
+                        <label>Total Parties (n)</label>
+                        <input type="number" id="n-parties" placeholder="3" value="3" min="1">
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" onclick="nostrUpdateConfig()">Update & Subscribe</button>
+                <button class="btn btn-secondary" onclick="nostrClearAll()" style="margin-left: 10px;">Clear All Data</button>
+            </div>
+
+            <div class="warning">
+                Everyone must agree on the same threshold and n_parties values for the protocol to work!
+            </div>
+
+            <h2 class="section-header">Part I: Distributed Key Generation</h2>
+
+            <!-- Keygen Round 1 -->
+            <div class="phase-section">
+                <div class="phase-header">
+                    <div class="phase-title">Round 1: Commitments</div>
+                    <div class="phase-count" id="round1-count">0 / 0</div>
+                </div>
+
+                <div class="post-box">
+                    <div class="post-label">
+                        Run: <code>yushan keygen-round1 --threshold 2 --n-parties 3 --my-index &lt;your-index&gt;</code>
+                    </div>
+                    <textarea class="post-textarea" id="round1-input" placeholder='Paste your keygen-round1 JSON output here...'></textarea>
+                    <button class="btn" onclick="postToNostr('round1-input', 'keygen_round1')">Broadcast</button>
+                </div>
+
+                <div class="entries-container" id="round1-entries">
+                    <div class="empty-state">Waiting for parties to post their commitments...</div>
+                </div>
+                <div class="copy-section" id="round1-copy-section">
+                    <div class="copy-label">Group's Keygen Commitments</div>
+                    <div class="copy-output" id="round1-output">No data yet</div>
+                    <button class="btn btn-secondary" onclick="nostrCopyToClipboard('round1-output')">Copy All</button>
+                </div>
+            </div>
+
+            <!-- Keygen Round 2 -->
+            <div class="phase-section">
+                <div class="phase-header">
+                    <div class="phase-title">Round 2: Keygen Shares</div>
+                    <div class="phase-count" id="round2-count">0 / 0</div>
+                </div>
+
+                <div class="post-box">
+                    <div class="post-label">
+                        Run: <code>yushan keygen-round2 --data '&lt;all-commitments&gt;'</code>
+                    </div>
+                    <textarea class="post-textarea" id="round2-input" placeholder='Paste your keygen-round2 JSON output here...'></textarea>
+                    <button class="btn" onclick="postToNostr('round2-input', 'keygen_round2')">Broadcast</button>
+                </div>
+
+                <div class="entries-container" id="round2-entries">
+                    <div class="empty-state">Waiting for parties to post their secret shares...</div>
+                </div>
+                <div class="copy-section" id="round2-copy-section">
+                    <div class="copy-label">Group's Keygen Shares</div>
+                    <div class="copy-output" id="round2-output">No data yet</div>
+                    <button class="btn btn-secondary" onclick="nostrCopyToClipboard('round2-output')">Copy All</button>
+                </div>
+            </div>
+
+            <!-- Keygen Finalize -->
+            <div class="phase-section">
+                <div class="phase-header">
+                    <div class="phase-title">Finalize Keygen</div>
+                </div>
+                <div class="post-box">
+                    <div class="post-label">
+                        Copy "Group's Keygen Shares" above, then run:<br>
+                        <code>yushan keygen-finalize --data '&lt;shares-JSON&gt;'</code>
+                    </div>
+                    <p style="color: #888;">After this step, you'll have your secret share of the group's public key!</p>
+                </div>
+            </div>
+
+            <h2 class="section-header">Part II: Signing</h2>
+
+            <!-- Signing Nonces -->
+            <div class="phase-section">
+                <div class="phase-header">
+                    <div class="phase-title">Signing: Nonces</div>
+                    <div class="phase-count" id="nonce-count">0 / 0</div>
+                </div>
+
+                <div class="post-box">
+                    <div class="post-label">
+                        Run: <code>yushan generate-nonce --session "msg1"</code>
+                    </div>
+                    <textarea class="post-textarea" id="nonce-input" placeholder='Paste your generate-nonce JSON output here...'></textarea>
+                    <button class="btn" onclick="postToNostr('nonce-input', 'signing_nonce')">Broadcast</button>
+                </div>
+
+                <div class="entries-container" id="nonce-entries">
+                    <div class="empty-state">Waiting for signers to post nonces...</div>
+                </div>
+                <div class="copy-section" id="nonce-copy-section">
+                    <div class="copy-label">Session Nonces</div>
+                    <div class="copy-output" id="nonce-output">No data yet</div>
+                    <button class="btn btn-secondary" onclick="nostrCopyToClipboard('nonce-output')">Copy All</button>
+                </div>
+            </div>
+
+            <!-- Signing Shares -->
+            <div class="phase-section">
+                <div class="phase-header">
+                    <div class="phase-title">Signing: Signature Shares</div>
+                    <div class="phase-count" id="sig-count">0 / 0</div>
+                </div>
+
+                <div class="post-box">
+                    <div class="post-label">
+                        Run: <code>yushan sign --session "msg1" --message "Hello!" --data '&lt;all-nonces&gt;'</code>
+                    </div>
+                    <textarea class="post-textarea" id="sig-input" placeholder='Paste your sign JSON output here...'></textarea>
+                    <button class="btn" onclick="postToNostr('sig-input', 'signing_share')">Broadcast</button>
+                </div>
+
+                <div class="entries-container" id="sig-entries">
+                    <div class="empty-state">Waiting for signers to post signature shares...</div>
+                </div>
+                <div class="copy-section" id="sig-copy-section">
+                    <div class="copy-label">Session Signature Shares</div>
+                    <div class="copy-output" id="sig-output">No data yet</div>
+                    <button class="btn btn-secondary" onclick="nostrCopyToClipboard('sig-output')">Copy All</button>
+                </div>
+            </div>
         </div>
 
-        <div class="post-box">
-          <div class="post-label">
-            Run:
-            <code
-              >yushan keygen-round1 --threshold 2 --n-parties 3 --my-index
-              &lt;your-index&gt;</code
-            >
-          </div>
-          <textarea
-            class="post-textarea"
-            id="round1-input"
-            placeholder='Paste your keygen-round1 JSON output here, e.g.: {"party_index": 1, "keygen_input": "hex...", "type": "keygen_round1"}'
-          ></textarea>
-          <button
-            class="btn"
-            onclick="postToNostr('round1-input', 'keygen_round1')"
-          >
-            Broadcast
-          </button>
-        </div>
+        <!-- ============================================ -->
+        <!-- VERIFY TAB -->
+        <!-- ============================================ -->
+        <div id="verify-content" class="main-tab-content">
+            <p class="subtitle">Verify Schnorr Signatures (BIP-340)</p>
 
-        <div class="entries-container" id="round1-entries">
-          <div class="empty-state">
-            Waiting for parties to post their commitments...
-          </div>
-        </div>
-        <div class="copy-section" id="round1-copy-section">
-          <div class="copy-label">Group's Keygen Commitments</div>
-          <div class="copy-output" id="round1-output">No data yet</div>
-          <button
-            class="btn btn-secondary"
-            onclick="copyToClipboard('round1-output')"
-          >
-            Copy All
-          </button>
-        </div>
-      </div>
+            <div class="card">
+                <div class="section-title">Signature Verification</div>
+                <p style="color: #aaa; margin-bottom: 20px;">
+                    Paste any signature, public key, and message to verify independently.
+                </p>
 
-      <!-- Keygen Round 2 -->
-      <div class="phase-section">
-        <div class="phase-header">
-          <div class="phase-title">
-            Distributed Keygen Round 2: Keygen Shares
-          </div>
-          <div class="phase-count" id="round2-count">0 / 0</div>
-        </div>
+                <div class="form-group">
+                    <label>Public Key (hex, 32 or 33 bytes)</label>
+                    <input type="text" id="verify-pubkey" placeholder="Public key hex...">
+                </div>
 
-        <div class="post-box">
-          <div class="post-label">
-            Run:
-            <code>yushan keygen-round2 --data '&lt;all-commitments&gt;'</code>
-          </div>
-          <textarea
-            class="post-textarea"
-            id="round2-input"
-            placeholder='Paste your keygen-round2 JSON output here, e.g.: {"party_index": 1, "shares": [...], "type": "keygen_round2"}'
-          ></textarea>
-          <button
-            class="btn"
-            onclick="postToNostr('round2-input', 'keygen_round2')"
-          >
-            Broadcast
-          </button>
-        </div>
+                <div class="form-group">
+                    <label>Message</label>
+                    <input type="text" id="verify-message" placeholder="Original message...">
+                </div>
 
-        <div class="entries-container" id="round2-entries">
-          <div class="empty-state">
-            Waiting for parties to post their secret shares...
-          </div>
-        </div>
-        <div class="copy-section" id="round2-copy-section">
-          <div class="copy-label">Group's Keygen Shares</div>
-          <div class="copy-output" id="round2-output">No data yet</div>
-          <button
-            class="btn btn-secondary"
-            onclick="copyToClipboard('round2-output')"
-          >
-            Copy All
-          </button>
-        </div>
-      </div>
+                <div class="form-group">
+                    <label>Signature (hex, 64 bytes)</label>
+                    <input type="text" id="verify-signature" placeholder="Signature hex (128 chars)...">
+                </div>
 
-      <!-- Keygen Finalize -->
-      <div class="phase-section">
-        <div class="phase-header">
-          <div class="phase-title">Finalize Keygen</div>
+                <button class="btn btn-primary" onclick="verifySignatureGlobal()">Verify Signature</button>
+                <button class="btn btn-secondary" onclick="clearVerifyForm()">Clear</button>
+
+                <div id="verify-result" style="display: none; margin-top: 20px;"></div>
+            </div>
+
+            <div class="card">
+                <div class="section-title">About Schnorr Signatures</div>
+                <div style="color: #aaa; line-height: 1.8;">
+                    <p><strong style="color: #00d4ff;">BIP-340:</strong> Schnorr signatures use 32-byte x-only public keys and produce 64-byte signatures.</p>
+                    <p style="margin-top: 12px;"><strong style="color: #00d4ff;">FROST:</strong> Flexible Round-Optimized Schnorr Threshold signatures allow t-of-n parties to collaboratively sign without reconstructing the private key.</p>
+                    <p style="margin-top: 12px;"><strong style="color: #00d4ff;">Verification:</strong> A valid signature proves that threshold participants with the corresponding private key shares signed the exact message.</p>
+                </div>
+            </div>
         </div>
-
-        <div class="post-box">
-          <div class="post-label">
-            Copy "Group's Keygen Shares" above, then run:
-            <br />
-            <code>yushan keygen-finalize --data '&lt;shares-JSON&gt;'</code>
-          </div>
-          After this step, you'll have your secret share of the group's public
-          key!
-        </div>
-      </div>
-
-      <h1>Part II: Signing</h1>
-
-      <!-- Signing Nonces -->
-      <div class="phase-section">
-        <div class="phase-header">
-          <div class="phase-title">Signing: Nonces</div>
-          <div class="phase-count" id="nonce-count">0 / 0</div>
-        </div>
-
-        <div class="post-box">
-          <div class="post-label">
-            Run: <code>yushan generate-nonce --session "msg1"</code>
-          </div>
-          <textarea
-            class="post-textarea"
-            id="nonce-input"
-            placeholder='Paste your generate-nonce JSON output here, e.g.: {"party_index": 1, "session": "msg1", "nonce": "hex...", "type": "signing_nonce"}'
-          ></textarea>
-          <button
-            class="btn"
-            onclick="postToNostr('nonce-input', 'signing_nonce')"
-          >
-            Broadcast
-          </button>
-        </div>
-
-        <div class="entries-container" id="nonce-entries">
-          <div class="empty-state">Waiting for signers to post nonces...</div>
-        </div>
-        <div class="copy-section" id="nonce-copy-section">
-          <div class="copy-label">Session Nonces</div>
-          <div class="copy-output" id="nonce-output">No data yet</div>
-          <button
-            class="btn btn-secondary"
-            onclick="copyToClipboard('nonce-output')"
-          >
-            Copy All
-          </button>
-        </div>
-      </div>
-
-      <!-- Signing Shares -->
-      <div class="phase-section">
-        <div class="phase-header">
-          <div class="phase-title">Signing: Signature Shares</div>
-          <div class="phase-count" id="sig-count">0 / 0</div>
-        </div>
-
-        <div class="post-box">
-          <div class="post-label">
-            Run:
-            <code
-              >yushan sign --session "msg1" --message "Hello!" --data
-              '&lt;all-nonces&gt;'</code
-            >
-          </div>
-          <textarea
-            class="post-textarea"
-            id="sig-input"
-            placeholder='Paste your sign JSON output here, e.g.: {"party_index": 1, "session": "msg1", "signature_share": "hex...", "type": "signing_share"}'
-          ></textarea>
-          <button
-            class="btn"
-            onclick="postToNostr('sig-input', 'signing_share')"
-          >
-            Broadcast
-          </button>
-        </div>
-
-        <div class="entries-container" id="sig-entries">
-          <div class="empty-state">
-            Waiting for signers to post signature shares...
-          </div>
-        </div>
-        <div class="copy-section" id="sig-copy-section">
-          <div class="copy-label">Session Signature Shares</div>
-          <div class="copy-output" id="sig-output">No data yet</div>
-          <button
-            class="btn btn-secondary"
-            onclick="copyToClipboard('sig-output')"
-          >
-            Copy All
-          </button>
-        </div>
-      </div>
-
-      <!-- Signature Verifier -->
-      <h1>Signature Verifier</h1>
-      <div class="phase-section">
-        <div class="phase-header">
-          <div class="phase-title">Verify Schnorr Signature</div>
-        </div>
-
-        <div class="post-box">
-          <div class="post-label">Signature (hex)</div>
-          <textarea
-            class="post-textarea"
-            id="verify-signature"
-            placeholder="Paste signature hex here..."
-          ></textarea>
-        </div>
-
-        <div class="post-box">
-          <div class="post-label">Public Key (hex)</div>
-          <textarea
-            class="post-textarea"
-            id="verify-pubkey"
-            placeholder="Paste public key hex here..."
-          ></textarea>
-        </div>
-
-        <div class="post-box">
-          <div class="post-label">Message</div>
-          <input
-            type="text"
-            id="verify-message"
-            placeholder="The message that was signed..."
-            style="
-              width: 100%;
-              padding: 10px;
-              background: var(--bg-primary);
-              border: 1px solid var(--secondary);
-              color: var(--primary);
-              border-radius: 15px;
-            "
-          />
-        </div>
-
-        <button class="btn" onclick="verifySignature()">
-          Verify Signature
-        </button>
-
-        <div
-          id="verify-output"
-          class="entries-container"
-          style="margin-top: 20px; display: none"
-        >
-          <div class="entry" id="verify-result"></div>
-        </div>
-      </div>
-
-      <div class="footer-logo">
-        <img
-          src="https://frostsnap.com/assets/small-stay-frosty.svg"
-          alt="Stay Frosty"
-        />
-      </div>
-
-      <div class="header-links" style="text-align: center">
-        <p>
-          PS: limited time 15% off
-          <a href="https://frostsnap.com">FROST hardware wallets</a> with promo
-          code TAIWAN ❄️
-        </p>
-      </div>
     </div>
 
+    <!-- Nostr SDK -->
     <script type="module">
-      import {
-        SimplePool,
-        generateSecretKey,
-        getPublicKey,
-        finalizeEvent,
-      } from "https://esm.sh/nostr-tools@2.7.2";
+        import { SimplePool, generateSecretKey, getPublicKey, finalizeEvent } from 'https://esm.sh/nostr-tools@2.7.2';
 
-      import init, { wasm_verify } from "./pkg/yushan.js";
+        const RELAYS = ['wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.nostr.band'];
 
-      const RELAYS = [
-        "wss://relay.damus.io",
-        "wss://nos.lol",
-        "wss://relay.nostr.band",
-      ];
+        let pool = new SimplePool();
+        let currentSub = null;
+        let currentRoom = null;
+        let connected = false;
 
-      let pool = new SimplePool();
-      let currentSub = null;
-      let currentRoom = null;
-      let connected = false;
+        const sk = generateSecretKey();
+        const pk = getPublicKey(sk);
 
-      // Generate ephemeral keypair for signing Nostr events
-      const sk = generateSecretKey();
-      const pk = getPublicKey(sk);
+        const phaseData = {
+            keygen_round1: new Map(),
+            keygen_round2: new Map(),
+            signing_nonce: new Map(),
+            signing_share: new Map(),
+        };
 
-      // Data storage: phase -> party_index -> event
-      const phaseData = {
-        keygen_round1: new Map(),
-        keygen_round2: new Map(),
-        signing_nonce: new Map(),
-        signing_share: new Map(),
-      };
+        window.nostrUpdateConfig = function() {
+            const roomId = document.getElementById('room-id').value.trim();
+            const threshold = parseInt(document.getElementById('nostr-threshold').value);
+            const nParties = parseInt(document.getElementById('n-parties').value);
 
-      // Subscribe to Nostr events for the current room
-      window.updateConfig = function () {
-        const roomId = document.getElementById("room-id").value.trim();
-        const threshold = parseInt(document.getElementById("threshold").value);
-        const nParties = parseInt(document.getElementById("n-parties").value);
+            if (!roomId) { alert('Please enter a room ID'); return; }
+            if (threshold < 1 || nParties < 1 || threshold > nParties) { alert('Invalid threshold or n_parties values'); return; }
 
-        if (!roomId) {
-          alert("Please enter a room ID");
-          return;
-        }
+            connected = false;
+            document.getElementById('nostr-status-indicator').classList.remove('connected');
+            document.getElementById('nostr-status-text').textContent = 'Disconnected';
 
-        if (threshold < 1 || nParties < 1 || threshold > nParties) {
-          alert("Invalid threshold or n_parties values");
-          return;
-        }
+            if (currentSub) currentSub.close();
 
-        // Reset connection status
-        connected = false;
-        document
-          .getElementById("status-indicator")
-          .classList.remove("connected");
-        document.getElementById("status-text").textContent = "Disconnected";
-        document.getElementById("status-text").style.color = "";
+            phaseData.keygen_round1.clear();
+            phaseData.keygen_round2.clear();
+            phaseData.signing_nonce.clear();
+            phaseData.signing_share.clear();
 
-        // Unsubscribe from previous room
-        if (currentSub) {
-          currentSub.close();
-        }
+            currentRoom = roomId;
 
-        // Clear previous data
-        phaseData.keygen_round1.clear();
-        phaseData.keygen_round2.clear();
-        phaseData.signing_nonce.clear();
-        phaseData.signing_share.clear();
-
-        currentRoom = roomId;
-
-        // Subscribe to new room
-        console.log(`Subscribing to room: ${roomId}`);
-
-        currentSub = pool.subscribeMany(
-          RELAYS,
-          [
-            {
-              kinds: [1],
-              "#r": [roomId],
-              since: Math.floor(Date.now() / 1000) - 3600, // Last hour
-            },
-          ],
-          {
-            onevent(event) {
-              try {
-                const data = JSON.parse(event.content);
-                processEvent(data, event);
-              } catch (e) {
-                console.error("Failed to parse event:", e);
-              }
-            },
-            oneose() {
-              console.log("Initial sync complete");
-            },
-          }
-        );
-
-        // Update status to connected immediately after subscribing
-        connected = true;
-        document.getElementById("status-indicator").classList.add("connected");
-        document.getElementById("status-text").textContent = "Connected";
-        document.getElementById("status-text").style.color = "#01b3b9e9";
-
-        refreshUI();
-      };
-
-      function processEvent(data, nostrEvent) {
-        const eventType = data.type;
-        const partyIndex = data.party_index;
-
-        if (!phaseData[eventType]) {
-          console.warn("Unknown event type:", eventType);
-          return;
-        }
-
-        // Deduplication: Keep earliest event for each party in each phase
-        const existing = phaseData[eventType].get(partyIndex);
-        if (existing && existing.created_at <= nostrEvent.created_at) {
-          return; // Already have an earlier event
-        }
-
-        phaseData[eventType].set(partyIndex, {
-          ...data,
-          created_at: nostrEvent.created_at,
-          nostr_id: nostrEvent.id,
-        });
-
-        refreshUI();
-      }
-
-      function refreshUI() {
-        const threshold = parseInt(document.getElementById("threshold").value);
-        const nParties = parseInt(document.getElementById("n-parties").value);
-
-        updatePhaseUI("keygen_round1", "round1", nParties);
-        updatePhaseUI("keygen_round2", "round2", nParties);
-        updatePhaseUI("signing_nonce", "nonce", threshold);
-        updatePhaseUI("signing_share", "sig", threshold);
-      }
-
-      function updatePhaseUI(phaseKey, uiPrefix, expectedCount) {
-        const data = phaseData[phaseKey];
-        const entriesEl = document.getElementById(`${uiPrefix}-entries`);
-        const countEl = document.getElementById(`${uiPrefix}-count`);
-        const outputEl = document.getElementById(`${uiPrefix}-output`);
-        const copySectionEl = document.getElementById(
-          `${uiPrefix}-copy-section`
-        );
-
-        // Update count
-        countEl.textContent = `${data.size} / ${expectedCount}`;
-
-        // Update count color based on completion
-        if (data.size >= expectedCount) {
-          countEl.style.color = "var(--secondary)";
-          countEl.style.fontWeight = "bold";
-        } else {
-          countEl.style.color = "var(--primary)";
-          countEl.style.fontWeight = "normal";
-        }
-
-        // Update entries display
-        if (data.size === 0) {
-          entriesEl.innerHTML = '<div class="empty-state">No data yet...</div>';
-        } else {
-          entriesEl.innerHTML = "";
-          const sortedEntries = Array.from(data.values()).sort(
-            (a, b) => a.party_index - b.party_index
-          );
-
-          sortedEntries.forEach((entry) => {
-            const entryDiv = document.createElement("div");
-            entryDiv.className = "entry";
-
-            const date = new Date(entry.created_at * 1000);
-            const timeStr = date.toLocaleTimeString();
-
-            entryDiv.innerHTML = `
-              <div class="entry-header">
-                <span class="entry-party">Party ${entry.party_index}</span>
-                <span class="entry-time">${timeStr}</span>
-              </div>
-              <div class="entry-data">${JSON.stringify(entry, null, 2)}</div>
-            `;
-
-            entriesEl.appendChild(entryDiv);
-          });
-        }
-
-        // Show/hide and update aggregated output section based on whether we have enough data
-        if (data.size >= expectedCount) {
-          copySectionEl.style.display = "block";
-          const jsonObjects = Array.from(data.values())
-            .sort((a, b) => a.party_index - b.party_index)
-            .map((entry) => {
-              // Remove our metadata before outputting
-              const clean = { ...entry };
-              delete clean.created_at;
-              delete clean.nostr_id;
-              return JSON.stringify(clean);
+            currentSub = pool.subscribeMany(RELAYS, [{ kinds: [1], '#r': [roomId], since: Math.floor(Date.now() / 1000) - 3600 }], {
+                onevent(event) {
+                    try {
+                        const data = JSON.parse(event.content);
+                        processNostrEvent(data, event);
+                    } catch (e) { console.error('Failed to parse event:', e); }
+                },
+                oneose() { console.log('Initial sync complete'); }
             });
 
-          outputEl.textContent = jsonObjects.join(" ");
-        } else {
-          copySectionEl.style.display = "none";
-        }
-      }
+            connected = true;
+            document.getElementById('nostr-status-indicator').classList.add('connected');
+            document.getElementById('nostr-status-text').textContent = 'Connected';
+            document.getElementById('nostr-status-text').style.color = '#00d4ff';
 
-      window.copyToClipboard = function (elementId) {
-        const el = document.getElementById(elementId);
-        const text = el.textContent;
+            refreshNostrUI();
+        };
 
-        if (text === "No data yet") {
-          alert("No data to copy");
-          return;
-        }
+        function processNostrEvent(data, nostrEvent) {
+            const eventType = data.type;
+            const partyIndex = data.party_index;
+            if (!phaseData[eventType]) return;
 
-        navigator.clipboard.writeText(text).then(
-          () => {
-            // Visual feedback
-            const originalBg = el.style.background;
-            el.style.background = "#1a3a1a";
-            setTimeout(() => {
-              el.style.background = originalBg;
-            }, 200);
-          },
-          (err) => {
-            console.error("Failed to copy:", err);
-            alert("Failed to copy to clipboard");
-          }
-        );
-      };
+            const existing = phaseData[eventType].get(partyIndex);
+            if (existing && existing.created_at <= nostrEvent.created_at) return;
 
-      window.clearAll = function () {
-        if (
-          !confirm("Clear all data for this session? This cannot be undone.")
-        ) {
-          return;
+            phaseData[eventType].set(partyIndex, { ...data, created_at: nostrEvent.created_at, nostr_id: nostrEvent.id });
+            refreshNostrUI();
         }
 
-        phaseData.keygen_round1.clear();
-        phaseData.keygen_round2.clear();
-        phaseData.signing_nonce.clear();
-        phaseData.signing_share.clear();
+        function refreshNostrUI() {
+            const threshold = parseInt(document.getElementById('nostr-threshold').value);
+            const nParties = parseInt(document.getElementById('n-parties').value);
 
-        refreshUI();
-      };
-
-      window.postToNostr = async function (textareaId, expectedType) {
-        const textarea = document.getElementById(textareaId);
-        const content = textarea.value.trim();
-
-        if (!content) {
-          alert("Please paste your CLI output first");
-          return;
+            updatePhaseUI('keygen_round1', 'round1', nParties);
+            updatePhaseUI('keygen_round2', 'round2', nParties);
+            updatePhaseUI('signing_nonce', 'nonce', threshold);
+            updatePhaseUI('signing_share', 'sig', threshold);
         }
 
-        if (!currentRoom) {
-          alert("Please configure and subscribe to a room first");
-          return;
+        function updatePhaseUI(phaseKey, uiPrefix, expectedCount) {
+            const data = phaseData[phaseKey];
+            const entriesEl = document.getElementById(`${uiPrefix}-entries`);
+            const countEl = document.getElementById(`${uiPrefix}-count`);
+            const outputEl = document.getElementById(`${uiPrefix}-output`);
+            const copySectionEl = document.getElementById(`${uiPrefix}-copy-section`);
+
+            countEl.textContent = `${data.size} / ${expectedCount}`;
+            countEl.style.color = data.size >= expectedCount ? '#00d4ff' : '#888';
+            countEl.style.fontWeight = data.size >= expectedCount ? 'bold' : 'normal';
+
+            if (data.size === 0) {
+                entriesEl.innerHTML = '<div class="empty-state">No data yet...</div>';
+            } else {
+                entriesEl.innerHTML = '';
+                const sortedEntries = Array.from(data.values()).sort((a, b) => a.party_index - b.party_index);
+                sortedEntries.forEach(entry => {
+                    const entryDiv = document.createElement('div');
+                    entryDiv.className = 'entry';
+                    const date = new Date(entry.created_at * 1000);
+                    entryDiv.innerHTML = `<div class="entry-header"><span class="entry-party">Party ${entry.party_index}</span><span class="entry-time">${date.toLocaleTimeString()}</span></div><div class="entry-data">${JSON.stringify(entry, null, 2)}</div>`;
+                    entriesEl.appendChild(entryDiv);
+                });
+            }
+
+            if (data.size >= expectedCount) {
+                copySectionEl.style.display = 'block';
+                const jsonObjects = Array.from(data.values()).sort((a, b) => a.party_index - b.party_index).map(entry => {
+                    const clean = { ...entry };
+                    delete clean.created_at;
+                    delete clean.nostr_id;
+                    return JSON.stringify(clean);
+                });
+                outputEl.textContent = jsonObjects.join(' ');
+            } else {
+                copySectionEl.style.display = 'none';
+            }
         }
 
-        // Validate JSON
-        let data;
-        try {
-          data = JSON.parse(content);
-        } catch (e) {
-          alert(
-            "Invalid JSON. Please paste the output from your CLI exactly as shown."
-          );
-          return;
-        }
+        window.nostrCopyToClipboard = function(elementId) {
+            const el = document.getElementById(elementId);
+            const text = el.textContent;
+            if (text === 'No data yet') { alert('No data to copy'); return; }
+            navigator.clipboard.writeText(text).then(() => {
+                el.style.background = '#1a3a1a';
+                setTimeout(() => { el.style.background = ''; }, 200);
+            });
+        };
 
-        // Validate type matches
-        if (data.type !== expectedType) {
-          alert(
-            `Expected type "${expectedType}" but got "${data.type}". Make sure you're pasting the correct CLI output.`
-          );
-          return;
-        }
+        window.nostrClearAll = function() {
+            if (!confirm('Clear all data for this session?')) return;
+            phaseData.keygen_round1.clear();
+            phaseData.keygen_round2.clear();
+            phaseData.signing_nonce.clear();
+            phaseData.signing_share.clear();
+            refreshNostrUI();
+        };
 
-        // Validate required fields
-        if (!data.party_index) {
-          alert("Missing party_index in JSON");
-          return;
-        }
+        window.postToNostr = async function(textareaId, expectedType) {
+            const textarea = document.getElementById(textareaId);
+            const content = textarea.value.trim();
 
-        // Create and publish Nostr event
-        try {
-          const event = finalizeEvent(
-            {
-              kind: 1,
-              created_at: Math.floor(Date.now() / 1000),
-              tags: [["r", currentRoom]],
-              content: content,
-            },
-            sk
-          );
+            if (!content) { alert('Please paste your CLI output first'); return; }
+            if (!currentRoom) { alert('Please configure and subscribe to a room first'); return; }
 
-          await Promise.any(pool.publish(RELAYS, event));
+            let data;
+            try { data = JSON.parse(content); } catch (e) { alert('Invalid JSON'); return; }
+            if (data.type !== expectedType) { alert(`Expected type "${expectedType}" but got "${data.type}"`); return; }
+            if (!data.party_index) { alert('Missing party_index in JSON'); return; }
 
-          // Clear textarea and show success
-          textarea.value = "";
-          textarea.style.borderColor = "#01b3b9e9";
-          setTimeout(() => {
-            textarea.style.borderColor = "#01b3b9e9";
-          }, 500);
-
-          console.log("Published event:", event.id);
-        } catch (e) {
-          console.error("Failed to publish:", e);
-          alert(
-            "Failed to publish to Nostr relays. Check console for details."
-          );
-        }
-      };
-
-      // Signature verification
-      let wasmInitialized = false;
-
-      async function initWasm() {
-        if (!wasmInitialized) {
-          try {
-            await init();
-            wasmInitialized = true;
-            console.log("WASM loaded for signature verification");
-          } catch (e) {
-            console.error("Failed to load WASM:", e);
-          }
-        }
-      }
-
-      window.verifySignature = async function () {
-        const signature = document
-          .getElementById("verify-signature")
-          .value.trim();
-        const pubkey = document.getElementById("verify-pubkey").value.trim();
-        const message = document.getElementById("verify-message").value.trim();
-
-        if (!signature || !pubkey || !message) {
-          alert("Please fill in all fields");
-          return;
-        }
-
-        // Initialize WASM if needed
-        await initWasm();
-
-        try {
-          const resultJson = wasm_verify(signature, pubkey, message);
-          const result = JSON.parse(resultJson);
-
-          const outputDiv = document.getElementById("verify-output");
-          const resultDiv = document.getElementById("verify-result");
-
-          const isValid = result.result === "VALID";
-          resultDiv.innerHTML = `
-            <div style="white-space: pre-wrap; font-family: Monaco, monospace; ${
-              isValid ? "color: #00ff00;" : "color: #ff6b6b;"
-            }">
-              ${result.output}
-            </div>
-          `;
-          outputDiv.style.display = "block";
-        } catch (e) {
-          alert("Verification error: " + e);
-          console.error("Verification error:", e);
-        }
-      };
-
-      // Auto-connect on load with default values
-      window.addEventListener("load", () => {
-        updateConfig();
-        initWasm(); // Pre-load WASM for verifier
-      });
+            try {
+                const event = finalizeEvent({ kind: 1, created_at: Math.floor(Date.now() / 1000), tags: [['r', currentRoom]], content: content }, sk);
+                await Promise.any(pool.publish(RELAYS, event));
+                textarea.value = '';
+                console.log('Published event:', event.id);
+            } catch (e) {
+                console.error('Failed to publish:', e);
+                alert('Failed to publish to Nostr relays');
+            }
+        };
     </script>
-  </body>
+
+    <script>
+        // ============================================
+        // MAIN TAB SWITCHING
+        // ============================================
+        function switchMainTab(tabName) {
+            document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.main-tab-content').forEach(t => t.classList.remove('active'));
+
+            const tabIndex = { 'wallet': 0, 'htss': 1, 'workshop': 2, 'verify': 3 }[tabName];
+            document.querySelectorAll('.main-tab')[tabIndex].classList.add('active');
+            document.getElementById(`${tabName}-content`).classList.add('active');
+        }
+
+        function switchSubTab(parent, subTab) {
+            const container = document.getElementById(`${parent}-content`);
+            container.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+            container.querySelectorAll('.sub-tab-content').forEach(t => t.classList.remove('active'));
+
+            const subIndex = subTab === 'single' ? 0 : 1;
+            container.querySelectorAll('.sub-tab')[subIndex].classList.add('active');
+            document.getElementById(`${parent}-${subTab}`).classList.add('active');
+        }
+
+        // ============================================
+        // BITCOIN WALLET FUNCTIONALITY
+        // ============================================
+        const API_BASE = 'https://mempool.space/testnet/api';
+        const FAUCET_URL = 'https://bitcoinfaucet.uo1.net/';
+        const singleAddress = 'tb1pqjuvav27udjjufh8z8pt6873myjlrgjmelfx62f7xhkl4rrrw5vsw2r2um';
+
+        let dkgAddress = null;
+        let dkgMetadata = null;
+        let singleBalance = 0;
+        let dkgBalance = 0;
+
+        async function initWallet() {
+            document.getElementById('singleAddress').textContent = singleAddress;
+            await refreshSingleBalance();
+            await loadDkgInfo();
+        }
+
+        async function refreshSingleBalance() {
+            try {
+                const response = await fetch(`${API_BASE}/address/${singleAddress}/utxo`);
+                const utxos = await response.json();
+                singleBalance = utxos.reduce((sum, u) => sum + u.value, 0);
+                const confirmed = utxos.filter(u => u.status.confirmed).reduce((sum, u) => sum + u.value, 0);
+
+                document.getElementById('singleBalance').textContent = `${singleBalance.toLocaleString()} sats`;
+                let btcText = `${(singleBalance / 100000000).toFixed(8)} BTC`;
+                if (confirmed < singleBalance) btcText += ' (pending)';
+                document.getElementById('singleBalanceBtc').textContent = btcText;
+            } catch (e) {
+                console.error('Failed to fetch balance:', e);
+                document.getElementById('singleBalance').textContent = 'Error';
+            }
+        }
+
+        async function loadDkgInfo() {
+            const savedDkg = localStorage.getItem('frostdao_dkg');
+            if (savedDkg) {
+                try {
+                    const data = JSON.parse(savedDkg);
+                    dkgAddress = data.address;
+                    dkgMetadata = data.metadata;
+                    document.getElementById('dkgAddress').textContent = dkgAddress;
+                    document.getElementById('dkgThreshold').textContent = `${dkgMetadata.threshold}-of-${dkgMetadata.n_parties}`;
+                    document.getElementById('dkgIndex').textContent = dkgMetadata.my_index;
+                    document.getElementById('dkgRank').textContent = dkgMetadata.my_rank;
+                    document.getElementById('dkgStatus').classList.add('active');
+                    document.getElementById('dkgStatus').classList.remove('inactive');
+                    await refreshDkgBalance();
+                } catch (e) { console.error('Failed to load DKG info:', e); }
+            }
+        }
+
+        async function refreshDkgBalance() {
+            if (!dkgAddress) {
+                document.getElementById('dkgBalance').textContent = '-- sats';
+                document.getElementById('dkgBalanceBtc').textContent = 'Complete DKG first';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/address/${dkgAddress}/utxo`);
+                const utxos = await response.json();
+                dkgBalance = utxos.reduce((sum, u) => sum + u.value, 0);
+                const confirmed = utxos.filter(u => u.status.confirmed).reduce((sum, u) => sum + u.value, 0);
+
+                document.getElementById('dkgBalance').textContent = `${dkgBalance.toLocaleString()} sats`;
+                let btcText = `${(dkgBalance / 100000000).toFixed(8)} BTC`;
+                if (confirmed < dkgBalance) btcText += ' (pending)';
+                document.getElementById('dkgBalanceBtc').textContent = btcText;
+            } catch (e) { console.error('Failed to fetch DKG balance:', e); }
+        }
+
+        function setAmount(type, sats) {
+            document.getElementById(`${type}Amount`).value = sats;
+        }
+
+        function setMax(type) {
+            const balance = type === 'single' ? singleBalance : dkgBalance;
+            const maxAmount = Math.max(0, balance - 500);
+            document.getElementById(`${type}Amount`).value = maxAmount;
+        }
+
+        function fundAddress(type) {
+            const address = type === 'single' ? singleAddress : dkgAddress;
+            if (!address) { alert('No address available. Complete DKG first.'); return; }
+            navigator.clipboard.writeText(address);
+            alert(`Address copied to clipboard!\n\n${address}\n\nOpening faucet...`);
+            window.open(FAUCET_URL, '_blank');
+        }
+
+        function prepareSend(type) {
+            const recipient = document.getElementById(`${type}Recipient`).value.trim();
+            const amount = parseInt(document.getElementById(`${type}Amount`).value);
+            const balance = type === 'single' ? singleBalance : dkgBalance;
+
+            if (!recipient) { showWalletResult(type, 'Please enter a recipient address', 'error'); return; }
+            if (!recipient.startsWith('tb1') && !recipient.startsWith('bc1')) { showWalletResult(type, 'Invalid address format', 'error'); return; }
+            if (!amount || amount < 546) { showWalletResult(type, 'Amount must be at least 546 sats (dust limit)', 'error'); return; }
+            if (amount > balance - 200) { showWalletResult(type, `Insufficient balance`, 'error'); return; }
+
+            let command;
+            if (type === 'single') {
+                command = `frostdao btc-send --to ${recipient} --amount ${amount}`;
+            } else {
+                command = `# Step 1: Each signer generates nonce
+frostdao generate-nonce --session "tx-${Date.now()}"
+
+# Step 2: Share nonces, create signature shares
+frostdao sign --session "tx-${Date.now()}" --message "${recipient}:${amount}" --data '<nonces_json>'
+
+# Step 3: Combine signatures
+frostdao combine --data '<shares_json>'`;
+            }
+
+            document.getElementById(`${type}CommandText`).textContent = command;
+            document.getElementById(`${type}Command`).style.display = 'block';
+            showWalletResult(type, 'Command ready! Copy and run in terminal.', 'success');
+        }
+
+        function copyCommand(type) {
+            const text = document.getElementById(`${type}CommandText`).textContent;
+            navigator.clipboard.writeText(text);
+            alert('Command copied to clipboard!');
+        }
+
+        function showWalletResult(type, message, status) {
+            const result = document.getElementById(`${type}Result`);
+            result.textContent = message;
+            result.className = `result ${status}`;
+        }
+
+        // ============================================
+        // HTSS DEMO FUNCTIONALITY
+        // ============================================
+        const HTSS_THRESHOLD = 3;
+        const HTSS_PARTIES = [
+            { id: 'ceo', rank: 0, name: 'CEO' },
+            { id: 'cfo', rank: 1, name: 'CFO' },
+            { id: 'coo', rank: 1, name: 'COO' },
+            { id: 'director', rank: 2, name: 'Director' },
+            { id: 'manager', rank: 2, name: 'Manager' }
+        ];
+
+        let htssSelectedSigners = [];
+        let htssKeysReady = false;
+        let htssPublicKey = '';
+
+        async function htssRunDKG() {
+            const btn = document.getElementById('htss-dkgBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>Running DKG...';
+
+            document.getElementById('htss-dkgResult').style.display = 'block';
+            document.getElementById('htss-dkgLog').textContent = 'Starting DKG...\n';
+
+            try {
+                const resp = await fetch('/api/dkg');
+                const data = await resp.json();
+
+                if (data.success) {
+                    htssPublicKey = data.public_key;
+                    htssKeysReady = true;
+                    document.getElementById('htss-publicKeyDisplay').textContent = htssPublicKey;
+                    document.getElementById('htss-dkgLog').textContent = data.logs.join('\n');
+                    htssEnableSignerSelection();
+                } else {
+                    document.getElementById('htss-dkgLog').textContent = 'Error: ' + data.error;
+                }
+            } catch (e) {
+                document.getElementById('htss-dkgLog').textContent = 'Error: ' + e.message + '\n\nMake sure demo-server.py is running!';
+            }
+
+            btn.disabled = false;
+            btn.textContent = 'Run DKG for All Parties';
+        }
+
+        function htssEnableSignerSelection() {
+            document.querySelectorAll('.party-btn').forEach(btn => btn.disabled = false);
+            document.getElementById('htss-selectedDisplay').innerHTML = '<span style="color:#888">Click to select signers...</span>';
+        }
+
+        function htssClearAll() {
+            htssKeysReady = false;
+            htssPublicKey = '';
+            htssSelectedSigners = [];
+
+            document.querySelectorAll('.party-btn').forEach(btn => {
+                btn.classList.remove('selected');
+                btn.disabled = true;
+            });
+            document.getElementById('htss-publicKeyDisplay').textContent = '';
+            document.getElementById('htss-dkgResult').style.display = 'none';
+            document.getElementById('htss-signResult').style.display = 'none';
+            document.getElementById('htss-selectedDisplay').innerHTML = '<span style="color:#888">Run DKG first...</span>';
+            htssUpdateValidation();
+        }
+
+        function htssToggleSigner(btn) {
+            if (!htssKeysReady) return;
+            const party = btn.dataset.party;
+
+            if (btn.classList.contains('selected')) {
+                btn.classList.remove('selected');
+                htssSelectedSigners = htssSelectedSigners.filter(s => s !== party);
+            } else {
+                if (htssSelectedSigners.length >= HTSS_THRESHOLD) {
+                    const oldest = htssSelectedSigners.shift();
+                    document.querySelector(`[data-party="${oldest}"]`).classList.remove('selected');
+                }
+                btn.classList.add('selected');
+                htssSelectedSigners.push(party);
+            }
+            htssUpdateUI();
+        }
+
+        function htssSelectCombo(parties) {
+            if (!htssKeysReady) { alert('Run DKG first!'); return; }
+            document.querySelectorAll('.party-btn').forEach(btn => btn.classList.remove('selected'));
+            htssSelectedSigners = [];
+            parties.forEach(p => {
+                const btn = document.querySelector(`[data-party="${p}"]`);
+                if (btn) {
+                    btn.classList.add('selected');
+                    htssSelectedSigners.push(p);
+                }
+            });
+            htssUpdateUI();
+        }
+
+        function htssUpdateUI() {
+            const display = document.getElementById('htss-selectedDisplay');
+            if (htssSelectedSigners.length === 0) {
+                display.innerHTML = '<span style="color:#888">Click to select signers...</span>';
+            } else {
+                display.innerHTML = htssSelectedSigners.map(id => {
+                    const p = HTSS_PARTIES.find(x => x.id === id);
+                    return `<span class="signer-chip">${p.name} (r${p.rank})</span>`;
+                }).join('');
+            }
+            htssUpdateValidation();
+        }
+
+        function htssUpdateValidation() {
+            const box = document.getElementById('htss-validationBox');
+            const content = document.getElementById('htss-validationContent');
+            const signBtn = document.getElementById('htss-signBtn');
+
+            if (htssSelectedSigners.length < HTSS_THRESHOLD) {
+                box.className = 'validation-box pending';
+                content.innerHTML = `<strong>Select ${HTSS_THRESHOLD - htssSelectedSigners.length} more signer(s)</strong>`;
+                signBtn.disabled = !htssKeysReady;
+                return;
+            }
+
+            const ranks = htssSelectedSigners.map(id => HTSS_PARTIES.find(p => p.id === id).rank).sort((a,b) => a-b);
+            let valid = true;
+            let checks = [];
+
+            for (let i = 0; i < ranks.length; i++) {
+                const pass = ranks[i] <= i;
+                checks.push({ pos: i, rank: ranks[i], pass });
+                if (!pass) valid = false;
+            }
+
+            box.className = valid ? 'validation-box valid' : 'validation-box invalid';
+            signBtn.disabled = !htssKeysReady;
+
+            content.innerHTML = `
+                <strong>${valid ? '&#10003; VALID' : '&#10007; INVALID'}</strong>
+                <span class="validation-rule">[${ranks.join(',')}]</span><br>
+                ${checks.map(c => `<span class="rule-check ${c.pass?'pass':'fail'}">
+                    ${c.pass?'&#10003;':'&#10007;'} r<sub>${c.rank}</sub> ${c.pass?'&le;':'&gt;'} ${c.pos}
+                </span>`).join('')}
+            `;
+        }
+
+        async function htssSignMessage() {
+            if (!htssKeysReady) return;
+            if (htssSelectedSigners.length < HTSS_THRESHOLD) { alert(`Please select ${HTSS_THRESHOLD} signers first`); return; }
+
+            const message = document.getElementById('htss-messageInput').value;
+            const btn = document.getElementById('htss-signBtn');
+            const resultDiv = document.getElementById('htss-signResult');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>Signing...';
+
+            try {
+                const signers = htssSelectedSigners.join(',');
+                const resp = await fetch(`/api/sign?signers=${signers}&message=${encodeURIComponent(message)}`);
+                const data = await resp.json();
+
+                if (data.success && data.valid) {
+                    resultDiv.innerHTML = `
+                        <div class="result-box">
+                            <h3>&#10003; Signature Created!</h3>
+                            <div class="info-grid">
+                                <div class="info-item"><label>Message</label><value>"${data.message}"</value></div>
+                                <div class="info-item"><label>Signers</label><value>${data.signers.join(' + ')}</value></div>
+                            </div>
+                            <div class="info-item" style="margin-top:12px">
+                                <label>Signature (64 bytes)</label>
+                                <div class="signature-display">${data.signature}</div>
+                            </div>
+                            <button class="btn btn-secondary" style="margin-top:16px" onclick="copyToVerifySection('${data.public_key}', '${data.message}', '${data.signature}')">Copy to Verify</button>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result-box error">
+                            <h3>&#10007; Signing Rejected</h3>
+                            <p style="color:#e74c3c">${data.error || 'Invalid signer combination'}</p>
+                        </div>
+                    `;
+                }
+                resultDiv.style.display = 'block';
+            } catch (e) {
+                resultDiv.innerHTML = `<div class="result-box error"><h3>&#10007; Error</h3><p>${e.message}</p><p style="margin-top:12px;color:#888">Make sure demo-server.py is running!</p></div>`;
+                resultDiv.style.display = 'block';
+            }
+
+            btn.disabled = false;
+            btn.textContent = 'Create Threshold Signature';
+            htssUpdateValidation();
+        }
+
+        function htssClearSignature() {
+            document.getElementById('htss-signResult').style.display = 'none';
+        }
+
+        function copyToVerifySection(pubKey, message, signature) {
+            document.getElementById('verify-pubkey').value = pubKey;
+            document.getElementById('verify-message').value = message;
+            document.getElementById('verify-signature').value = signature;
+            document.getElementById('verify-result').style.display = 'none';
+            switchMainTab('verify');
+        }
+
+        // ============================================
+        // VERIFICATION FUNCTIONALITY
+        // ============================================
+        async function verifySignatureGlobal() {
+            const pubKey = document.getElementById('verify-pubkey').value.trim();
+            const message = document.getElementById('verify-message').value.trim();
+            const signature = document.getElementById('verify-signature').value.trim();
+            const resultDiv = document.getElementById('verify-result');
+
+            if (!pubKey || !message || !signature) { alert('Please fill in all fields'); return; }
+
+            try {
+                const resp = await fetch(`/api/verify?signature=${encodeURIComponent(signature)}&public_key=${encodeURIComponent(pubKey)}&message=${encodeURIComponent(message)}`);
+                const data = await resp.json();
+
+                if (data.valid) {
+                    resultDiv.innerHTML = `<div class="result-box"><h3>&#10003; SIGNATURE VALID!</h3><p style="color:#aaa;margin-top:12px">The signature is cryptographically valid.</p></div>`;
+                } else {
+                    resultDiv.innerHTML = `<div class="result-box error"><h3>&#10007; SIGNATURE INVALID</h3><p style="color:#aaa;margin-top:12px">Verification failed. Check the signature, public key, or message.</p></div>`;
+                }
+                resultDiv.style.display = 'block';
+            } catch (e) {
+                resultDiv.innerHTML = `<div class="result-box error"><h3>&#10007; Error</h3><p>${e.message}</p></div>`;
+                resultDiv.style.display = 'block';
+            }
+        }
+
+        function clearVerifyForm() {
+            document.getElementById('verify-pubkey').value = '';
+            document.getElementById('verify-message').value = '';
+            document.getElementById('verify-signature').value = '';
+            document.getElementById('verify-result').style.display = 'none';
+        }
+
+        // ============================================
+        // INITIALIZATION
+        // ============================================
+        initWallet();
+
+        // Check HTSS server status on load
+        fetch('/api/status')
+            .then(r => r.json())
+            .then(data => {
+                if (data.dkg_done) {
+                    htssPublicKey = data.public_key;
+                    htssKeysReady = true;
+                    document.getElementById('htss-dkgResult').style.display = 'block';
+                    document.getElementById('htss-publicKeyDisplay').textContent = htssPublicKey;
+                    document.getElementById('htss-dkgLog').textContent = 'Keys loaded from previous session.';
+                    htssEnableSignerSelection();
+                }
+            })
+            .catch(() => console.log('HTSS server not running'));
+    </script>
+</body>
 </html>
