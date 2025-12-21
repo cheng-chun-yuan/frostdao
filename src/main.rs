@@ -1,25 +1,11 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-/// Result from a command, separating educational output from copy-paste result
-#[derive(Debug, Clone)]
-pub struct CommandResult {
-    /// Educational output with explanations (🧠, ⚙️, ❄️, etc.)
-    pub output: String,
-    /// Clean JSON result for copy-pasting
-    pub result: String,
-}
+// Use library crate for core functionality
+use frostdao::btc::{schnorr as bitcoin_schnorr, transaction as bitcoin_tx};
+use frostdao::protocol::{dkg_tx, keygen, recovery, reshare, signing};
 
-mod birkhoff;
-mod bitcoin_schnorr;
-mod bitcoin_tx;
-mod crypto_helpers;
-mod dkg_tx;
-mod keygen;
-mod recovery;
-mod reshare;
-mod signing;
-mod storage;
+// TUI is CLI-only, not part of lib
 mod tui;
 
 #[derive(Parser)]

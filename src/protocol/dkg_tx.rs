@@ -27,9 +27,9 @@
 //!         txid
 //! ```
 
-use crate::bitcoin_tx::{broadcast_transaction, fetch_fee_estimates, fetch_utxos};
-use crate::keygen::{get_state_dir, HtssMetadata};
-use crate::signing::NonceOutput;
+use crate::btc::transaction::{broadcast_transaction, fetch_fee_estimates, fetch_utxos};
+use crate::protocol::keygen::{get_state_dir, HtssMetadata};
+use crate::protocol::signing::NonceOutput;
 use crate::storage::{FileStorage, Storage};
 use crate::CommandResult;
 use anyhow::{Context, Result};
@@ -53,8 +53,8 @@ use std::str::FromStr;
 // Taproot Helper Functions
 // ============================================================================
 
-// Use shared tagged_hash from crypto_helpers
-use crate::crypto_helpers::tagged_hash;
+// Use shared tagged_hash from crypto helpers
+use crate::crypto::helpers::tagged_hash;
 
 /// Compute the taptweak for a given internal public key (no script tree)
 /// tweak = tagged_hash("TapTweak", internal_pubkey)
@@ -555,7 +555,8 @@ pub fn dkg_sign_core(
         .map_err(|_| anyhow::anyhow!("Invalid sighash length"))?;
 
     // Parse nonces from other parties
-    let nonce_outputs: Vec<NonceOutput> = crate::keygen::parse_space_separated_json(nonces_data)?;
+    let nonce_outputs: Vec<NonceOutput> =
+        crate::protocol::keygen::parse_space_separated_json(nonces_data)?;
 
     out.push_str(&format!("Session: {}\n", session_id));
     out.push_str(&format!("Sighash: {}...\n", &sighash_hex[..16]));
@@ -564,7 +565,7 @@ pub fn dkg_sign_core(
     // Validate signer set in HTSS mode
     if htss_metadata.hierarchical {
         let ranks: Vec<u32> = nonce_outputs.iter().map(|n| n.rank).collect();
-        crate::birkhoff::validate_signer_set(&ranks, htss_metadata.threshold)?;
+        crate::crypto::birkhoff::validate_signer_set(&ranks, htss_metadata.threshold)?;
         out.push_str("✓ HTSS signer set is valid\n\n");
     }
 
@@ -608,7 +609,7 @@ pub fn dkg_sign_core(
     // This ensures: σ = k - e*p (instead of k + e*p) when combined,
     // which allows the final signature s = σ - e*t = k - e*p - e*t = k - e*(p+t) to verify.
     let sig_share = if parity_flip {
-        let negated_paired = crate::crypto_helpers::negate_paired_secret_share(&paired_share)?;
+        let negated_paired = crate::crypto::helpers::negate_paired_secret_share(&paired_share)?;
         sign_session.sign(&negated_paired, nonce)
     } else {
         sign_session.sign(&paired_share, nonce)
@@ -733,7 +734,7 @@ pub fn dkg_broadcast_core(
 
     // Parse signature shares
     let share_outputs: Vec<DkgSignatureShareOutput> =
-        crate::keygen::parse_space_separated_json(shares_data)?;
+        crate::protocol::keygen::parse_space_separated_json(shares_data)?;
 
     out.push_str(&format!("Session: {}\n", session_id));
     out.push_str(&format!("Shares received: {}\n\n", share_outputs.len()));

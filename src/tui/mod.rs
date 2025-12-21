@@ -33,10 +33,8 @@ use std::io;
 use app::App;
 use state::{AppState, KeygenState, ReshareState, SendState};
 
-use crate::keygen;
-use crate::reshare;
-use crate::signing;
-use crate::storage::{FileStorage, Storage};
+use frostdao::protocol::{keygen, reshare, signing};
+use frostdao::storage::{FileStorage, Storage};
 
 /// Run the terminal UI
 pub fn run_tui() -> Result<()> {

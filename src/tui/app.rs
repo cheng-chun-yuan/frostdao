@@ -5,10 +5,10 @@ use bitcoin::{Address, XOnlyPublicKey};
 use ratatui::widgets::ListState;
 use std::collections::HashMap;
 
-use crate::keygen::{list_wallets, WalletSummary};
-use crate::storage::{FileStorage, Storage};
 use crate::tui::screens::{KeygenFormData, ReshareFormData, SendFormData};
 use crate::tui::state::{AppState, NetworkSelection};
+use frostdao::protocol::keygen::{list_wallets, WalletSummary};
+use frostdao::storage::{FileStorage, Storage};
 
 /// Balance information for a wallet
 #[derive(Clone)]
@@ -147,7 +147,7 @@ impl App {
 
     /// Fetch balance for a wallet on the current network
     fn fetch_balance(&self, wallet_name: &str) -> Result<BalanceInfo> {
-        let state_dir = crate::keygen::get_state_dir(wallet_name);
+        let state_dir = frostdao::protocol::keygen::get_state_dir(wallet_name);
         let storage = FileStorage::new(&state_dir)?;
 
         // Load shared key

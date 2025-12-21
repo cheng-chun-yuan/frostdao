@@ -179,7 +179,7 @@ fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
 
 /// Get address for the selected network
 fn get_address_for_network(
-    wallet: &crate::keygen::WalletSummary,
+    wallet: &frostdao::protocol::keygen::WalletSummary,
     network: NetworkSelection,
 ) -> Option<String> {
     // For now, return the stored address (testnet)

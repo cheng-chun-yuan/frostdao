@@ -1,5 +1,5 @@
-use crate::birkhoff::validate_signer_set;
-use crate::keygen::{parse_space_separated_json, HtssMetadata};
+use crate::crypto::birkhoff::validate_signer_set;
+use crate::protocol::keygen::{parse_space_separated_json, HtssMetadata};
 use crate::storage::{FileStorage, Storage};
 use crate::CommandResult;
 use anyhow::{Context, Result};
