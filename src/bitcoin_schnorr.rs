@@ -21,7 +21,7 @@ use bitcoin::Network;
 use rand::RngCore;
 use secp256kfun::prelude::*;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+// sha2 no longer needed - using shared tagged_hash from crypto_helpers
 
 const STATE_DIR: &str = ".frost_state";
 
@@ -29,16 +29,8 @@ const STATE_DIR: &str = ".frost_state";
 // BIP340 Tagged Hash Functions
 // ============================================================================
 
-/// Computes a BIP340 tagged hash: SHA256(SHA256(tag) || SHA256(tag) || msg)
-/// This provides domain separation for different use cases.
-fn tagged_hash(tag: &str, msg: &[u8]) -> [u8; 32] {
-    let tag_hash = Sha256::digest(tag.as_bytes());
-    let mut hasher = Sha256::new();
-    hasher.update(&tag_hash);
-    hasher.update(&tag_hash);
-    hasher.update(msg);
-    hasher.finalize().into()
-}
+// Use shared tagged_hash from crypto_helpers
+use crate::crypto_helpers::tagged_hash;
 
 /// BIP340/challenge tagged hash for signature verification
 fn challenge_hash(r_bytes: &[u8; 32], pubkey_bytes: &[u8; 32], message: &[u8]) -> [u8; 32] {
@@ -55,11 +47,7 @@ fn aux_hash(aux: &[u8; 32]) -> [u8; 32] {
 }
 
 /// BIP340/nonce tagged hash for deterministic nonce generation
-fn nonce_hash(
-    masked_secret: &[u8; 32],
-    pubkey_bytes: &[u8; 32],
-    message: &[u8],
-) -> [u8; 32] {
+fn nonce_hash(masked_secret: &[u8; 32], pubkey_bytes: &[u8; 32], message: &[u8]) -> [u8; 32] {
     let mut data = Vec::with_capacity(32 + 32 + message.len());
     data.extend_from_slice(masked_secret);
     data.extend_from_slice(pubkey_bytes);
@@ -345,8 +333,8 @@ pub fn sign_message_core(
 
     // Step 4: Compute challenge
     let e_bytes = challenge_hash(&r_bytes, &pubkey_bytes, message);
-    let e_scalar: Scalar<Public, Zero> = Scalar::from_bytes(e_bytes)
-        .ok_or_else(|| anyhow::anyhow!("Invalid challenge bytes"))?;
+    let e_scalar: Scalar<Public, Zero> =
+        Scalar::from_bytes(e_bytes).ok_or_else(|| anyhow::anyhow!("Invalid challenge bytes"))?;
 
     out.push_str("Computing signature scalar:\n");
     out.push_str("   s = k + e * secret_key (mod n)\n\n");
@@ -469,8 +457,8 @@ pub fn verify_signature_core(
 
     // Compute challenge
     let e_bytes = challenge_hash(&r_bytes, &pubkey_bytes, message);
-    let e_scalar: Scalar<Public, Zero> = Scalar::from_bytes(e_bytes)
-        .ok_or_else(|| anyhow::anyhow!("Invalid challenge bytes"))?;
+    let e_scalar: Scalar<Public, Zero> =
+        Scalar::from_bytes(e_bytes).ok_or_else(|| anyhow::anyhow!("Invalid challenge bytes"))?;
 
     // Verify: s * G == R + e * P
     let lhs = g!(s_scalar * G).normalize();
@@ -667,8 +655,8 @@ pub fn get_address_core(network: Network, storage: &dyn Storage) -> Result<Comma
     out.push_str(&format!("Public Key (x-only): {}\n\n", pubkey_hex));
 
     // Create XOnlyPublicKey for bitcoin crate
-    let xonly_pubkey = XOnlyPublicKey::from_slice(&pubkey_bytes)
-        .context("Failed to create x-only public key")?;
+    let xonly_pubkey =
+        XOnlyPublicKey::from_slice(&pubkey_bytes).context("Failed to create x-only public key")?;
 
     // Create a P2TR address using key-path spend (no script tree)
     // For a simple key-path address, we use the untweaked internal key
@@ -812,8 +800,20 @@ pub fn get_dkg_address_core(network: Network, storage: &dyn Storage) -> Result<C
 }
 
 /// CLI wrapper for getting DKG testnet address
-pub fn get_dkg_address_testnet() -> Result<()> {
-    let storage = FileStorage::new(STATE_DIR)?;
+pub fn get_dkg_address_testnet(name: &str) -> Result<()> {
+    let state_dir = crate::keygen::get_state_dir(name);
+    let path = std::path::Path::new(&state_dir);
+
+    if !path.exists() {
+        anyhow::bail!(
+            "Wallet '{}' not found at {}. Did you run keygen-finalize with --name {}?",
+            name,
+            state_dir,
+            name
+        );
+    }
+
+    let storage = FileStorage::new(&state_dir)?;
     let cmd_result = get_dkg_address_core(Network::Testnet, &storage)?;
     println!("{}", cmd_result.output);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -853,12 +853,8 @@ mod tests {
         let sig_output: BitcoinSignatureOutput = serde_json::from_str(&sig_result.result).unwrap();
 
         // Verify signature
-        let verify_result = verify_signature_core(
-            &sig_output.signature,
-            &key_output.public_key,
-            message,
-        )
-        .unwrap();
+        let verify_result =
+            verify_signature_core(&sig_output.signature, &key_output.public_key, message).unwrap();
 
         assert_eq!(verify_result.result, "VALID");
     }

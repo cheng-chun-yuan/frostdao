@@ -12,6 +12,8 @@ pub trait Storage {
     fn write(&self, key: &str, data: &[u8]) -> Result<()>;
     #[allow(dead_code)]
     fn exists(&self, key: &str) -> bool;
+    /// Delete a key from storage. Used for security-critical cleanup (e.g., nonces).
+    fn delete(&self, key: &str) -> Result<()>;
 }
 
 /// In-memory storage for testing
@@ -48,6 +50,12 @@ impl Storage for MemoryStorage {
         let data = self.data.read().unwrap();
         data.contains_key(key)
     }
+
+    fn delete(&self, key: &str) -> Result<()> {
+        let mut storage = self.data.write().unwrap();
+        storage.remove(key);
+        Ok(())
+    }
 }
 
 /// File-based storage for CLI
@@ -76,6 +84,14 @@ impl Storage for FileStorage {
 
     fn exists(&self, key: &str) -> bool {
         self.base_dir.join(key).exists()
+    }
+
+    fn delete(&self, key: &str) -> Result<()> {
+        let path = self.base_dir.join(key);
+        if path.exists() {
+            std::fs::remove_file(path)?;
+        }
+        Ok(())
     }
 }
 
@@ -126,6 +142,20 @@ impl Storage for LocalStorageImpl {
             }
         }
         false
+    }
+
+    fn delete(&self, key: &str) -> Result<()> {
+        let window = web_sys::window().ok_or(anyhow::anyhow!("No window"))?;
+        let storage = window
+            .local_storage()
+            .map_err(|_| anyhow::anyhow!("Failed to get localStorage"))?
+            .ok_or(anyhow::anyhow!("localStorage not available"))?;
+
+        storage
+            .remove_item(key)
+            .map_err(|_| anyhow::anyhow!("Failed to delete from localStorage"))?;
+
+        Ok(())
     }
 }
 

@@ -89,8 +89,13 @@ frostdao btc-address-signet
 Get the DKG group Taproot address (testnet).
 
 ```bash
-frostdao dkg-address
+frostdao dkg-address --name <wallet_name>
 ```
+
+**Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `--name` | Wallet/session name |
 
 **Requires:** Completed DKG (`keygen-finalize`)
 
@@ -101,8 +106,13 @@ frostdao dkg-address
 Check DKG group wallet balance on testnet.
 
 ```bash
-frostdao dkg-balance
+frostdao dkg-balance --name <wallet_name>
 ```
+
+**Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `--name` | Wallet/session name |
 
 **Output:**
 - DKG group address
@@ -233,6 +243,7 @@ Generate polynomial and commitments for DKG.
 
 ```bash
 frostdao keygen-round1 \
+  --name <wallet_name> \
   --threshold <t> \
   --n-parties <n> \
   --my-index <i> \
@@ -243,19 +254,22 @@ frostdao keygen-round1 \
 **Parameters:**
 | Parameter | Description | Default |
 |-----------|-------------|---------|
+| `--name` | Wallet/session name (creates folder) | Required |
 | `--threshold` | Minimum signers required | Required |
 | `--n-parties` | Total number of parties | Required |
 | `--my-index` | Your party index (1-based) | Required |
 | `--rank` | HTSS rank (0=highest) | 0 |
 | `--hierarchical` | Enable HTSS mode | false |
 
+**Safety:** If a wallet with the same name exists, you'll be prompted to confirm replacement.
+
 **Examples:**
 ```bash
 # Standard TSS (2-of-3)
-frostdao keygen-round1 --threshold 2 --n-parties 3 --my-index 1
+frostdao keygen-round1 --name treasury --threshold 2 --n-parties 3 --my-index 1
 
 # HTSS (3-of-4 with ranks)
-frostdao keygen-round1 --threshold 3 --n-parties 4 --my-index 1 --rank 0 --hierarchical
+frostdao keygen-round1 --name corp_wallet --threshold 3 --n-parties 4 --my-index 1 --rank 0 --hierarchical
 ```
 
 ---
@@ -265,18 +279,14 @@ frostdao keygen-round1 --threshold 3 --n-parties 4 --my-index 1 --rank 0 --hiera
 Exchange encrypted shares.
 
 ```bash
-frostdao keygen-round2 --data '<json>'
+frostdao keygen-round2 --name <wallet_name> --data '<json>'
 ```
 
-**Input Format:**
-```json
-{
-  "commitments": [
-    {"index": 1, "commitment": "...", "rank": 0},
-    {"index": 2, "commitment": "...", "rank": 0}
-  ]
-}
-```
+**Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `--name` | Wallet/session name (must match round1) |
+| `--data` | JSON with all round1 commitments |
 
 ---
 
@@ -285,13 +295,20 @@ frostdao keygen-round2 --data '<json>'
 Finalize DKG and derive keys.
 
 ```bash
-frostdao keygen-finalize --data '<json>'
+frostdao keygen-finalize --name <wallet_name> --data '<json>'
 ```
+
+**Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `--name` | Wallet/session name (must match round1) |
+| `--data` | JSON with all round2 shares |
 
 **Output:**
 - Group public key
 - Your secret share
 - HTSS metadata (if hierarchical)
+- `group_info.json` with parties ordered by rank
 
 ---
 
@@ -356,15 +373,230 @@ frostdao verify \
 
 ---
 
+## Resharing Commands
+
+### reshare-round1
+
+Generate sub-shares for new parties (run by old parties).
+
+```bash
+frostdao reshare-round1 \
+  --source <wallet_name> \
+  --new-threshold <t> \
+  --new-n-parties <n> \
+  --my-index <i>
+```
+
+**Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `--source` | Source wallet name |
+| `--new-threshold` | New threshold for reshared wallet |
+| `--new-n-parties` | New total number of parties |
+| `--my-index` | Your party index in the original wallet |
+
+---
+
+### reshare-finalize
+
+Combine sub-shares to create new wallet (run by new parties).
+
+```bash
+frostdao reshare-finalize \
+  --source <old_wallet> \
+  --target <new_wallet> \
+  --my-index <i> \
+  --data '<round1_outputs_json>'
+```
+
+**Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `--source` | Source wallet name (for metadata) |
+| `--target` | New wallet name to create |
+| `--my-index` | Your new party index |
+| `--data` | JSON with round1 outputs from old parties |
+
+---
+
+## Share Recovery Commands
+
+### recover-round1
+
+Helper party generates sub-share for a lost party.
+
+```bash
+frostdao recover-round1 \
+  --name <wallet_name> \
+  --lost-index <i>
+```
+
+**Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `--name` | Wallet name |
+| `--lost-index` | Index of the party who lost their share |
+
+**Output:** JSON with `helper_index`, `lost_index`, `sub_share`, `rank`
+
+---
+
+### recover-finalize
+
+Lost party combines sub-shares to recover their share.
+
+```bash
+frostdao recover-finalize \
+  --source <wallet_name> \
+  --target <new_wallet> \
+  --my-index <i> \
+  [--rank <r>] \
+  [--hierarchical] \
+  --data '<sub_shares_json>'
+```
+
+**Parameters:**
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `--source` | Source wallet name (for metadata) | Required |
+| `--target` | New wallet name to create | Required |
+| `--my-index` | Your party index (the one being recovered) | Required |
+| `--rank` | Your HTSS rank | 0 |
+| `--hierarchical` | Enable hierarchical mode | false |
+| `--data` | JSON with sub-shares from helper parties | Required |
+
+**Note:** For HTSS wallets with mixed ranks, uses Birkhoff interpolation.
+
+---
+
+## DKG Transaction Commands
+
+### dkg-build-tx
+
+Build an unsigned transaction for DKG threshold signing.
+
+```bash
+frostdao dkg-build-tx \
+  --name <wallet_name> \
+  --to <recipient_address> \
+  --amount <satoshis> \
+  [--fee-rate <sats_per_vbyte>]
+```
+
+**Parameters:**
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `--name` | DKG wallet name | Required |
+| `--to` | Recipient Taproot address | Required |
+| `--amount` | Amount in satoshis | Required |
+| `--fee-rate` | Fee rate (sats/vbyte) | Auto |
+
+**Output:** JSON with `session_id`, `sighash`, `unsigned_tx`
+
+---
+
+### dkg-nonce
+
+Generate a signing nonce for DKG transaction.
+
+```bash
+frostdao dkg-nonce \
+  --name <wallet_name> \
+  --session <session_id>
+```
+
+**Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `--name` | DKG wallet name |
+| `--session` | Session ID from dkg-build-tx |
+
+**Output:** JSON with nonce data for this party
+
+---
+
+### dkg-sign
+
+Create a signature share for DKG transaction.
+
+```bash
+frostdao dkg-sign \
+  --name <wallet_name> \
+  --session <session_id> \
+  --sighash <hex> \
+  --data '<nonces_json>'
+```
+
+**Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `--name` | DKG wallet name |
+| `--session` | Session ID |
+| `--sighash` | Transaction sighash (32-byte hex) |
+| `--data` | JSON array of nonces from all signers |
+
+**Output:** JSON with signature share
+
+---
+
+### dkg-broadcast
+
+Combine signature shares and broadcast transaction.
+
+```bash
+frostdao dkg-broadcast \
+  --name <wallet_name> \
+  --unsigned-tx <hex> \
+  --data '<signature_shares_json>'
+```
+
+**Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `--name` | DKG wallet name |
+| `--unsigned-tx` | Unsigned transaction hex from dkg-build-tx |
+| `--data` | JSON array of signature shares |
+
+**Output:** JSON with `txid` and broadcast status
+
+---
+
 ## Storage Locations
 
-| File | Location | Description |
-|------|----------|-------------|
-| Single keypair | `.frost_state/bitcoin_keypair.json` | BIP340 keypair |
-| DKG public key | `.frost_state/shared_key.bin` | Group public key |
-| DKG secret share | `.frost_state/paired_secret_share.bin` | Your share |
-| HTSS metadata | `.frost_state/htss_metadata.json` | Ranks, threshold |
-| Round 1 state | `.frost_state/round1_state.json` | DKG intermediate |
+DKG wallets are stored in named folders under `.frost_state/`:
+
+```
+.frost_state/
+├── <wallet_name>/           # Each DKG wallet has its own folder
+│   ├── group_info.json      # Public info (shareable)
+│   ├── shared_key.bin       # Group public key
+│   ├── paired_secret_share.bin  # Your secret share (keep private!)
+│   ├── htss_metadata.json   # Ranks, threshold
+│   ├── all_commitments.json # Round 1 data
+│   └── round1_state.json    # DKG intermediate state
+└── bitcoin_keypair.json     # Single-signer BIP340 keypair
+```
+
+### group_info.json
+
+Generated after `keygen-finalize`, contains public info sorted by rank:
+
+```json
+{
+  "name": "treasury",
+  "group_public_key": "35a3e7ff...",
+  "taproot_address_testnet": "tb1p...",
+  "taproot_address_mainnet": "bc1p...",
+  "threshold": 2,
+  "total_parties": 3,
+  "hierarchical": false,
+  "parties": [
+    {"index": 1, "rank": 0, "verification_share": "..."},
+    {"index": 2, "rank": 0, "verification_share": "..."},
+    {"index": 3, "rank": 0, "verification_share": "..."}
+  ]
+}
+```
 
 ---
 

@@ -46,13 +46,16 @@ pub fn wasm_keygen_round1(
     {
         use crate::storage::LocalStorageImpl;
         let storage = LocalStorageImpl;
-        let cmd_result = keygen::round1_core(threshold, n_parties, my_index, rank, hierarchical, &storage)
-            .map_err(|e| JsValue::from_str(&format!("Error: {}", e)))?;
+        let cmd_result =
+            keygen::round1_core(threshold, n_parties, my_index, rank, hierarchical, &storage)
+                .map_err(|e| JsValue::from_str(&format!("Error: {}", e)))?;
         command_result_to_json(cmd_result)
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        Err(JsValue::from_str("WASM functions only available in WASM target"))
+        Err(JsValue::from_str(
+            "WASM functions only available in WASM target",
+        ))
     }
 }
 
@@ -69,7 +72,9 @@ pub fn wasm_keygen_round2(data: String) -> Result<String, JsValue> {
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        Err(JsValue::from_str("WASM functions only available in WASM target"))
+        Err(JsValue::from_str(
+            "WASM functions only available in WASM target",
+        ))
     }
 }
 
@@ -86,7 +91,9 @@ pub fn wasm_keygen_finalize(data: String) -> Result<String, JsValue> {
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        Err(JsValue::from_str("WASM functions only available in WASM target"))
+        Err(JsValue::from_str(
+            "WASM functions only available in WASM target",
+        ))
     }
 }
 
@@ -105,7 +112,9 @@ pub fn wasm_generate_nonce(session: String) -> Result<String, JsValue> {
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        Err(JsValue::from_str("WASM functions only available in WASM target"))
+        Err(JsValue::from_str(
+            "WASM functions only available in WASM target",
+        ))
     }
 }
 
@@ -122,7 +131,9 @@ pub fn wasm_sign(session: String, message: String, data: String) -> Result<Strin
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        Err(JsValue::from_str("WASM functions only available in WASM target"))
+        Err(JsValue::from_str(
+            "WASM functions only available in WASM target",
+        ))
     }
 }
 
@@ -139,13 +150,19 @@ pub fn wasm_combine(data: String) -> Result<String, JsValue> {
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        Err(JsValue::from_str("WASM functions only available in WASM target"))
+        Err(JsValue::from_str(
+            "WASM functions only available in WASM target",
+        ))
     }
 }
 
 #[wasm_bindgen]
 #[cfg_attr(not(target_arch = "wasm32"), allow(unused_variables))]
-pub fn wasm_verify(signature: String, public_key: String, message: String) -> Result<String, JsValue> {
+pub fn wasm_verify(
+    signature: String,
+    public_key: String,
+    message: String,
+) -> Result<String, JsValue> {
     #[cfg(target_arch = "wasm32")]
     {
         let cmd_result = signing::verify_signature_core(&signature, &public_key, &message)
@@ -154,7 +171,9 @@ pub fn wasm_verify(signature: String, public_key: String, message: String) -> Re
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        Err(JsValue::from_str("WASM functions only available in WASM target"))
+        Err(JsValue::from_str(
+            "WASM functions only available in WASM target",
+        ))
     }
 }
 
@@ -174,7 +193,9 @@ pub fn wasm_btc_keygen() -> Result<String, JsValue> {
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        Err(JsValue::from_str("WASM functions only available in WASM target"))
+        Err(JsValue::from_str(
+            "WASM functions only available in WASM target",
+        ))
     }
 }
 
@@ -191,7 +212,9 @@ pub fn wasm_btc_import_key(secret_hex: String) -> Result<String, JsValue> {
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        Err(JsValue::from_str("WASM functions only available in WASM target"))
+        Err(JsValue::from_str(
+            "WASM functions only available in WASM target",
+        ))
     }
 }
 
@@ -207,7 +230,9 @@ pub fn wasm_btc_get_pubkey() -> Result<String, JsValue> {
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        Err(JsValue::from_str("WASM functions only available in WASM target"))
+        Err(JsValue::from_str(
+            "WASM functions only available in WASM target",
+        ))
     }
 }
 
@@ -224,7 +249,9 @@ pub fn wasm_btc_sign(message: String) -> Result<String, JsValue> {
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        Err(JsValue::from_str("WASM functions only available in WASM target"))
+        Err(JsValue::from_str(
+            "WASM functions only available in WASM target",
+        ))
     }
 }
 
@@ -243,28 +270,41 @@ pub fn wasm_btc_sign_hex(message_hex: String) -> Result<String, JsValue> {
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        Err(JsValue::from_str("WASM functions only available in WASM target"))
+        Err(JsValue::from_str(
+            "WASM functions only available in WASM target",
+        ))
     }
 }
 
 #[wasm_bindgen]
 #[cfg_attr(not(target_arch = "wasm32"), allow(unused_variables))]
-pub fn wasm_btc_verify(signature: String, public_key: String, message: String) -> Result<String, JsValue> {
+pub fn wasm_btc_verify(
+    signature: String,
+    public_key: String,
+    message: String,
+) -> Result<String, JsValue> {
     #[cfg(target_arch = "wasm32")]
     {
-        let cmd_result = bitcoin_schnorr::verify_signature_core(&signature, &public_key, message.as_bytes())
-            .map_err(|e| JsValue::from_str(&format!("Error: {}", e)))?;
+        let cmd_result =
+            bitcoin_schnorr::verify_signature_core(&signature, &public_key, message.as_bytes())
+                .map_err(|e| JsValue::from_str(&format!("Error: {}", e)))?;
         command_result_to_json(cmd_result)
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        Err(JsValue::from_str("WASM functions only available in WASM target"))
+        Err(JsValue::from_str(
+            "WASM functions only available in WASM target",
+        ))
     }
 }
 
 #[wasm_bindgen]
 #[cfg_attr(not(target_arch = "wasm32"), allow(unused_variables))]
-pub fn wasm_btc_verify_hex(signature: String, public_key: String, message_hex: String) -> Result<String, JsValue> {
+pub fn wasm_btc_verify_hex(
+    signature: String,
+    public_key: String,
+    message_hex: String,
+) -> Result<String, JsValue> {
     #[cfg(target_arch = "wasm32")]
     {
         let message = hex::decode(&message_hex)
@@ -275,7 +315,9 @@ pub fn wasm_btc_verify_hex(signature: String, public_key: String, message_hex: S
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        Err(JsValue::from_str("WASM functions only available in WASM target"))
+        Err(JsValue::from_str(
+            "WASM functions only available in WASM target",
+        ))
     }
 }
 
@@ -292,6 +334,8 @@ pub fn wasm_btc_sign_taproot(sighash_hex: String) -> Result<String, JsValue> {
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        Err(JsValue::from_str("WASM functions only available in WASM target"))
+        Err(JsValue::from_str(
+            "WASM functions only available in WASM target",
+        ))
     }
 }

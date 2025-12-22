@@ -10,8 +10,6 @@ use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::collections::{BTreeMap, BTreeSet};
 
-const STATE_DIR: &str = ".frost_state";
-
 /// Parse space-separated JSON objects into a Vec
 /// Handles compact JSON where objects are separated by spaces
 pub fn parse_space_separated_json<T>(data: &str) -> Result<Vec<T>>
@@ -133,10 +131,10 @@ pub struct IncomingShare {
 #[derive(Serialize, Deserialize)]
 struct Round1State {
     my_index: u32,
-    my_rank: u32,        // HTSS rank (0 = highest authority)
+    my_rank: u32, // HTSS rank (0 = highest authority)
     threshold: u32,
     n_parties: u32,
-    hierarchical: bool,  // Whether HTSS mode is enabled
+    hierarchical: bool, // Whether HTSS mode is enabled
     contributor: Contributor,
     share_indices: Vec<String>, // Hex encoded ShareIndex scalars
 }
@@ -152,12 +150,187 @@ pub struct HtssMetadata {
     pub party_ranks: std::collections::BTreeMap<u32, u32>,
 }
 
+/// Party info for group_info.json
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PartyInfo {
+    pub index: u32,
+    pub rank: u32,
+    pub verification_share: String,
+}
+
+/// Group info stored after DKG finalize (shareable public info)
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct GroupInfo {
+    pub name: String,
+    pub group_public_key: String,
+    pub taproot_address_testnet: String,
+    pub taproot_address_mainnet: String,
+    pub threshold: u32,
+    pub total_parties: u32,
+    pub hierarchical: bool,
+    /// Parties sorted by rank (ascending)
+    pub parties: Vec<PartyInfo>,
+}
+
+/// Helper to get the state directory path for a given wallet name
+pub fn get_state_dir(name: &str) -> String {
+    format!(".frost_state/{}", name)
+}
+
+/// List all available DKG wallets
+pub fn list_wallets() -> Result<Vec<WalletSummary>> {
+    let base_dir = std::path::Path::new(".frost_state");
+
+    if !base_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut wallets = Vec::new();
+
+    for entry in std::fs::read_dir(base_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        // Skip if not a directory
+        if !path.is_dir() {
+            continue;
+        }
+
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown")
+            .to_string();
+
+        // Check if it's a valid wallet (has shared_key.bin)
+        let shared_key_path = path.join("shared_key.bin");
+        if !shared_key_path.exists() {
+            continue;
+        }
+
+        // Try to load group_info.json for more details
+        let group_info_path = path.join("group_info.json");
+        let (threshold, total_parties, hierarchical, address) = if group_info_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&group_info_path) {
+                if let Ok(info) = serde_json::from_str::<GroupInfo>(&content) {
+                    (
+                        Some(info.threshold),
+                        Some(info.total_parties),
+                        Some(info.hierarchical),
+                        Some(info.taproot_address_testnet),
+                    )
+                } else {
+                    (None, None, None, None)
+                }
+            } else {
+                (None, None, None, None)
+            }
+        } else {
+            // Try to load from htss_metadata.json
+            let htss_path = path.join("htss_metadata.json");
+            if htss_path.exists() {
+                if let Ok(content) = std::fs::read_to_string(&htss_path) {
+                    if let Ok(htss) = serde_json::from_str::<HtssMetadata>(&content) {
+                        (
+                            Some(htss.threshold),
+                            Some(htss.party_ranks.len() as u32),
+                            Some(htss.hierarchical),
+                            None,
+                        )
+                    } else {
+                        (None, None, None, None)
+                    }
+                } else {
+                    (None, None, None, None)
+                }
+            } else {
+                (None, None, None, None)
+            }
+        };
+
+        wallets.push(WalletSummary {
+            name,
+            threshold,
+            total_parties,
+            hierarchical,
+            address,
+        });
+    }
+
+    // Sort by name
+    wallets.sort_by(|a, b| a.name.cmp(&b.name));
+
+    Ok(wallets)
+}
+
+/// Summary info for a wallet
+#[derive(Debug, Clone)]
+pub struct WalletSummary {
+    pub name: String,
+    pub threshold: Option<u32>,
+    pub total_parties: Option<u32>,
+    pub hierarchical: Option<bool>,
+    pub address: Option<String>,
+}
+
+/// Print wallet list to console
+pub fn print_wallet_list() -> Result<()> {
+    let wallets = list_wallets()?;
+
+    if wallets.is_empty() {
+        println!("No DKG wallets found.\n");
+        println!("Create one with:");
+        println!("  frostdao keygen-round1 --name <wallet_name> --threshold <t> --n-parties <n> --my-index <i>");
+        return Ok(());
+    }
+
+    println!("DKG Wallets\n");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    for wallet in &wallets {
+        let mode = match wallet.hierarchical {
+            Some(true) => "HTSS",
+            Some(false) => "TSS",
+            None => "?",
+        };
+
+        let threshold_str = match (wallet.threshold, wallet.total_parties) {
+            (Some(t), Some(n)) => format!("{}-of-{}", t, n),
+            _ => "?".to_string(),
+        };
+
+        println!("  {} ({} {})", wallet.name, threshold_str, mode);
+
+        if let Some(addr) = &wallet.address {
+            let short_addr = if addr.len() > 20 {
+                format!("{}...{}", &addr[..10], &addr[addr.len() - 8..])
+            } else {
+                addr.clone()
+            };
+            println!("    Address: {}", short_addr);
+        }
+    }
+
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("\nUse --name <wallet_name> to select a wallet:");
+    println!(
+        "  frostdao dkg-address --name {}",
+        wallets.first().map(|w| w.name.as_str()).unwrap_or("<name>")
+    );
+    println!(
+        "  frostdao dkg-balance --name {}",
+        wallets.first().map(|w| w.name.as_str()).unwrap_or("<name>")
+    );
+
+    Ok(())
+}
+
 pub fn round1_core(
     threshold: u32,
     n_parties: u32,
     my_index: u32,
-    my_rank: u32,        // HTSS rank (0 = highest authority)
-    hierarchical: bool,  // Whether HTSS mode is enabled
+    my_rank: u32,       // HTSS rank (0 = highest authority)
+    hierarchical: bool, // Whether HTSS mode is enabled
     storage: &dyn Storage,
 ) -> Result<CommandResult> {
     let mut out = String::new();
@@ -315,18 +488,51 @@ pub fn round1_core(
 }
 
 pub fn round1(
+    name: &str,
     threshold: u32,
     n_parties: u32,
     my_index: u32,
     my_rank: u32,
     hierarchical: bool,
 ) -> Result<()> {
-    let storage = FileStorage::new(STATE_DIR)?;
-    let cmd_result = round1_core(threshold, n_parties, my_index, my_rank, hierarchical, &storage)?;
+    let state_dir = get_state_dir(name);
+    let path = std::path::Path::new(&state_dir);
+
+    // Check if folder exists and prompt for confirmation
+    if path.exists() {
+        println!("⚠️  Wallet '{}' already exists at {}", name, state_dir);
+        println!("   This will OVERWRITE your existing keys!");
+        print!("   Replace? [y/N]: ");
+        std::io::Write::flush(&mut std::io::stdout())?;
+
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input)?;
+        let input = input.trim().to_lowercase();
+
+        if input != "y" && input != "yes" {
+            println!("Aborted. Your existing wallet is safe.");
+            return Ok(());
+        }
+
+        // Remove existing folder
+        std::fs::remove_dir_all(path)?;
+        println!("   Removed existing wallet.\n");
+    }
+
+    let storage = FileStorage::new(&state_dir)?;
+    let cmd_result = round1_core(
+        threshold,
+        n_parties,
+        my_index,
+        my_rank,
+        hierarchical,
+        &storage,
+    )?;
     println!("{}", cmd_result.output);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("📋 Copy this JSON:");
     println!("{}\n", cmd_result.result);
+    println!("💾 State saved to: {}/", state_dir);
     Ok(())
 }
 
@@ -453,13 +659,26 @@ pub fn round2_core(data: &str, storage: &dyn Storage) -> Result<CommandResult> {
     })
 }
 
-pub fn round2(data: &str) -> Result<()> {
-    let storage = FileStorage::new(STATE_DIR)?;
+pub fn round2(name: &str, data: &str) -> Result<()> {
+    let state_dir = get_state_dir(name);
+    let path = std::path::Path::new(&state_dir);
+
+    if !path.exists() {
+        anyhow::bail!(
+            "Wallet '{}' not found at {}. Did you run keygen-round1 with --name {}?",
+            name,
+            state_dir,
+            name
+        );
+    }
+
+    let storage = FileStorage::new(&state_dir)?;
     let cmd_result = round2_core(data, &storage)?;
     println!("{}", cmd_result.output);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("📋 Copy this JSON:");
     println!("{}\n", cmd_result.result);
+    println!("💾 State saved to: {}/", state_dir);
     Ok(())
 }
 
@@ -655,12 +874,158 @@ pub fn finalize_core(data: &str, storage: &dyn Storage) -> Result<CommandResult>
     })
 }
 
-pub fn finalize(data: &str) -> Result<()> {
-    let storage = FileStorage::new(STATE_DIR)?;
+pub fn finalize(name: &str, data: &str) -> Result<()> {
+    let state_dir = get_state_dir(name);
+    let path = std::path::Path::new(&state_dir);
+
+    if !path.exists() {
+        anyhow::bail!(
+            "Wallet '{}' not found at {}. Did you run keygen-round1 with --name {}?",
+            name,
+            state_dir,
+            name
+        );
+    }
+
+    let storage = FileStorage::new(&state_dir)?;
     let cmd_result = finalize_core(data, &storage)?;
+
+    // Generate group_info.json
+    generate_group_info(name, &storage)?;
+
     println!("{}", cmd_result.output);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("📋 Your keys:");
     println!("{}\n", cmd_result.result);
+    println!("💾 Wallet saved to: {}/", state_dir);
+    println!("📄 Group info: {}/group_info.json", state_dir);
+    Ok(())
+}
+
+/// Generate group_info.json with parties ordered by rank
+fn generate_group_info(name: &str, storage: &dyn Storage) -> Result<()> {
+    // Load HTSS metadata
+    let htss_json = String::from_utf8(storage.read("htss_metadata.json")?)?;
+    let htss: HtssMetadata = serde_json::from_str(&htss_json)?;
+
+    // Load shared key for public key and addresses
+    let shared_key_bytes = storage.read("shared_key.bin")?;
+    let xonly_shared_key: schnorr_fun::frost::SharedKey<schnorr_fun::fun::marker::EvenY> =
+        bincode::deserialize(&shared_key_bytes)?;
+
+    // Get x-only public key bytes (32 bytes)
+    let pubkey_bytes: [u8; 32] = xonly_shared_key.public_key().to_xonly_bytes();
+    let public_key_hex = hex::encode(pubkey_bytes);
+
+    // Generate Taproot addresses
+    use bitcoin::{Address, Network, XOnlyPublicKey};
+    let xonly_pk = XOnlyPublicKey::from_slice(&pubkey_bytes)
+        .map_err(|e| anyhow::anyhow!("Invalid public key: {}", e))?;
+
+    let secp = bitcoin::secp256k1::Secp256k1::new();
+    let address_testnet = Address::p2tr(&secp, xonly_pk, None, Network::Testnet).to_string();
+    let address_mainnet = Address::p2tr(&secp, xonly_pk, None, Network::Bitcoin).to_string();
+
+    // Load commitments to extract verification shares
+    let commitments_json = String::from_utf8(storage.read("all_commitments.json")?)?;
+    let round1_outputs: Vec<Round1Output> = parse_space_separated_json(&commitments_json)?;
+
+    // Build party info with verification shares
+    let mut parties: Vec<PartyInfo> = Vec::new();
+    for output in &round1_outputs {
+        // Try to extract verification share from keygen_input (first commitment = a0*G)
+        let verification_share = match hex::decode(&output.keygen_input) {
+            Ok(keygen_input_bytes) => {
+                match bincode::deserialize::<schnorr_fun::frost::chilldkg::simplepedpop::KeygenInput>(
+                    &keygen_input_bytes,
+                ) {
+                    Ok(keygen_input) => {
+                        // The first coefficient commitment is the verification share
+                        if !keygen_input.com.is_empty() {
+                            hex::encode(keygen_input.com[0].to_bytes())
+                        } else {
+                            "unavailable".to_string()
+                        }
+                    }
+                    Err(_) => "unavailable".to_string(),
+                }
+            }
+            Err(_) => "unavailable".to_string(),
+        };
+
+        parties.push(PartyInfo {
+            index: output.party_index,
+            rank: output.rank,
+            verification_share,
+        });
+    }
+
+    // Sort parties by rank (ascending), then by index
+    parties.sort_by(|a, b| a.rank.cmp(&b.rank).then(a.index.cmp(&b.index)));
+
+    let group_info = GroupInfo {
+        name: name.to_string(),
+        group_public_key: public_key_hex,
+        taproot_address_testnet: address_testnet,
+        taproot_address_mainnet: address_mainnet,
+        threshold: htss.threshold,
+        total_parties: parties.len() as u32,
+        hierarchical: htss.hierarchical,
+        parties,
+    };
+
+    storage.write(
+        "group_info.json",
+        serde_json::to_string_pretty(&group_info)?.as_bytes(),
+    )?;
+
+    Ok(())
+}
+
+/// Regenerate group_info.json for an existing wallet
+pub fn regenerate_group_info(name: &str) -> Result<()> {
+    let state_dir = get_state_dir(name);
+    let path = std::path::Path::new(&state_dir);
+
+    if !path.exists() {
+        anyhow::bail!("Wallet '{}' not found at {}.", name, state_dir);
+    }
+
+    let storage = FileStorage::new(&state_dir)?;
+    generate_group_info(name, &storage)?;
+
+    // Read and display the generated info
+    let info_path = path.join("group_info.json");
+    let content = std::fs::read_to_string(&info_path)?;
+    let info: GroupInfo = serde_json::from_str(&content)?;
+
+    println!("Group Info for '{}'\n", name);
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("Public Key: {}", info.group_public_key);
+    println!("Threshold:  {}-of-{}", info.threshold, info.total_parties);
+    println!(
+        "Mode:       {}",
+        if info.hierarchical { "HTSS" } else { "TSS" }
+    );
+    println!();
+    println!("Addresses:");
+    println!("  Testnet: {}", info.taproot_address_testnet);
+    println!("  Mainnet: {}", info.taproot_address_mainnet);
+    println!();
+    println!("Parties (sorted by rank):");
+    for party in &info.parties {
+        let share_display = if party.verification_share.len() > 16 {
+            format!("{}...", &party.verification_share[..16])
+        } else {
+            party.verification_share.clone()
+        };
+        println!(
+            "  Party {} (rank {}): {}",
+            party.index, party.rank, share_display
+        );
+    }
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("\nSaved to: {}/group_info.json", state_dir);
+
     Ok(())
 }
