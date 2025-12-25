@@ -193,9 +193,10 @@ pub fn derive_at_path(context: &HdContext, path: &DerivationPath) -> Result<Deri
     // Accumulate tweaks (accounting for parity flips)
     // If the intermediate key was flipped, the tweak relationship changes
     let accumulated_tweak = if flip1 {
-        // When change level flipped, tweak1 was effectively negated
-        let neg_tweak1 = s!(-tweak1).public();
-        s!(neg_tweak1 + tweak2).public()
+        // When change level flipped, we need tweak1 - tweak2 so that after
+        // the parity flip negation in derive_share, the final result is correct:
+        // -(s + tweak1 - tweak2) = -s - tweak1 + tweak2, matching the derived key
+        s!(tweak1 - tweak2).public()
     } else {
         s!(tweak1 + tweak2).public()
     };
