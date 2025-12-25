@@ -31,7 +31,7 @@ use ratatui::{
 use std::io;
 
 use app::App;
-use state::{AppState, KeygenState, ReshareState, SendState};
+use state::{AddressListState, AppState, KeygenState, MnemonicState, ReshareState, SendState};
 
 use frostdao::protocol::{keygen, reshare, signing};
 use frostdao::storage::{FileStorage, Storage};
@@ -82,6 +82,8 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut A
                     AppState::Keygen(_) => handle_keygen_keys(app, key),
                     AppState::Reshare(_) => handle_reshare_keys(app, key),
                     AppState::Send(_) => handle_send_keys(app, key),
+                    AppState::AddressList(_) => handle_address_list_keys(app, key.code),
+                    AppState::MnemonicBackup(_) => handle_mnemonic_keys(app, key.code),
                 }
             }
         }
@@ -120,6 +122,37 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
                 app.state = AppState::Send(state::SendState::default());
             } else {
                 app.set_message("Select a wallet first to send");
+            }
+        }
+        KeyCode::Char('a') => {
+            // HD Address list
+            if let Some(wallet) = app.selected_wallet() {
+                let wallet_name = wallet.name.clone();
+                app.state = AppState::AddressList(AddressListState {
+                    wallet_name: wallet_name.clone(),
+                    addresses: Vec::new(),
+                    selected: 0,
+                    error: None,
+                    hd_enabled: false,
+                });
+                // Load addresses
+                app.load_hd_addresses(&wallet_name);
+            } else {
+                app.set_message("Select a wallet first to view addresses");
+            }
+        }
+        KeyCode::Char('m') => {
+            // Mnemonic backup
+            if let Some(wallet) = app.selected_wallet() {
+                let wallet_name = wallet.name.clone();
+                app.state = AppState::MnemonicBackup(MnemonicState {
+                    wallet_name: wallet_name.clone(),
+                    words: Vec::new(),
+                    error: None,
+                    revealed: false,
+                });
+            } else {
+                app.set_message("Select a wallet first to backup");
             }
         }
         _ => {}
@@ -422,15 +455,19 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
                                 use schnorr_fun::fun::marker::EvenY;
 
                                 let paired_share: PairedSecretShare<EvenY> =
-                                    bincode::deserialize(&bytes).unwrap();
+                                    match bincode::deserialize(&bytes) {
+                                        Ok(share) => share,
+                                        Err(e) => {
+                                            app.reshare_form.error_message =
+                                                Some(format!("Corrupted wallet data: {}", e));
+                                            return;
+                                        }
+                                    };
 
-                                // Extract party index from Scalar (hack from signing.rs)
-                                let my_old_index = {
-                                    let mut u32_index_bytes = [0u8; 4];
-                                    u32_index_bytes
-                                        .copy_from_slice(&paired_share.index().to_bytes()[28..]);
-                                    u32::from_be_bytes(u32_index_bytes)
-                                };
+                                // Extract party index from scalar (big-endian, last 4 bytes)
+                                let index_bytes = paired_share.index().to_bytes();
+                                let my_old_index =
+                                    u32::from_be_bytes(index_bytes[28..32].try_into().unwrap());
 
                                 match reshare::reshare_round1_core(
                                     &wallet_name,
@@ -883,6 +920,89 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
     }
 }
 
+fn handle_address_list_keys(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Esc => {
+            app.state = AppState::Home;
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if let AppState::AddressList(ref mut state) = app.state {
+                if state.selected > 0 {
+                    state.selected -= 1;
+                }
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if let AppState::AddressList(ref mut state) = app.state {
+                if state.selected + 1 < state.addresses.len() {
+                    state.selected += 1;
+                }
+            }
+        }
+        KeyCode::Char('c') => {
+            app.set_message("Address copied to clipboard (simulated)");
+        }
+        _ => {}
+    }
+}
+
+fn handle_mnemonic_keys(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Esc => {
+            app.state = AppState::Home;
+        }
+        KeyCode::Enter => {
+            if let AppState::MnemonicBackup(ref mut state) = app.state {
+                if !state.revealed {
+                    // Generate mnemonic
+                    let wallet_name = state.wallet_name.clone();
+                    let state_dir = keygen::get_state_dir(&wallet_name);
+                    match FileStorage::new(&state_dir) {
+                        Ok(storage) => match storage.read("paired_secret_share.bin") {
+                            Ok(bytes) => {
+                                use schnorr_fun::frost::PairedSecretShare;
+                                use schnorr_fun::fun::marker::EvenY;
+
+                                let paired_share: PairedSecretShare<EvenY> =
+                                    match bincode::deserialize(&bytes) {
+                                        Ok(share) => share,
+                                        Err(e) => {
+                                            state.error =
+                                                Some(format!("Corrupted wallet data: {}", e));
+                                            return;
+                                        }
+                                    };
+                                let share_bytes = paired_share.secret_share().share.to_bytes();
+
+                                match frostdao::crypto::mnemonic::share_to_mnemonic(&share_bytes) {
+                                    Ok(mnemonic) => {
+                                        state.words =
+                                            mnemonic.words().map(|s| s.to_string()).collect();
+                                        state.revealed = true;
+                                    }
+                                    Err(e) => {
+                                        state.error = Some(format!("Error: {}", e));
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                state.error = Some(format!("Cannot read share: {}", e));
+                            }
+                        },
+                        Err(e) => {
+                            state.error = Some(format!("Storage error: {}", e));
+                        }
+                    }
+                } else {
+                    // Already revealed, go home
+                    app.state = AppState::Home;
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
 fn ui(frame: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -906,6 +1026,8 @@ fn ui(frame: &mut Frame, app: &App) {
         AppState::Keygen(_) => screens::render_keygen(frame, app, &app.keygen_form, chunks[1]),
         AppState::Reshare(_) => screens::render_reshare(frame, app, &app.reshare_form, chunks[1]),
         AppState::Send(_) => screens::render_send(frame, app, &app.send_form, chunks[1]),
+        AppState::AddressList(state) => screens::render_address_list(frame, state, chunks[1]),
+        AppState::MnemonicBackup(state) => screens::render_mnemonic(frame, state, chunks[1]),
     }
 
     // Help bar
@@ -946,13 +1068,21 @@ fn render_help_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     } else {
         match &app.state {
             AppState::Home => {
-                "↑/↓:Navigate | Enter:Balance | n:Network | g:Keygen | h:Reshare | s:Send | q:Quit"
+                "↑/↓:Nav | r:Balance | n:Net | g:Keygen | h:Reshare | s:Send | a:Addr | m:Backup | q:Quit"
                     .to_string()
             }
             AppState::ChainSelect => "↑/↓:Select | Enter:Confirm | Esc:Cancel".to_string(),
             AppState::Keygen(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
             AppState::Reshare(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
             AppState::Send(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
+            AppState::AddressList(_) => "↑/↓:Navigate | c:Copy | Esc:Back".to_string(),
+            AppState::MnemonicBackup(state) => {
+                if state.revealed {
+                    "Enter:Done | Esc:Back".to_string()
+                } else {
+                    "Enter:Reveal | Esc:Cancel".to_string()
+                }
+            }
         }
     };
 

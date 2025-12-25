@@ -77,6 +77,40 @@ pub enum AppState {
 
     /// Send wizard
     Send(SendState),
+
+    /// HD Address list
+    AddressList(AddressListState),
+
+    /// Mnemonic backup screen
+    MnemonicBackup(MnemonicState),
+}
+
+/// HD Address list state
+#[derive(Clone, Default)]
+pub struct AddressListState {
+    /// Wallet name
+    pub wallet_name: String,
+    /// Addresses loaded (address, pubkey_hex, index)
+    pub addresses: Vec<(String, String, u32)>,
+    /// Currently selected index
+    pub selected: usize,
+    /// Error message if any
+    pub error: Option<String>,
+    /// Is HD enabled for this wallet
+    pub hd_enabled: bool,
+}
+
+/// Mnemonic backup state
+#[derive(Clone, Default)]
+pub struct MnemonicState {
+    /// Wallet name
+    pub wallet_name: String,
+    /// Generated mnemonic words (24)
+    pub words: Vec<String>,
+    /// Error message if any
+    pub error: Option<String>,
+    /// Whether to show the mnemonic (security confirmation)
+    pub revealed: bool,
 }
 
 /// Keygen wizard state

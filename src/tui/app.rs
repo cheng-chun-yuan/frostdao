@@ -6,7 +6,7 @@ use ratatui::widgets::ListState;
 use std::collections::HashMap;
 
 use crate::tui::screens::{KeygenFormData, ReshareFormData, SendFormData};
-use crate::tui::state::{AppState, NetworkSelection};
+use crate::tui::state::{AddressListState, AppState, NetworkSelection};
 use frostdao::protocol::keygen::{list_wallets, WalletSummary};
 use frostdao::storage::{FileStorage, Storage};
 
@@ -233,5 +233,61 @@ impl App {
     /// Clear status message
     pub fn clear_message(&mut self) {
         self.message = None;
+    }
+
+    /// Load HD addresses for a wallet
+    pub fn load_hd_addresses(&mut self, wallet_name: &str) {
+        let btc_network = self.network.to_bitcoin_network();
+        let state_dir = frostdao::protocol::keygen::get_state_dir(wallet_name);
+
+        match FileStorage::new(&state_dir) {
+            Ok(storage) => {
+                // Check if HD is enabled
+                match storage.read("hd_metadata.json") {
+                    Ok(bytes) => {
+                        let hd_json = String::from_utf8_lossy(&bytes);
+                        if let Ok(metadata) =
+                            serde_json::from_str::<frostdao::protocol::keygen::HdMetadata>(&hd_json)
+                        {
+                            if metadata.hd_enabled {
+                                // Load addresses
+                                match frostdao::btc::hd_address::list_derived_addresses(
+                                    &storage,
+                                    10,
+                                    btc_network,
+                                ) {
+                                    Ok(addresses) => {
+                                        if let AppState::AddressList(ref mut state) = self.state {
+                                            state.addresses = addresses;
+                                            state.hd_enabled = true;
+                                        }
+                                    }
+                                    Err(e) => {
+                                        if let AppState::AddressList(ref mut state) = self.state {
+                                            state.error = Some(format!("Error loading: {}", e));
+                                        }
+                                    }
+                                }
+                            } else {
+                                if let AppState::AddressList(ref mut state) = self.state {
+                                    state.error =
+                                        Some("HD not enabled for this wallet".to_string());
+                                }
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        if let AppState::AddressList(ref mut state) = self.state {
+                            state.error = Some("HD not enabled for this wallet".to_string());
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                if let AppState::AddressList(ref mut state) = self.state {
+                    state.error = Some(format!("Storage error: {}", e));
+                }
+            }
+        }
     }
 }
