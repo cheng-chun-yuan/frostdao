@@ -150,6 +150,17 @@ pub struct HtssMetadata {
     pub party_ranks: std::collections::BTreeMap<u32, u32>,
 }
 
+/// HD wallet metadata for BIP-32/BIP-44 key derivation
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct HdMetadata {
+    /// 32-byte chain code for HD derivation (hex encoded)
+    pub chain_code: String,
+    /// Whether HD derivation is enabled for this wallet
+    pub hd_enabled: bool,
+    /// Optional mnemonic hint (first/last word reminder, NOT the full phrase)
+    pub mnemonic_hint: Option<String>,
+}
+
 /// Party info for group_info.json
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PartyInfo {
@@ -842,8 +853,25 @@ pub fn finalize_core(data: &str, storage: &dyn Storage) -> Result<CommandResult>
         serde_json::to_string_pretty(&htss_metadata)?.as_bytes(),
     )?;
 
+    // Generate and save HD metadata for BIP-32/BIP-44 derivation
+    // Chain code is derived deterministically from group public key
+    let chain_code = crate::crypto::helpers::tagged_hash(
+        "FrostDAO/ChainCode",
+        &xonly_shared_key.public_key().to_xonly_bytes(),
+    );
+    let hd_metadata = HdMetadata {
+        chain_code: hex::encode(chain_code),
+        hd_enabled: true,
+        mnemonic_hint: None,
+    };
+    storage.write(
+        "hd_metadata.json",
+        serde_json::to_string_pretty(&hd_metadata)?.as_bytes(),
+    )?;
+
     out.push_str("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
     out.push_str("❄️  Key generation complete!\n");
+    out.push_str("   HD derivation enabled for multiple addresses.\n");
     out.push_str("   Compare public keys with other tables to verify!\n\n");
 
     if state.hierarchical {
