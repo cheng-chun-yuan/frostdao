@@ -7,6 +7,7 @@ mod keygen;
 mod mnemonic;
 mod reshare;
 mod send;
+mod wallet_details;
 
 pub use address_list::render_address_list;
 pub use chain_select::render_chain_select;
@@ -15,3 +16,4 @@ pub use keygen::{render_keygen, KeygenFormData};
 pub use mnemonic::render_mnemonic;
 pub use reshare::{render_reshare, ReshareFormData};
 pub use send::{render_send, SendFormData};
+pub use wallet_details::render_wallet_details;

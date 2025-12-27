@@ -50,6 +50,9 @@ pub enum AppState {
     #[default]
     Home,
 
+    /// Wallet details with action menu
+    WalletDetails(WalletDetailsState),
+
     /// Chain/network selection popup
     ChainSelect,
 
@@ -67,6 +70,57 @@ pub enum AppState {
 
     /// Mnemonic backup screen
     MnemonicBackup(MnemonicState),
+}
+
+/// Available wallet actions
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum WalletAction {
+    Send,
+    ViewAddresses,
+    BackupMnemonic,
+    Reshare,
+    FetchBalance,
+}
+
+impl WalletAction {
+    pub fn all() -> &'static [WalletAction] {
+        &[
+            WalletAction::Send,
+            WalletAction::ViewAddresses,
+            WalletAction::BackupMnemonic,
+            WalletAction::Reshare,
+            WalletAction::FetchBalance,
+        ]
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            WalletAction::Send => "Send Transaction",
+            WalletAction::ViewAddresses => "View HD Addresses",
+            WalletAction::BackupMnemonic => "Backup Mnemonic",
+            WalletAction::Reshare => "Reshare Keys",
+            WalletAction::FetchBalance => "Fetch Balance",
+        }
+    }
+
+    pub fn description(&self) -> &'static str {
+        match self {
+            WalletAction::Send => "Sign and broadcast a Bitcoin transaction",
+            WalletAction::ViewAddresses => "View derived HD addresses",
+            WalletAction::BackupMnemonic => "Backup your secret share as 24 words",
+            WalletAction::Reshare => "Proactively refresh secret shares",
+            WalletAction::FetchBalance => "Check wallet balance from mempool.space",
+        }
+    }
+}
+
+/// Wallet details state
+#[derive(Clone, Default)]
+pub struct WalletDetailsState {
+    /// Wallet name
+    pub wallet_name: String,
+    /// Selected action index
+    pub selected_action: usize,
 }
 
 /// HD Address list state

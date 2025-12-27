@@ -31,7 +31,10 @@ use ratatui::{
 use std::io;
 
 use app::App;
-use state::{AddressListState, AppState, KeygenState, MnemonicState, ReshareState, SendState};
+use state::{
+    AddressListState, AppState, KeygenState, MnemonicState, ReshareState, SendState, WalletAction,
+    WalletDetailsState,
+};
 
 use frostdao::protocol::{keygen, reshare, signing};
 use frostdao::storage::{FileStorage, Storage};
@@ -78,6 +81,7 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut A
 
                 match &app.state {
                     AppState::Home => handle_home_keys(app, key.code),
+                    AppState::WalletDetails(_) => handle_wallet_details_keys(app, key.code),
                     AppState::ChainSelect => handle_chain_select_keys(app, key.code),
                     AppState::Keygen(_) => handle_keygen_keys(app, key),
                     AppState::Reshare(_) => handle_reshare_keys(app, key),
@@ -94,7 +98,18 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
     match code {
         KeyCode::Down | KeyCode::Char('j') => app.next_wallet(),
         KeyCode::Up | KeyCode::Char('k') => app.prev_wallet(),
-        KeyCode::Enter | KeyCode::Char('r') => app.refresh_balance(),
+        KeyCode::Enter => {
+            // Go to wallet details
+            if let Some(wallet) = app.selected_wallet() {
+                app.state = AppState::WalletDetails(WalletDetailsState {
+                    wallet_name: wallet.name.clone(),
+                    selected_action: 0,
+                });
+            } else {
+                app.set_message("No wallet selected");
+            }
+        }
+        KeyCode::Char('r') => app.refresh_balance(),
         KeyCode::Char('R') => app.reload_wallets(),
         KeyCode::Char('n') => {
             app.chain_selector_index = match app.network {
@@ -200,6 +215,123 @@ fn handle_chain_select_keys(app: &mut App, code: KeyCode) {
         KeyCode::Down | KeyCode::Char('j') => app.next_network(),
         KeyCode::Enter => app.confirm_network(),
         KeyCode::Esc => app.state = AppState::Home,
+        _ => {}
+    }
+}
+
+fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
+    let state = if let AppState::WalletDetails(s) = &app.state {
+        s.clone()
+    } else {
+        return;
+    };
+
+    let actions = WalletAction::all();
+    let action_count = actions.len();
+
+    match code {
+        KeyCode::Esc => {
+            app.state = AppState::Home;
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if let AppState::WalletDetails(ref mut s) = app.state {
+                if s.selected_action > 0 {
+                    s.selected_action -= 1;
+                } else {
+                    s.selected_action = action_count - 1;
+                }
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if let AppState::WalletDetails(ref mut s) = app.state {
+                s.selected_action = (s.selected_action + 1) % action_count;
+            }
+        }
+        KeyCode::Enter => {
+            let selected_action = actions[state.selected_action];
+            let wallet_name = state.wallet_name.clone();
+
+            match selected_action {
+                WalletAction::Send => {
+                    // Go to send flow with wallet pre-selected
+                    app.send_form = screens::SendFormData::new();
+                    // Find wallet index
+                    if let Some(idx) = app.wallets.iter().position(|w| w.name == wallet_name) {
+                        app.send_form.wallet_index = idx;
+                        // Load party info
+                        if let Some(wallet) = app.wallets.get(idx) {
+                            app.send_form.threshold = wallet.threshold.unwrap_or(2);
+                            app.send_form.total_parties = wallet.total_parties.unwrap_or(3);
+                            app.send_form.selected_parties =
+                                vec![true; wallet.total_parties.unwrap_or(3) as usize];
+                        }
+                    }
+                    app.state = AppState::Send(SendState::SelectSigners { wallet_name });
+                }
+                WalletAction::ViewAddresses => {
+                    app.state = AppState::AddressList(AddressListState {
+                        wallet_name: wallet_name.clone(),
+                        addresses: Vec::new(),
+                        selected: 0,
+                        error: None,
+                        hd_enabled: false,
+                    });
+                    app.load_hd_addresses(&wallet_name);
+                }
+                WalletAction::BackupMnemonic => {
+                    let state_dir = keygen::get_state_dir(&wallet_name);
+
+                    // Scan for available party folders
+                    let mut available_parties = Vec::new();
+                    for i in 1..=10 {
+                        let party_dir = format!("{}/party{}", state_dir, i);
+                        let share_path = format!("{}/paired_secret_share.bin", party_dir);
+                        if std::path::Path::new(&share_path).exists() {
+                            available_parties.push(i);
+                        }
+                    }
+
+                    // Check for legacy structure
+                    let legacy_share_path = format!("{}/paired_secret_share.bin", state_dir);
+                    let has_legacy_share = std::path::Path::new(&legacy_share_path).exists();
+
+                    if available_parties.is_empty() && !has_legacy_share {
+                        app.set_message("No party shares found in this wallet");
+                        app.state = AppState::Home;
+                    } else if has_legacy_share && available_parties.is_empty() {
+                        app.state = AppState::MnemonicBackup(MnemonicState {
+                            wallet_name,
+                            available_parties: vec![0],
+                            selected_party: 0,
+                            words: Vec::new(),
+                            error: None,
+                            party_selected: false,
+                            revealed: false,
+                        });
+                    } else {
+                        app.state = AppState::MnemonicBackup(MnemonicState {
+                            wallet_name,
+                            available_parties,
+                            selected_party: 0,
+                            words: Vec::new(),
+                            error: None,
+                            party_selected: false,
+                            revealed: false,
+                        });
+                    }
+                }
+                WalletAction::Reshare => {
+                    app.state = AppState::Reshare(ReshareState::default());
+                }
+                WalletAction::FetchBalance => {
+                    // Find wallet and refresh balance
+                    if let Some(idx) = app.wallets.iter().position(|w| w.name == wallet_name) {
+                        app.wallet_list_state.select(Some(idx));
+                        app.refresh_balance();
+                    }
+                }
+            }
+        }
         _ => {}
     }
 }
@@ -1239,6 +1371,9 @@ fn ui(frame: &mut Frame, app: &App) {
     // Main content based on state
     match &app.state {
         AppState::Home => screens::render_home(frame, app, chunks[1]),
+        AppState::WalletDetails(state) => {
+            screens::render_wallet_details(frame, app, state, chunks[1])
+        }
         AppState::ChainSelect => {
             screens::render_home(frame, app, chunks[1]);
             screens::render_chain_select(frame, app, frame.area());
@@ -1288,8 +1423,10 @@ fn render_help_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     } else {
         match &app.state {
             AppState::Home => {
-                "↑/↓:Nav | r:Balance | n:Net | g:Keygen | h:Reshare | s:Send | a:Addr | m:Backup | q:Quit"
-                    .to_string()
+                "↑/↓:Navigate | Enter:Select Wallet | n:Network | g:New Wallet | q:Quit".to_string()
+            }
+            AppState::WalletDetails(_) => {
+                "↑/↓:Navigate | Enter:Select Action | Esc:Back".to_string()
             }
             AppState::ChainSelect => "↑/↓:Select | Enter:Confirm | Esc:Cancel".to_string(),
             AppState::Keygen(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
