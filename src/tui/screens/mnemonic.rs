@@ -12,9 +12,22 @@ use crate::tui::state::MnemonicState;
 
 /// Render the mnemonic backup screen
 pub fn render_mnemonic(frame: &mut Frame, state: &MnemonicState, area: Rect) {
-    let block = Block::default()
-        .title(format!("Share Backup - {}", state.wallet_name))
-        .borders(Borders::ALL);
+    let title = if state.party_selected {
+        let party_idx = state
+            .available_parties
+            .get(state.selected_party)
+            .copied()
+            .unwrap_or(1);
+        if party_idx == 0 {
+            format!("Share Backup - {}", state.wallet_name)
+        } else {
+            format!("Share Backup - {} (Party {})", state.wallet_name, party_idx)
+        }
+    } else {
+        format!("Share Backup - {} - Select Party", state.wallet_name)
+    };
+
+    let block = Block::default().title(title).borders(Borders::ALL);
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -30,6 +43,48 @@ pub fn render_mnemonic(frame: &mut Frame, state: &MnemonicState, area: Rect) {
         ])
         .block(Block::default());
         frame.render_widget(error_para, inner);
+        return;
+    }
+
+    // Party selection screen
+    if !state.party_selected {
+        let mut lines = vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                "Select which party's share to backup:",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(""),
+        ];
+
+        for (i, party_idx) in state.available_parties.iter().enumerate() {
+            let is_selected = i == state.selected_party;
+            let prefix = if is_selected { "▶ " } else { "  " };
+            let style = if is_selected {
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::White)
+            };
+            let label = if *party_idx == 0 {
+                format!("{}Your Share (Legacy Wallet)", prefix)
+            } else {
+                format!("{}Party {} - Secret Share", prefix, party_idx)
+            };
+            lines.push(Line::from(Span::styled(label, style)));
+        }
+
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "↑/↓: Select | Enter: Continue | Esc: Cancel",
+            Style::default().fg(Color::DarkGray),
+        )));
+
+        let para = Paragraph::new(lines).wrap(Wrap { trim: false });
+        frame.render_widget(para, inner);
         return;
     }
 
