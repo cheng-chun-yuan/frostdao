@@ -885,3 +885,364 @@ pub fn dkg_broadcast_core(
         result: serde_json::to_string(&output)?,
     })
 }
+
+// ============================================================================
+// Automated Multi-Party Signing for Local Parties
+// ============================================================================
+
+/// Result of automated FROST signing
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AutoSignResult {
+    pub txid: String,
+    pub raw_tx: String,
+    pub from_address: String,
+    pub to_address: String,
+    pub amount_sats: u64,
+    pub fee_sats: u64,
+    pub network: String,
+    pub explorer_url: String,
+    pub signers: Vec<u32>,
+    #[serde(rename = "type")]
+    pub event_type: String,
+}
+
+/// Automatically sign a transaction using all local party shares
+///
+/// This function automates the entire FROST signing flow:
+/// 1. Build unsigned transaction with real BIP341 sighash
+/// 2. Generate nonces for all selected local parties
+/// 3. Generate signature shares for all selected local parties
+/// 4. Combine signatures with taptweak adjustment
+/// 5. Broadcast or return ready-to-broadcast transaction
+pub fn frost_sign_all_local(
+    wallet_name: &str,
+    to_address: &str,
+    amount_sats: u64,
+    selected_parties: &[u32], // Party indices (1-based)
+    fee_rate: Option<u64>,
+    network: Network,
+) -> Result<CommandResult> {
+    let mut out = String::new();
+
+    out.push_str("🔐 FROST Multi-Party Signing (Automated)\n\n");
+    out.push_str(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n",
+    );
+
+    if selected_parties.is_empty() {
+        anyhow::bail!("No parties selected for signing");
+    }
+
+    out.push_str(&format!("Wallet: {}\n", wallet_name));
+    out.push_str(&format!("Signing parties: {:?}\n", selected_parties));
+    out.push_str(&format!("Destination: {}\n", to_address));
+    out.push_str(&format!("Amount: {} sats\n\n", amount_sats));
+
+    // Step 1: Load shared key from main wallet folder
+    let state_dir = get_state_dir(wallet_name);
+    let main_storage = FileStorage::new(&state_dir)?;
+
+    let shared_key_bytes = main_storage
+        .read("shared_key.bin")
+        .context("No DKG shared key found")?;
+    let shared_key: SharedKey<EvenY> = bincode::deserialize(&shared_key_bytes)?;
+
+    // Get address
+    let pubkey_bytes: [u8; 32] = shared_key.public_key().to_xonly_bytes();
+    let xonly_pubkey = XOnlyPublicKey::from_slice(&pubkey_bytes)?;
+    let secp = bitcoin::secp256k1::Secp256k1::new();
+    let from_address = Address::p2tr(&secp, xonly_pubkey, None, network);
+
+    // Parse destination
+    let dest_address = Address::from_str(to_address)
+        .context("Invalid destination address")?
+        .require_network(network)
+        .context("Address network mismatch")?;
+
+    // Step 2: Fetch UTXOs and build transaction
+    out.push_str("📥 Fetching UTXOs...\n");
+    let utxos = fetch_utxos(&from_address.to_string(), network)?;
+
+    let confirmed_utxos: Vec<_> = utxos.iter().filter(|u| u.status.confirmed).collect();
+    if confirmed_utxos.is_empty() {
+        anyhow::bail!("No confirmed UTXOs available");
+    }
+
+    let total_available: u64 = confirmed_utxos.iter().map(|u| u.value).sum();
+    out.push_str(&format!("   Available: {} sats\n", total_available));
+
+    // Get fee rate
+    let fee_estimates = fetch_fee_estimates(network)?;
+    let fee_rate = fee_rate.unwrap_or(fee_estimates.half_hour_fee);
+
+    // Estimate fee
+    let estimated_vsize: u64 = 10 + (confirmed_utxos.len() as u64 * 58) + (2 * 43);
+    let estimated_fee = estimated_vsize * fee_rate;
+
+    if total_available < amount_sats + estimated_fee {
+        anyhow::bail!(
+            "Insufficient funds. Need {} sats, have {} sats",
+            amount_sats + estimated_fee,
+            total_available
+        );
+    }
+
+    // Build transaction inputs
+    let mut tx_inputs = Vec::new();
+    let mut prevouts = Vec::new();
+
+    for utxo in &confirmed_utxos {
+        let txid = Txid::from_str(&utxo.txid)?;
+        let outpoint = OutPoint::new(txid, utxo.vout);
+
+        tx_inputs.push(TxIn {
+            previous_output: outpoint,
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+            witness: Witness::new(),
+        });
+
+        prevouts.push(TxOut {
+            value: Amount::from_sat(utxo.value),
+            script_pubkey: from_address.script_pubkey(),
+        });
+    }
+
+    // Build outputs
+    let selected_amount: u64 = confirmed_utxos.iter().map(|u| u.value).sum();
+    let mut tx_outputs = Vec::new();
+
+    tx_outputs.push(TxOut {
+        value: Amount::from_sat(amount_sats),
+        script_pubkey: dest_address.script_pubkey(),
+    });
+
+    let change_amount = selected_amount - amount_sats - estimated_fee;
+    if change_amount > 546 {
+        tx_outputs.push(TxOut {
+            value: Amount::from_sat(change_amount),
+            script_pubkey: from_address.script_pubkey(),
+        });
+    }
+
+    // Create unsigned transaction
+    let tx = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: tx_inputs,
+        output: tx_outputs,
+    };
+
+    // Compute sighash
+    let mut sighash_cache = SighashCache::new(&tx);
+    let prevouts_slice = Prevouts::All(&prevouts);
+    let sighash = sighash_cache
+        .taproot_key_spend_signature_hash(0, &prevouts_slice, TapSighashType::Default)
+        .context("Failed to compute sighash")?;
+
+    let sighash_bytes: [u8; 32] = *sighash.as_byte_array();
+    let sighash_hex = hex::encode(&sighash_bytes);
+
+    out.push_str(&format!("📝 Sighash: {}...\n\n", &sighash_hex[..16]));
+
+    // Generate session ID
+    let session_id = generate_session_id(to_address, amount_sats);
+
+    // Step 3: Load party shares and generate nonces
+    out.push_str("🔑 Generating nonces for all parties...\n");
+
+    let frost = frost::new_with_synthetic_nonces::<Sha256, rand::rngs::ThreadRng>();
+
+    let mut party_data: Vec<(
+        u32,
+        u32,
+        PairedSecretShare<EvenY>,
+        schnorr_fun::binonce::NonceKeyPair,
+    )> = Vec::new();
+    let mut nonces_map: BTreeMap<Scalar<Public, NonZero>, schnorr_fun::binonce::Nonce> =
+        BTreeMap::new();
+    let mut _nonce_outputs: Vec<NonceOutput> = Vec::new();
+
+    for &party_idx in selected_parties {
+        let party_dir = format!("{}/party{}", state_dir, party_idx);
+        let party_storage = FileStorage::new(&party_dir)
+            .with_context(|| format!("Party {} folder not found", party_idx))?;
+
+        // Load metadata
+        let metadata_json = String::from_utf8(party_storage.read("htss_metadata.json")?)?;
+        let metadata: HtssMetadata = serde_json::from_str(&metadata_json)?;
+
+        // Load paired secret share
+        let paired_share_bytes = party_storage
+            .read("paired_secret_share.bin")
+            .with_context(|| format!("Party {} secret share not found", party_idx))?;
+        let paired_share: PairedSecretShare<EvenY> = bincode::deserialize(&paired_share_bytes)?;
+
+        // Generate nonce
+        let mut nonce_rng: rand_chacha::ChaCha20Rng =
+            frost.seed_nonce_rng(paired_share, session_id.as_bytes());
+        let nonce = frost.gen_nonce(&mut nonce_rng);
+
+        // Store public nonce
+        let public_nonce = nonce.public();
+        let share_index = Scalar::<Secret, Zero>::from(party_idx)
+            .non_zero()
+            .expect("index should be nonzero")
+            .public();
+        nonces_map.insert(share_index, public_nonce);
+
+        // Create NonceOutput for compatibility
+        let public_nonce_bytes = bincode::serialize(&public_nonce)?;
+        let public_nonce_hex = hex::encode(&public_nonce_bytes);
+        _nonce_outputs.push(NonceOutput {
+            party_index: party_idx,
+            rank: metadata.my_rank,
+            session: session_id.clone(),
+            nonce: public_nonce_hex,
+            event_type: "signing_nonce".to_string(),
+        });
+
+        party_data.push((party_idx, metadata.my_rank, paired_share, nonce));
+        out.push_str(&format!("   Party {}: ✓ nonce generated\n", party_idx));
+    }
+
+    out.push_str("\n");
+
+    // Step 4: Create coordinator session and generate signature shares
+    out.push_str("✍️  Generating signature shares...\n");
+
+    let msg = Message::raw(&sighash_bytes);
+
+    // Compute tweaked public key for P2TR
+    let internal_pubkey = shared_key.public_key();
+    let internal_pubkey_bytes: [u8; 32] = internal_pubkey.to_xonly_bytes();
+    let (tweaked_pubkey, parity_flip) = compute_tweaked_pubkey(&internal_pubkey);
+    let taptweak = compute_taptweak(&internal_pubkey_bytes);
+
+    // Create coordinator session
+    let coord_session = frost.coordinator_sign_session(&shared_key, nonces_map.clone(), msg);
+    let agg_binonce = coord_session.agg_binonce();
+    let parties = coord_session.parties();
+
+    // Create sign session with tweaked pubkey
+    let sign_session = frost.party_sign_session(tweaked_pubkey, parties.clone(), agg_binonce, msg);
+
+    // Generate signature shares for each party
+    let mut _sig_shares: Vec<DkgSignatureShareOutput> = Vec::new();
+    let mut sig_shares_sum: Scalar<Public, Zero> = Scalar::zero();
+
+    for (party_idx, rank, paired_share, nonce) in party_data {
+        // Handle parity flip - negate secret share if needed
+        let sig_share = if parity_flip {
+            let negated_paired = crate::crypto::helpers::negate_paired_secret_share(&paired_share)?;
+            sign_session.sign(&negated_paired, nonce)
+        } else {
+            sign_session.sign(&paired_share, nonce)
+        };
+
+        // Add to running sum
+        let sum = s!(sig_shares_sum + sig_share);
+        sig_shares_sum = sum.public();
+
+        let sig_share_hex = hex::encode(bincode::serialize(&sig_share)?);
+        _sig_shares.push(DkgSignatureShareOutput {
+            party_index: party_idx,
+            rank,
+            session_id: session_id.clone(),
+            sighash: sighash_hex.clone(),
+            signature_share: sig_share_hex,
+            event_type: "dkg_signature_share".to_string(),
+        });
+
+        out.push_str(&format!("   Party {}: ✓ share created\n", party_idx));
+    }
+
+    out.push_str("\n");
+
+    // Step 5: Combine signatures with taptweak
+    out.push_str("🔗 Combining signature shares...\n");
+
+    // Get final nonce R
+    let final_nonce = coord_session.final_nonce();
+    let sig_r_bytes = final_nonce.to_xonly_bytes();
+
+    // Compute challenge e = H("BIP0340/challenge", R || Q || m)
+    let mut challenge_input = Vec::with_capacity(96);
+    challenge_input.extend_from_slice(&sig_r_bytes);
+    challenge_input.extend_from_slice(&tweaked_pubkey.to_xonly_bytes());
+    challenge_input.extend_from_slice(&sighash_bytes);
+    let challenge_hash = tagged_hash("BIP0340/challenge", &challenge_input);
+    let challenge: Scalar<Public, Zero> = Scalar::from_bytes_mod_order(challenge_hash);
+
+    // Compute tweak contribution e * t
+    let tweak_contribution = s!(challenge * taptweak);
+
+    // Apply taptweak adjustment
+    let sig_s_final = if parity_flip {
+        s!(sig_shares_sum - tweak_contribution)
+    } else {
+        s!(sig_shares_sum + tweak_contribution)
+    };
+    let sig_s_bytes = sig_s_final.to_bytes();
+
+    // Create 64-byte BIP340 signature
+    let mut sig_64 = [0u8; 64];
+    sig_64[..32].copy_from_slice(&sig_r_bytes);
+    sig_64[32..].copy_from_slice(&sig_s_bytes);
+
+    out.push_str(&format!(
+        "   Taptweak applied (parity_flip={})\n\n",
+        parity_flip
+    ));
+
+    // Step 6: Create signed transaction
+    let unsigned_tx_hex = bitcoin::consensus::encode::serialize_hex(&tx);
+    let tx_bytes = hex::decode(&unsigned_tx_hex)?;
+    let mut signed_tx: Transaction = bitcoin::consensus::deserialize(&tx_bytes)?;
+
+    // Add witness
+    signed_tx.input[0].witness = Witness::from_slice(&[&sig_64[..]]);
+
+    let raw_tx = bitcoin::consensus::encode::serialize_hex(&signed_tx);
+    let txid = signed_tx.compute_txid();
+
+    out.push_str("📡 Broadcasting transaction...\n");
+
+    // Broadcast
+    let explorer_url = match network {
+        Network::Testnet => format!("https://mempool.space/testnet/tx/{}", txid),
+        Network::Signet => format!("https://mempool.space/signet/tx/{}", txid),
+        Network::Bitcoin => format!("https://mempool.space/tx/{}", txid),
+        _ => format!("https://mempool.space/testnet/tx/{}", txid),
+    };
+
+    match broadcast_transaction(&raw_tx, network) {
+        Ok(_) => {
+            out.push_str(&format!("\n✅ Transaction broadcast successfully!\n"));
+            out.push_str(&format!("   TxID: {}\n", txid));
+            out.push_str(&format!("   Explorer: {}\n", explorer_url));
+        }
+        Err(e) => {
+            out.push_str(&format!("\n⚠️ Broadcast failed: {}\n", e));
+            out.push_str("   Raw transaction saved for manual broadcast.\n");
+        }
+    }
+
+    let output = AutoSignResult {
+        txid: txid.to_string(),
+        raw_tx,
+        from_address: from_address.to_string(),
+        to_address: dest_address.to_string(),
+        amount_sats,
+        fee_sats: estimated_fee,
+        network: network_name(network).to_string(),
+        explorer_url,
+        signers: selected_parties.to_vec(),
+        event_type: "frost_auto_sign".to_string(),
+    };
+
+    Ok(CommandResult {
+        output: out,
+        result: serde_json::to_string(&output)?,
+    })
+}
