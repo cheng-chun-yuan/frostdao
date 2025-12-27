@@ -60,6 +60,13 @@ fn render_wallet_list(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
+    // Split the details area into wallet info and help panel
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(10), Constraint::Length(12)])
+        .split(area);
+
+    // Wallet details
     let content = if let Some(wallet) = app.selected_wallet() {
         let mut lines = vec![
             Line::from(vec![
@@ -161,7 +168,7 @@ fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(Color::DarkGray),
             )),
             Line::from(""),
-            Line::from("Create a wallet with 'k' (keygen)"),
+            Line::from("Create a wallet with 'g' (keygen)"),
             Line::from("or use CLI:"),
             Line::from(Span::styled(
                 "  frostdao keygen-round1 --name <name> ...",
@@ -174,7 +181,89 @@ fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
         .block(Block::default().borders(Borders::ALL).title("Details"))
         .wrap(Wrap { trim: false });
 
-    frame.render_widget(details, area);
+    frame.render_widget(details, chunks[0]);
+
+    // Quick Actions help panel
+    render_quick_actions(frame, chunks[1]);
+}
+
+fn render_quick_actions(frame: &mut Frame, area: Rect) {
+    let help_lines = vec![
+        Line::from(vec![Span::styled(
+            " Quick Actions",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                " n",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  Switch Network: "),
+            Span::styled("Testnet", Style::default().fg(Color::Yellow)),
+            Span::raw(" → "),
+            Span::styled("Signet", Style::default().fg(Color::Magenta)),
+            Span::raw(" → "),
+            Span::styled("Mainnet", Style::default().fg(Color::Red)),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                " s",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  Sign/Send: Start threshold signing wizard"),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                " g",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  Keygen: Create new threshold wallet"),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                " h",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  Reshare: Proactive share refresh"),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                " a",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  Addresses: View HD derived addresses"),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                " m",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  Mnemonic: Backup share as 24 words"),
+        ]),
+    ];
+
+    let help = Paragraph::new(help_lines).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::DarkGray)),
+    );
+
+    frame.render_widget(help, area);
 }
 
 /// Get address for the selected network

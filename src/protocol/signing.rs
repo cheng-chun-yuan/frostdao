@@ -238,7 +238,18 @@ pub fn create_signature_share_core(
 
     let ranks_only: Vec<u32> = signer_ranks.iter().map(|(_, r)| *r).collect();
 
-    // Validate signer set in HTSS mode
+    // Validate signer count for threshold
+    let num_signers = nonce_outputs.len();
+    if num_signers < htss_metadata.threshold as usize {
+        anyhow::bail!(
+            "Not enough signers: have {} but need at least {} for {}-of-n threshold",
+            num_signers,
+            htss_metadata.threshold,
+            htss_metadata.threshold
+        );
+    }
+
+    // Validate signer set in HTSS mode (additional rank-based validation)
     if htss_metadata.hierarchical {
         out.push_str("🔐 HTSS Signer Validation:\n");
         out.push_str(&format!("   Signers: {:?}\n", signer_ranks));
@@ -246,6 +257,11 @@ pub fn create_signature_share_core(
         validate_signer_set(&ranks_only, htss_metadata.threshold)?;
 
         out.push_str("   ✅ Signer set is valid for HTSS!\n\n");
+    } else {
+        out.push_str(&format!(
+            "✓ Signer count validated: {} signers (threshold: {})\n\n",
+            num_signers, htss_metadata.threshold
+        ));
     }
 
     // Convert to expected format
@@ -257,15 +273,13 @@ pub fn create_signature_share_core(
         })
         .collect();
 
-    let num_signers = nonces.len();
-
     let public_key_hex = hex::encode(bincode::serialize(&shared_key)?);
     let input = NonceInput {
         nonces,
         public_key: public_key_hex,
     };
 
-    out.push_str(&format!(" Signing with {} parties\n", num_signers));
+    out.push_str(&format!("🔏 Signing with {} parties\n", num_signers));
     out.push_str(&format!("  Message: \"{}\"\n\n", message));
 
     out.push_str("📐 Using schnorr_fun's FROST signing\n");
