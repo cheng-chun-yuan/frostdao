@@ -228,6 +228,28 @@ impl App {
         self.message = Some(msg.to_string());
     }
 
+    /// Copy text to clipboard
+    pub fn copy_to_clipboard(&mut self, text: &str) {
+        match arboard::Clipboard::new() {
+            Ok(mut clipboard) => match clipboard.set_text(text) {
+                Ok(_) => {
+                    let preview = if text.len() > 20 {
+                        format!("{}...", &text[..20])
+                    } else {
+                        text.to_string()
+                    };
+                    self.message = Some(format!("Copied: {}", preview));
+                }
+                Err(e) => {
+                    self.message = Some(format!("Clipboard error: {}", e));
+                }
+            },
+            Err(e) => {
+                self.message = Some(format!("Clipboard unavailable: {}", e));
+            }
+        }
+    }
+
     /// Load HD addresses for a wallet
     pub fn load_hd_addresses(&mut self, wallet_name: &str) {
         let btc_network = self.network.to_bitcoin_network();
@@ -244,10 +266,10 @@ impl App {
                         ) {
                             Ok(metadata) => {
                                 if metadata.hd_enabled {
-                                    // Load addresses
+                                    // Load addresses using stored derived_count
                                     match frostdao::btc::hd_address::list_derived_addresses(
                                         &storage,
-                                        10,
+                                        metadata.derived_count,
                                         btc_network,
                                     ) {
                                         Ok(addresses) => {
@@ -289,6 +311,56 @@ impl App {
             Err(e) => {
                 if let AppState::AddressList(ref mut state) = self.state {
                     state.error = Some(format!("Storage error: {}", e));
+                }
+            }
+        }
+    }
+
+    /// Add a new HD address (derive next index)
+    pub fn add_hd_address(&mut self, wallet_name: &str) {
+        let state_dir = frostdao::protocol::keygen::get_state_dir(wallet_name);
+        if let Ok(storage) = FileStorage::new(&state_dir) {
+            match frostdao::btc::hd_address::add_address(&storage) {
+                Ok(new_count) => {
+                    self.message = Some(format!("Added address {}", new_count - 1));
+                    // Reload addresses
+                    self.load_hd_addresses(wallet_name);
+                }
+                Err(e) => {
+                    self.message = Some(format!("Error adding address: {}", e));
+                }
+            }
+        }
+    }
+
+    /// Remove the last HD address
+    pub fn remove_hd_address(&mut self, wallet_name: &str) {
+        let state_dir = frostdao::protocol::keygen::get_state_dir(wallet_name);
+        if let Ok(storage) = FileStorage::new(&state_dir) {
+            // Get current count first
+            if let Ok(current) = frostdao::btc::hd_address::get_derived_count(&storage) {
+                if current <= 1 {
+                    self.message = Some("Cannot remove: minimum 1 address required".to_string());
+                    return;
+                }
+            }
+
+            match frostdao::btc::hd_address::remove_address(&storage) {
+                Ok(new_count) => {
+                    self.message = Some(format!(
+                        "Removed address. Now showing {} addresses",
+                        new_count
+                    ));
+                    // Reload addresses and adjust selection if needed
+                    self.load_hd_addresses(wallet_name);
+                    if let AppState::AddressList(ref mut state) = self.state {
+                        if state.selected >= state.addresses.len() && !state.addresses.is_empty() {
+                            state.selected = state.addresses.len() - 1;
+                        }
+                    }
+                }
+                Err(e) => {
+                    self.message = Some(format!("Error removing address: {}", e));
                 }
             }
         }

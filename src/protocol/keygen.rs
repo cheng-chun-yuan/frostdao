@@ -159,6 +159,13 @@ pub struct HdMetadata {
     pub hd_enabled: bool,
     /// Optional mnemonic hint (first/last word reminder, NOT the full phrase)
     pub mnemonic_hint: Option<String>,
+    /// Number of derived addresses (defaults to 5 for backwards compatibility)
+    #[serde(default = "default_derived_count")]
+    pub derived_count: u32,
+}
+
+fn default_derived_count() -> u32 {
+    5
 }
 
 /// Party info for group_info.json
@@ -887,6 +894,7 @@ pub fn finalize_core(data: &str, storage: &dyn Storage) -> Result<CommandResult>
         chain_code: hex::encode(chain_code),
         hd_enabled: true,
         mnemonic_hint: None,
+        derived_count: 10, // Default to 10 addresses
     };
     storage.write(
         "hd_metadata.json",

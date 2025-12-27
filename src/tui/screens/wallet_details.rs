@@ -20,6 +20,65 @@ pub fn render_wallet_details(frame: &mut Frame, app: &App, state: &WalletDetails
 
     render_wallet_info(frame, app, &state.wallet_name, chunks[0]);
     render_action_menu(frame, state, chunks[1]);
+
+    // Render confirmation dialog overlay if deleting
+    if state.confirm_delete {
+        render_delete_confirmation(frame, &state.wallet_name, area);
+    }
+}
+
+fn render_delete_confirmation(frame: &mut Frame, wallet_name: &str, area: Rect) {
+    use ratatui::widgets::Clear;
+
+    // Center the dialog
+    let popup_width = 50;
+    let popup_height = 8;
+    let popup_area = Rect {
+        x: area.x + (area.width.saturating_sub(popup_width)) / 2,
+        y: area.y + (area.height.saturating_sub(popup_height)) / 2,
+        width: popup_width.min(area.width),
+        height: popup_height.min(area.height),
+    };
+
+    // Clear the area behind the popup
+    frame.render_widget(Clear, popup_area);
+
+    let content = vec![
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "⚠️  DELETE WALLET?",
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(""),
+        Line::from(vec![
+            Span::raw("This will permanently delete "),
+            Span::styled(
+                wallet_name,
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("Y", Style::default().fg(Color::Green)),
+            Span::raw(" = Yes, delete  |  "),
+            Span::styled("N", Style::default().fg(Color::Red)),
+            Span::raw(" = No, cancel"),
+        ]),
+    ];
+
+    let dialog = Paragraph::new(content)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Red))
+                .title(" Confirm Delete ")
+                .style(Style::default().bg(Color::Black)),
+        )
+        .alignment(ratatui::layout::Alignment::Center);
+
+    frame.render_widget(dialog, popup_area);
 }
 
 fn render_wallet_info(frame: &mut Frame, app: &App, wallet_name: &str, area: Rect) {

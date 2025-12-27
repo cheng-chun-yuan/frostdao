@@ -79,7 +79,7 @@ pub enum WalletAction {
     ViewAddresses,
     BackupMnemonic,
     Reshare,
-    FetchBalance,
+    DeleteWallet,
 }
 
 impl WalletAction {
@@ -89,7 +89,7 @@ impl WalletAction {
             WalletAction::ViewAddresses,
             WalletAction::BackupMnemonic,
             WalletAction::Reshare,
-            WalletAction::FetchBalance,
+            WalletAction::DeleteWallet,
         ]
     }
 
@@ -99,7 +99,7 @@ impl WalletAction {
             WalletAction::ViewAddresses => "View HD Addresses",
             WalletAction::BackupMnemonic => "Backup Mnemonic",
             WalletAction::Reshare => "Reshare Keys",
-            WalletAction::FetchBalance => "Fetch Balance",
+            WalletAction::DeleteWallet => "⚠ Delete Wallet",
         }
     }
 
@@ -109,7 +109,7 @@ impl WalletAction {
             WalletAction::ViewAddresses => "View derived HD addresses",
             WalletAction::BackupMnemonic => "Backup your secret share as 24 words",
             WalletAction::Reshare => "Proactively refresh secret shares",
-            WalletAction::FetchBalance => "Check wallet balance from mempool.space",
+            WalletAction::DeleteWallet => "Permanently delete this wallet (cannot undo!)",
         }
     }
 }
@@ -121,6 +121,8 @@ pub struct WalletDetailsState {
     pub wallet_name: String,
     /// Selected action index
     pub selected_action: usize,
+    /// Confirm delete mode
+    pub confirm_delete: bool,
 }
 
 /// HD Address list state
@@ -136,6 +138,8 @@ pub struct AddressListState {
     pub error: Option<String>,
     /// Is HD enabled for this wallet
     pub hd_enabled: bool,
+    /// Balance cache for addresses (index -> (balance_sats, utxo_count))
+    pub balance_cache: std::collections::HashMap<u32, (u64, usize)>,
 }
 
 /// Mnemonic backup state
@@ -199,6 +203,8 @@ pub enum SendState {
     SelectWallet,
     /// Select which parties will sign
     SelectSigners { wallet_name: String },
+    /// Select HD address to send from (optional)
+    SelectAddress { wallet_name: String },
     /// Enter recipient and amount
     EnterDetails { wallet_name: String },
     /// Show sighash for signing

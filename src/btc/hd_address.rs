@@ -220,6 +220,56 @@ pub fn list_addresses_core(
 }
 
 // ============================================================================
+// Address Count Management
+// ============================================================================
+
+/// Get current derived address count from HD metadata
+pub fn get_derived_count(storage: &dyn Storage) -> Result<u32> {
+    let hd_json = String::from_utf8(storage.read("hd_metadata.json")?)
+        .context("Failed to read hd_metadata.json")?;
+    let hd_metadata: HdMetadata =
+        serde_json::from_str(&hd_json).context("Failed to parse hd_metadata.json")?;
+    Ok(hd_metadata.derived_count)
+}
+
+/// Update derived address count (add or remove addresses)
+pub fn update_derived_count(storage: &dyn Storage, new_count: u32) -> Result<()> {
+    let hd_json = String::from_utf8(storage.read("hd_metadata.json")?)
+        .context("Failed to read hd_metadata.json")?;
+    let mut hd_metadata: HdMetadata =
+        serde_json::from_str(&hd_json).context("Failed to parse hd_metadata.json")?;
+
+    hd_metadata.derived_count = new_count.max(1); // Minimum 1 address
+
+    storage.write(
+        "hd_metadata.json",
+        serde_json::to_string_pretty(&hd_metadata)?.as_bytes(),
+    )?;
+
+    Ok(())
+}
+
+/// Add a new derived address (increment count)
+pub fn add_address(storage: &dyn Storage) -> Result<u32> {
+    let current = get_derived_count(storage)?;
+    let new_count = current + 1;
+    update_derived_count(storage, new_count)?;
+    Ok(new_count)
+}
+
+/// Remove the last derived address (decrement count, minimum 1)
+pub fn remove_address(storage: &dyn Storage) -> Result<u32> {
+    let current = get_derived_count(storage)?;
+    if current > 1 {
+        let new_count = current - 1;
+        update_derived_count(storage, new_count)?;
+        Ok(new_count)
+    } else {
+        Ok(1) // Keep at least 1 address
+    }
+}
+
+// ============================================================================
 // Helpers
 // ============================================================================
 

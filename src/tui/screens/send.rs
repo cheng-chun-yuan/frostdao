@@ -36,6 +36,11 @@ pub struct SendFormData {
     pub threshold: u32,
     pub selected_parties: Vec<bool>, // Which parties are selected for signing
     pub party_selector_index: usize, // Currently focused party in selector
+    // HD address selection
+    pub hd_enabled: bool,
+    pub hd_addresses: Vec<(String, String, u32)>, // (address, pubkey_hex, index)
+    pub hd_selected_index: usize,                 // Currently selected HD address
+    pub use_hd_address: bool,                     // Whether to use HD derived address
 }
 
 impl Default for SendFormData {
@@ -64,6 +69,11 @@ impl SendFormData {
             threshold: 2,
             selected_parties: vec![true, false, false], // Default: only self selected
             party_selector_index: 0,
+            // HD address selection defaults
+            hd_enabled: false,
+            hd_addresses: Vec::new(),
+            hd_selected_index: 0,
+            use_hd_address: false,
         }
     }
 
@@ -96,6 +106,29 @@ impl SendFormData {
             .map(|(i, _)| i as u32 + 1)
             .collect()
     }
+
+    /// Get the selected derivation path (if HD mode is enabled)
+    pub fn get_derivation_path(&self) -> Option<(u32, u32)> {
+        if self.use_hd_address && self.hd_enabled {
+            self.hd_addresses
+                .get(self.hd_selected_index)
+                .map(|(_, _, idx)| (0u32, *idx)) // (change=0 for receive, address_index)
+        } else {
+            None
+        }
+    }
+
+    /// Get selected HD address string
+    #[allow(dead_code)]
+    pub fn get_selected_hd_address(&self) -> Option<String> {
+        if self.use_hd_address && self.hd_enabled {
+            self.hd_addresses
+                .get(self.hd_selected_index)
+                .map(|(addr, _, _)| addr.clone())
+        } else {
+            None
+        }
+    }
 }
 
 /// Render send wizard
@@ -104,6 +137,7 @@ pub fn render_send(frame: &mut Frame, app: &App, form: &SendFormData, area: Rect
         crate::tui::state::AppState::Send(state) => match state {
             SendState::SelectWallet => render_select_wallet(frame, app, form, area),
             SendState::SelectSigners { .. } => render_select_signers(frame, form, area),
+            SendState::SelectAddress { .. } => render_select_address(frame, form, area),
             SendState::EnterDetails { .. } => render_enter_details(frame, form, area),
             SendState::ShowSighash { sighash, .. } => render_show_sighash(frame, sighash, area),
             SendState::GenerateNonce { nonce_output, .. } => {
@@ -367,11 +401,163 @@ fn render_select_signers(frame: &mut Frame, form: &SendFormData, area: Rect) {
     frame.render_widget(help, chunks[4]);
 }
 
+fn render_select_address(frame: &mut Frame, form: &SendFormData, area: Rect) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .title(" Send - Step 3: Select Address (HD Derivation) ");
+
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(4), // Header info
+            Constraint::Min(8),    // Address list
+            Constraint::Length(3), // Selection info
+            Constraint::Length(2), // Error
+            Constraint::Length(2), // Help
+        ])
+        .split(inner);
+
+    // Header with HD info
+    let header = if form.hd_enabled {
+        Paragraph::new(vec![
+            Line::from(vec![Span::styled(
+                "📍 Select an HD-derived address to send from:",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("   BIP-44 Path: ", Style::default().fg(Color::Gray)),
+                Span::styled("m/44'/0'/0'/0/", Style::default().fg(Color::Cyan)),
+                Span::styled("<index>", Style::default().fg(Color::Yellow)),
+            ]),
+        ])
+    } else {
+        Paragraph::new(vec![
+            Line::from(vec![Span::styled(
+                "⚠️  HD derivation not available for this wallet",
+                Style::default().fg(Color::Red),
+            )]),
+            Line::from(""),
+            Line::from("   This wallet was created without HD support."),
+            Line::from("   Will use root address for signing."),
+        ])
+    };
+    frame.render_widget(header, chunks[0]);
+
+    // Address list
+    if form.hd_enabled && !form.hd_addresses.is_empty() {
+        let mut addr_lines = vec![];
+
+        // Option to use root address
+        let root_focused = !form.use_hd_address;
+        let root_prefix = if root_focused { "▶ " } else { "  " };
+        let root_style = if root_focused {
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::White)
+        };
+        addr_lines.push(Line::from(vec![
+            Span::styled(root_prefix, root_style),
+            Span::styled("[Root Address] ", root_style),
+            Span::styled("(no derivation)", Style::default().fg(Color::DarkGray)),
+        ]));
+        addr_lines.push(Line::from(""));
+
+        // HD derived addresses
+        for (i, (addr, _, idx)) in form.hd_addresses.iter().enumerate() {
+            let is_selected = form.use_hd_address && i == form.hd_selected_index;
+            let prefix = if is_selected { "▶ " } else { "  " };
+
+            let style = if is_selected {
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::White)
+            };
+
+            let path_str = format!("0/{}", idx);
+            let short_addr = if addr.len() > 20 {
+                format!("{}...{}", &addr[..10], &addr[addr.len() - 8..])
+            } else {
+                addr.clone()
+            };
+
+            addr_lines.push(Line::from(vec![
+                Span::styled(prefix, style),
+                Span::styled(format!("[{}] ", path_str), Style::default().fg(Color::Cyan)),
+                Span::styled(short_addr, style),
+            ]));
+        }
+
+        let addr_list = Paragraph::new(addr_lines).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Available Addresses"),
+        );
+        frame.render_widget(addr_list, chunks[1]);
+    } else {
+        let no_hd = Paragraph::new("No HD addresses available")
+            .style(Style::default().fg(Color::DarkGray))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Available Addresses"),
+            );
+        frame.render_widget(no_hd, chunks[1]);
+    }
+
+    // Selection info
+    let selection_info = if form.use_hd_address && form.hd_enabled {
+        if let Some((_addr, _, idx)) = form.hd_addresses.get(form.hd_selected_index) {
+            Paragraph::new(vec![Line::from(vec![
+                Span::styled("Selected: ", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    format!("HD Address at path 0/{}", idx),
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ])])
+        } else {
+            Paragraph::new("")
+        }
+    } else {
+        Paragraph::new(vec![Line::from(vec![
+            Span::styled("Selected: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                "Root Address (no HD tweak)",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ])])
+    };
+    frame.render_widget(selection_info, chunks[2]);
+
+    if let Some(error) = &form.error_message {
+        let error_para = Paragraph::new(error.as_str()).style(Style::default().fg(Color::Red));
+        frame.render_widget(error_para, chunks[3]);
+    }
+
+    let help = Paragraph::new("↑/↓: Navigate | Enter: Continue | Esc: Back")
+        .style(Style::default().fg(Color::DarkGray));
+    frame.render_widget(help, chunks[4]);
+}
+
 fn render_enter_details(frame: &mut Frame, form: &SendFormData, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan))
-        .title(" Send - Step 3: Transaction Details ");
+        .title(" Send - Step 4: Transaction Details ");
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -412,7 +598,7 @@ fn render_show_sighash(frame: &mut Frame, sighash: &str, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan))
-        .title(" Send - Step 4: Sighash (Message to Sign) ");
+        .title(" Send - Step 5: Sighash (Message to Sign) ");
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -451,7 +637,7 @@ fn render_generate_nonce(frame: &mut Frame, nonce_output: &str, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan))
-        .title(" Send - Step 5: Your Nonce ");
+        .title(" Send - Step 6: Your Nonce ");
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -506,7 +692,7 @@ fn render_enter_nonces(frame: &mut Frame, form: &SendFormData, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan))
-        .title(" Send - Step 6: Collect Nonces ");
+        .title(" Send - Step 7: Collect Nonces ");
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -590,7 +776,7 @@ fn render_generate_share(frame: &mut Frame, share_output: &str, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan))
-        .title(" Send - Step 7: Your Signature Share ");
+        .title(" Send - Step 8: Your Signature Share ");
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -626,7 +812,7 @@ fn render_combine_shares(frame: &mut Frame, form: &SendFormData, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan))
-        .title(" Send - Step 8: Combine Signatures (Aggregator) ");
+        .title(" Send - Step 9: Combine Signatures (Aggregator) ");
 
     let inner = block.inner(area);
     frame.render_widget(block, area);

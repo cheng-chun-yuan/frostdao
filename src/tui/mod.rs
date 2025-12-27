@@ -104,6 +104,7 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
                 app.state = AppState::WalletDetails(WalletDetailsState {
                     wallet_name: wallet.name.clone(),
                     selected_action: 0,
+                    confirm_delete: false,
                 });
             } else {
                 app.set_message("No wallet selected");
@@ -149,6 +150,7 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
                     selected: 0,
                     error: None,
                     hd_enabled: false,
+                    balance_cache: std::collections::HashMap::new(),
                 });
                 // Load addresses
                 app.load_hd_addresses(&wallet_name);
@@ -226,6 +228,38 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
         return;
     };
 
+    // Handle confirm delete mode
+    if state.confirm_delete {
+        match code {
+            KeyCode::Char('y') | KeyCode::Char('Y') => {
+                // Actually delete the wallet
+                let wallet_name = state.wallet_name.clone();
+                let state_dir = keygen::get_state_dir(&wallet_name);
+                match std::fs::remove_dir_all(&state_dir) {
+                    Ok(_) => {
+                        app.set_message(&format!("Wallet '{}' deleted", wallet_name));
+                        app.reload_wallets();
+                        app.state = AppState::Home;
+                    }
+                    Err(e) => {
+                        app.set_message(&format!("Failed to delete: {}", e));
+                        if let AppState::WalletDetails(ref mut s) = app.state {
+                            s.confirm_delete = false;
+                        }
+                    }
+                }
+            }
+            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                // Cancel delete
+                if let AppState::WalletDetails(ref mut s) = app.state {
+                    s.confirm_delete = false;
+                }
+            }
+            _ => {}
+        }
+        return;
+    }
+
     let actions = WalletAction::all();
     let action_count = actions.len();
 
@@ -275,6 +309,7 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
                         selected: 0,
                         error: None,
                         hd_enabled: false,
+                        balance_cache: std::collections::HashMap::new(),
                     });
                     app.load_hd_addresses(&wallet_name);
                 }
@@ -323,13 +358,31 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
                 WalletAction::Reshare => {
                     app.state = AppState::Reshare(ReshareState::default());
                 }
-                WalletAction::FetchBalance => {
-                    // Find wallet and refresh balance
-                    if let Some(idx) = app.wallets.iter().position(|w| w.name == wallet_name) {
-                        app.wallet_list_state.select(Some(idx));
-                        app.refresh_balance();
+                WalletAction::DeleteWallet => {
+                    // Show confirmation dialog
+                    if let AppState::WalletDetails(ref mut s) = app.state {
+                        s.confirm_delete = true;
                     }
                 }
+            }
+        }
+        KeyCode::Char('c') => {
+            // Copy wallet address to clipboard
+            let addr_to_copy = app
+                .wallets
+                .iter()
+                .find(|w| w.name == state.wallet_name)
+                .and_then(|w| w.address.clone());
+            if let Some(addr) = addr_to_copy {
+                app.copy_to_clipboard(&addr);
+            }
+        }
+        KeyCode::Char('b') => {
+            // Quick fetch balance
+            let wallet_name = state.wallet_name.clone();
+            if let Some(idx) = app.wallets.iter().position(|w| w.name == wallet_name) {
+                app.wallet_list_state.select(Some(idx));
+                app.refresh_balance();
             }
         }
         _ => {}
@@ -475,10 +528,6 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
             KeyCode::Enter => {
                 app.state = AppState::Keygen(KeygenState::Round2Input);
             }
-            KeyCode::Char('c') => {
-                // Copy to clipboard (placeholder - would need arboard crate)
-                app.set_message("Output copied to clipboard (simulated)");
-            }
             _ => {}
         },
         AppState::Keygen(KeygenState::Round2Input) => match key.code {
@@ -526,9 +575,6 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
             }
             KeyCode::Enter => {
                 app.state = AppState::Keygen(KeygenState::FinalizeInput);
-            }
-            KeyCode::Char('c') => {
-                app.set_message("Output copied to clipboard (simulated)");
             }
             _ => {}
         },
@@ -727,9 +773,6 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
             KeyCode::Enter => {
                 // New party: go to finalize
                 app.state = AppState::Reshare(ReshareState::FinalizeInput);
-            }
-            KeyCode::Char('c') => {
-                app.set_message("Output copied to clipboard (simulated)");
             }
             _ => {}
         },
@@ -933,13 +976,84 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     return;
                 }
                 app.send_form.error_message = None;
+
+                // Load HD addresses for address selection
+                let state_dir = keygen::get_state_dir(&wallet_name);
+                let network = app.network.to_bitcoin_network();
+                let (hd_enabled, hd_addresses) = match FileStorage::new(&state_dir) {
+                    Ok(storage) => {
+                        // Check if HD metadata exists and get derived_count
+                        match storage.read("hd_metadata.json") {
+                            Ok(bytes) => {
+                                let hd_json = String::from_utf8_lossy(&bytes);
+                                match serde_json::from_str::<keygen::HdMetadata>(&hd_json) {
+                                    Ok(metadata) if metadata.hd_enabled => {
+                                        match frostdao::btc::hd_address::list_derived_addresses(
+                                            &storage,
+                                            metadata.derived_count,
+                                            network,
+                                        ) {
+                                            Ok(addrs) => (true, addrs),
+                                            Err(_) => (true, Vec::new()),
+                                        }
+                                    }
+                                    _ => (false, Vec::new()),
+                                }
+                            }
+                            Err(_) => (false, Vec::new()),
+                        }
+                    }
+                    Err(_) => (false, Vec::new()),
+                };
+
+                app.send_form.hd_enabled = hd_enabled;
+                app.send_form.hd_addresses = hd_addresses;
+                app.send_form.hd_selected_index = 0;
+                app.send_form.use_hd_address = false;
+
+                app.state = AppState::Send(SendState::SelectAddress {
+                    wallet_name: wallet_name.clone(),
+                });
+            }
+            _ => {}
+        },
+        AppState::Send(SendState::SelectAddress { wallet_name }) => match key.code {
+            KeyCode::Esc => {
+                app.state = AppState::Send(SendState::SelectSigners {
+                    wallet_name: wallet_name.clone(),
+                });
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if app.send_form.use_hd_address {
+                    if app.send_form.hd_selected_index > 0 {
+                        app.send_form.hd_selected_index -= 1;
+                    } else {
+                        // Wrap to root address
+                        app.send_form.use_hd_address = false;
+                    }
+                }
+                // If at root address and pressing up, do nothing
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if !app.send_form.use_hd_address {
+                    // At root, move to first HD address if available
+                    if !app.send_form.hd_addresses.is_empty() {
+                        app.send_form.use_hd_address = true;
+                        app.send_form.hd_selected_index = 0;
+                    }
+                } else if app.send_form.hd_selected_index + 1 < app.send_form.hd_addresses.len() {
+                    app.send_form.hd_selected_index += 1;
+                }
+            }
+            KeyCode::Enter => {
+                app.send_form.error_message = None;
                 app.state = AppState::Send(SendState::EnterDetails { wallet_name });
             }
             _ => {}
         },
         AppState::Send(SendState::EnterDetails { wallet_name }) => match key.code {
             KeyCode::Esc => {
-                app.state = AppState::Send(SendState::SelectSigners {
+                app.state = AppState::Send(SendState::SelectAddress {
                     wallet_name: wallet_name.clone(),
                 });
             }
@@ -987,12 +1101,16 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 // Get network from app
                 let network = app.network.to_bitcoin_network();
 
+                // Get derivation path if HD address selected
+                let derivation_path = app.send_form.get_derivation_path();
+
                 // Call automated FROST signing
                 match frostdao::protocol::dkg_tx::frost_sign_all_local(
                     &wallet_name,
                     &to_addr,
                     amount,
                     &selected_parties,
+                    derivation_path,
                     None, // Use default fee rate
                     network,
                 ) {
@@ -1033,9 +1151,6 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     wallet_name: wallet_name.clone(),
                 });
             }
-            KeyCode::Char('c') => {
-                app.set_message("Sighash copied to clipboard (simulated)");
-            }
             KeyCode::Enter => {
                 // Generate nonce
                 let state_dir = keygen::get_state_dir(&wallet_name);
@@ -1073,9 +1188,6 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     sighash,
                     session_id,
                 });
-            }
-            KeyCode::Char('c') => {
-                app.set_message("Nonce copied to clipboard (simulated)");
             }
             KeyCode::Enter => {
                 // Pre-fill with my nonce
@@ -1257,7 +1369,87 @@ fn handle_address_list_keys(app: &mut App, code: KeyCode) {
             }
         }
         KeyCode::Char('c') => {
-            app.set_message("Address copied to clipboard (simulated)");
+            // Copy selected address to clipboard
+            let addr_to_copy = if let AppState::AddressList(ref state) = app.state {
+                state
+                    .addresses
+                    .get(state.selected)
+                    .map(|(addr, _, _)| addr.clone())
+            } else {
+                None
+            };
+            if let Some(addr) = addr_to_copy {
+                app.copy_to_clipboard(&addr);
+            }
+        }
+        KeyCode::Char('b') => {
+            // Fetch balance for selected address
+            let addr_info = if let AppState::AddressList(ref state) = app.state {
+                state
+                    .addresses
+                    .get(state.selected)
+                    .map(|(addr, _, idx)| (addr.clone(), *idx))
+            } else {
+                None
+            };
+
+            if let Some((addr, idx)) = addr_info {
+                app.set_message(&format!("Fetching balance for address {}...", idx));
+
+                // Fetch balance from mempool.space
+                let api_base = app.network.mempool_api_base();
+                let url = format!("{}/address/{}/utxo", api_base, addr);
+
+                match reqwest::blocking::Client::new().get(&url).send() {
+                    Ok(response) => match response.json::<Vec<serde_json::Value>>() {
+                        Ok(utxos) => {
+                            let balance: u64 = utxos
+                                .iter()
+                                .filter_map(|u| u.get("value").and_then(|v| v.as_u64()))
+                                .sum();
+                            let utxo_count = utxos.len();
+
+                            if let AppState::AddressList(ref mut state) = app.state {
+                                state.balance_cache.insert(idx, (balance, utxo_count));
+                            }
+
+                            let btc = balance as f64 / 100_000_000.0;
+                            app.set_message(&format!(
+                                "Address {}: {} sats ({:.8} BTC), {} UTXOs",
+                                idx, balance, btc, utxo_count
+                            ));
+                        }
+                        Err(e) => {
+                            app.set_message(&format!("Failed to parse response: {}", e));
+                        }
+                    },
+                    Err(e) => {
+                        app.set_message(&format!("Failed to fetch balance: {}", e));
+                    }
+                }
+            }
+        }
+        KeyCode::Char('+') | KeyCode::Char('a') => {
+            // Add new HD address
+            let wallet_name = if let AppState::AddressList(ref state) = app.state {
+                Some(state.wallet_name.clone())
+            } else {
+                None
+            };
+            if let Some(name) = wallet_name {
+                app.add_hd_address(&name);
+            }
+        }
+        KeyCode::Char('-') | KeyCode::Char('x') => {
+            // Remove last HD address
+            let wallet_name = if let AppState::AddressList(ref state) = app.state {
+                Some(state.wallet_name.clone())
+            } else {
+                None
+            };
+            if let Some(name) = wallet_name {
+                app.remove_hd_address(&name);
+            }
         }
         _ => {}
     }
@@ -1426,7 +1618,7 @@ fn render_help_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
                 "↑/↓:Navigate | Enter:Select Wallet | n:Network | g:New Wallet | q:Quit".to_string()
             }
             AppState::WalletDetails(_) => {
-                "↑/↓:Navigate | Enter:Select Action | Esc:Back".to_string()
+                "↑/↓:Navigate | Enter:Select | b:Balance | c:Copy | Esc:Back".to_string()
             }
             AppState::ChainSelect => "↑/↓:Select | Enter:Confirm | Esc:Cancel".to_string(),
             AppState::Keygen(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),

@@ -911,14 +911,20 @@ pub struct AutoSignResult {
 /// This function automates the entire FROST signing flow:
 /// 1. Build unsigned transaction with real BIP341 sighash
 /// 2. Generate nonces for all selected local parties
-/// 3. Generate signature shares for all selected local parties
+/// 3. Generate signature shares for all selected local parties (with HD tweak if specified)
 /// 4. Combine signatures with taptweak adjustment
 /// 5. Broadcast or return ready-to-broadcast transaction
+///
+/// ## HD Derivation
+/// If `derivation_path` is provided as `Some((change, address_index))`, the signing
+/// will use the HD-derived key at that BIP-44 path. Each party's secret share is
+/// tweaked locally using the same public derivation info.
 pub fn frost_sign_all_local(
     wallet_name: &str,
     to_address: &str,
     amount_sats: u64,
-    selected_parties: &[u32], // Party indices (1-based)
+    selected_parties: &[u32],            // Party indices (1-based)
+    derivation_path: Option<(u32, u32)>, // Optional (change, address_index) for HD signing
     fee_rate: Option<u64>,
     network: Network,
 ) -> Result<CommandResult> {
@@ -947,11 +953,40 @@ pub fn frost_sign_all_local(
         .context("No DKG shared key found")?;
     let shared_key: SharedKey<EvenY> = bincode::deserialize(&shared_key_bytes)?;
 
-    // Get address
-    let pubkey_bytes: [u8; 32] = shared_key.public_key().to_xonly_bytes();
-    let xonly_pubkey = XOnlyPublicKey::from_slice(&pubkey_bytes)?;
-    let secp = bitcoin::secp256k1::Secp256k1::new();
-    let from_address = Address::p2tr(&secp, xonly_pubkey, None, network);
+    // HD Derivation: If path specified, derive child key info
+    let hd_derived_info: Option<crate::crypto::hd::DerivedKeyInfo> =
+        if let Some((change, index)) = derivation_path {
+            out.push_str(&format!("📍 Using HD path: 0/{}\n", index));
+
+            // Load HD context using the proper function (reads hd_metadata.json)
+            let hd_context = crate::btc::hd_address::load_hd_context(&main_storage)
+                .context("HD context not found. Wallet may not support HD derivation.")?;
+
+            let path = crate::crypto::hd::DerivationPath {
+                change,
+                address_index: index,
+            };
+            let derived = crate::crypto::hd::derive_at_path(&hd_context, &path)
+                .context("Failed to derive HD key")?;
+            Some(derived)
+        } else {
+            None
+        };
+
+    // Get address (use derived key if HD, otherwise root)
+    let (from_pubkey, from_address) = if let Some(ref derived) = hd_derived_info {
+        let pubkey_bytes: [u8; 32] = derived.public_key.to_xonly_bytes();
+        let xonly_pubkey = XOnlyPublicKey::from_slice(&pubkey_bytes)?;
+        let secp = bitcoin::secp256k1::Secp256k1::new();
+        let addr = Address::p2tr(&secp, xonly_pubkey, None, network);
+        (derived.public_key, addr)
+    } else {
+        let pubkey_bytes: [u8; 32] = shared_key.public_key().to_xonly_bytes();
+        let xonly_pubkey = XOnlyPublicKey::from_slice(&pubkey_bytes)?;
+        let secp = bitcoin::secp256k1::Secp256k1::new();
+        let addr = Address::p2tr(&secp, xonly_pubkey, None, network);
+        (shared_key.public_key(), addr)
+    };
 
     // Parse destination
     let dest_address = Address::from_str(to_address)
@@ -1076,9 +1111,18 @@ pub fn frost_sign_all_local(
         let paired_share_bytes = party_storage
             .read("paired_secret_share.bin")
             .with_context(|| format!("Party {} secret share not found", party_idx))?;
-        let paired_share: PairedSecretShare<EvenY> = bincode::deserialize(&paired_share_bytes)?;
+        let root_paired_share: PairedSecretShare<EvenY> =
+            bincode::deserialize(&paired_share_bytes)?;
 
-        // Generate nonce
+        // Apply HD derivation if specified
+        let paired_share = if let Some(ref derived_info) = hd_derived_info {
+            crate::crypto::hd::derive_share(&root_paired_share, derived_info)
+                .with_context(|| format!("Failed to derive HD share for party {}", party_idx))?
+        } else {
+            root_paired_share
+        };
+
+        // Generate nonce (use the derived or root share)
         let mut nonce_rng: rand_chacha::ChaCha20Rng =
             frost.seed_nonce_rng(paired_share, session_id.as_bytes());
         let nonce = frost.gen_nonce(&mut nonce_rng);
@@ -1114,17 +1158,29 @@ pub fn frost_sign_all_local(
     let msg = Message::raw(&sighash_bytes);
 
     // Compute tweaked public key for P2TR
-    let internal_pubkey = shared_key.public_key();
+    // Use derived key (from_pubkey) if HD, otherwise root key
+    let internal_pubkey = from_pubkey;
     let internal_pubkey_bytes: [u8; 32] = internal_pubkey.to_xonly_bytes();
     let (tweaked_pubkey, parity_flip) = compute_tweaked_pubkey(&internal_pubkey);
     let taptweak = compute_taptweak(&internal_pubkey_bytes);
 
-    // Create coordinator session
-    let coord_session = frost.coordinator_sign_session(&shared_key, nonces_map.clone(), msg);
+    // For HD signing, construct a SharedKey with the derived public key
+    // The coordinator session must use the same public key as the derived shares
+    let signing_shared_key = if hd_derived_info.is_some() {
+        // Use derived public key for HD signing
+        crate::crypto::helpers::construct_shared_key(&from_pubkey)
+            .context("Failed to construct derived SharedKey")?
+    } else {
+        // Use root shared key for non-HD signing
+        shared_key.clone()
+    };
+
+    let coord_session =
+        frost.coordinator_sign_session(&signing_shared_key, nonces_map.clone(), msg);
     let agg_binonce = coord_session.agg_binonce();
     let parties = coord_session.parties();
 
-    // Create sign session with tweaked pubkey
+    // Create sign session with tweaked pubkey (of derived key if HD)
     let sign_session = frost.party_sign_session(tweaked_pubkey, parties.clone(), agg_binonce, msg);
 
     // Generate signature shares for each party
