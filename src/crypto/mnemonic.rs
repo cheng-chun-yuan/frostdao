@@ -320,7 +320,8 @@ mod tests {
         assert_eq!(original_mnemonic.to_string(), restored_mnemonic.to_string());
 
         // Generate again with same words should give same result
-        let (_, expected_key, expected_chain) = generate_master_from_mnemonic("test").unwrap();
+        // Note: expected_key/expected_chain won't match restored because generate creates NEW random mnemonic
+        let (_, _expected_key, _expected_chain) = generate_master_from_mnemonic("test").unwrap();
 
         // Note: These won't match because generate creates NEW random mnemonic
         // But restore should be deterministic

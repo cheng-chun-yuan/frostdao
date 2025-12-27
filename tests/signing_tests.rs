@@ -10,7 +10,7 @@ const TEST_WALLET_PREFIX: &str = "test_sign";
 static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
 
 fn get_unique_prefix() -> String {
-    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+    let _id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
     let time = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()

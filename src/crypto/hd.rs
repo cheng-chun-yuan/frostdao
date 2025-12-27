@@ -378,7 +378,7 @@ mod tests {
         );
 
         // Verify derivation is consistent (same inputs = same outputs)
-        let (child_pubkey2, chain2, tweak2, parity2) =
+        let (child_pubkey2, _chain2, tweak2, _parity2) =
             derive_child_pubkey(&master_pubkey, &chain_code, 5).unwrap();
         assert_eq!(
             child_pubkey.to_xonly_bytes(),
