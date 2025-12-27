@@ -125,8 +125,8 @@ fn network_name(network: Network) -> &'static str {
     }
 }
 
-// Use shared tagged_hash from crypto_helpers
-use crate::crypto_helpers::tagged_hash;
+// Use shared tagged_hash from crypto helpers
+use crate::crypto::helpers::tagged_hash;
 
 /// BIP340/challenge hash
 fn challenge_hash(r_bytes: &[u8; 32], pubkey_bytes: &[u8; 32], message: &[u8]) -> [u8; 32] {
@@ -463,7 +463,7 @@ pub fn check_dkg_balance_core(network: Network, storage: &dyn Storage) -> Result
 
 /// CLI wrapper for DKG testnet balance
 pub fn check_dkg_balance_testnet(name: &str) -> Result<()> {
-    let state_dir = crate::keygen::get_state_dir(name);
+    let state_dir = crate::protocol::keygen::get_state_dir(name);
     let path = std::path::Path::new(&state_dir);
 
     if !path.exists() {

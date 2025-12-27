@@ -31,12 +31,13 @@ use ratatui::{
 use std::io;
 
 use app::App;
-use state::{AppState, KeygenState, ReshareState, SendState};
+use state::{
+    AddressListState, AppState, KeygenState, MnemonicState, ReshareState, SendState, WalletAction,
+    WalletDetailsState,
+};
 
-use crate::keygen;
-use crate::reshare;
-use crate::signing;
-use crate::storage::{FileStorage, Storage};
+use frostdao::protocol::{keygen, reshare, signing};
+use frostdao::storage::{FileStorage, Storage};
 
 /// Run the terminal UI
 pub fn run_tui() -> Result<()> {
@@ -80,10 +81,13 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut A
 
                 match &app.state {
                     AppState::Home => handle_home_keys(app, key.code),
+                    AppState::WalletDetails(_) => handle_wallet_details_keys(app, key.code),
                     AppState::ChainSelect => handle_chain_select_keys(app, key.code),
                     AppState::Keygen(_) => handle_keygen_keys(app, key),
                     AppState::Reshare(_) => handle_reshare_keys(app, key),
                     AppState::Send(_) => handle_send_keys(app, key),
+                    AppState::AddressList(_) => handle_address_list_keys(app, key.code),
+                    AppState::MnemonicBackup(_) => handle_mnemonic_keys(app, key.code),
                 }
             }
         }
@@ -94,7 +98,18 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
     match code {
         KeyCode::Down | KeyCode::Char('j') => app.next_wallet(),
         KeyCode::Up | KeyCode::Char('k') => app.prev_wallet(),
-        KeyCode::Enter | KeyCode::Char('r') => app.refresh_balance(),
+        KeyCode::Enter => {
+            // Go to wallet details
+            if let Some(wallet) = app.selected_wallet() {
+                app.state = AppState::WalletDetails(WalletDetailsState {
+                    wallet_name: wallet.name.clone(),
+                    selected_action: 0,
+                });
+            } else {
+                app.set_message("No wallet selected");
+            }
+        }
+        KeyCode::Char('r') => app.refresh_balance(),
         KeyCode::Char('R') => app.reload_wallets(),
         KeyCode::Char('n') => {
             app.chain_selector_index = match app.network {
@@ -124,6 +139,72 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
                 app.set_message("Select a wallet first to send");
             }
         }
+        KeyCode::Char('a') => {
+            // HD Address list
+            if let Some(wallet) = app.selected_wallet() {
+                let wallet_name = wallet.name.clone();
+                app.state = AppState::AddressList(AddressListState {
+                    wallet_name: wallet_name.clone(),
+                    addresses: Vec::new(),
+                    selected: 0,
+                    error: None,
+                    hd_enabled: false,
+                });
+                // Load addresses
+                app.load_hd_addresses(&wallet_name);
+            } else {
+                app.set_message("Select a wallet first to view addresses");
+            }
+        }
+        KeyCode::Char('m') => {
+            // Mnemonic backup
+            if let Some(wallet) = app.selected_wallet() {
+                let wallet_name = wallet.name.clone();
+                let state_dir = keygen::get_state_dir(&wallet_name);
+
+                // Scan for available party folders
+                let mut available_parties = Vec::new();
+                for i in 1..=10 {
+                    // Check up to 10 parties
+                    let party_dir = format!("{}/party{}", state_dir, i);
+                    let share_path = format!("{}/paired_secret_share.bin", party_dir);
+                    if std::path::Path::new(&share_path).exists() {
+                        available_parties.push(i);
+                    }
+                }
+
+                // Check for legacy structure (share directly in wallet folder)
+                let legacy_share_path = format!("{}/paired_secret_share.bin", state_dir);
+                let has_legacy_share = std::path::Path::new(&legacy_share_path).exists();
+
+                if available_parties.is_empty() && !has_legacy_share {
+                    app.set_message("No party shares found in this wallet");
+                } else if has_legacy_share && available_parties.is_empty() {
+                    // Legacy wallet - use party index 0 to indicate legacy
+                    app.state = AppState::MnemonicBackup(MnemonicState {
+                        wallet_name: wallet_name.clone(),
+                        available_parties: vec![0], // 0 = legacy (direct in wallet folder)
+                        selected_party: 0,
+                        words: Vec::new(),
+                        error: None,
+                        party_selected: false,
+                        revealed: false,
+                    });
+                } else {
+                    app.state = AppState::MnemonicBackup(MnemonicState {
+                        wallet_name: wallet_name.clone(),
+                        available_parties,
+                        selected_party: 0,
+                        words: Vec::new(),
+                        error: None,
+                        party_selected: false,
+                        revealed: false,
+                    });
+                }
+            } else {
+                app.set_message("Select a wallet first to backup");
+            }
+        }
         _ => {}
     }
 }
@@ -138,75 +219,234 @@ fn handle_chain_select_keys(app: &mut App, code: KeyCode) {
     }
 }
 
+fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
+    let state = if let AppState::WalletDetails(s) = &app.state {
+        s.clone()
+    } else {
+        return;
+    };
+
+    let actions = WalletAction::all();
+    let action_count = actions.len();
+
+    match code {
+        KeyCode::Esc => {
+            app.state = AppState::Home;
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if let AppState::WalletDetails(ref mut s) = app.state {
+                if s.selected_action > 0 {
+                    s.selected_action -= 1;
+                } else {
+                    s.selected_action = action_count - 1;
+                }
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if let AppState::WalletDetails(ref mut s) = app.state {
+                s.selected_action = (s.selected_action + 1) % action_count;
+            }
+        }
+        KeyCode::Enter => {
+            let selected_action = actions[state.selected_action];
+            let wallet_name = state.wallet_name.clone();
+
+            match selected_action {
+                WalletAction::Send => {
+                    // Go to send flow with wallet pre-selected
+                    app.send_form = screens::SendFormData::new();
+                    // Find wallet index
+                    if let Some(idx) = app.wallets.iter().position(|w| w.name == wallet_name) {
+                        app.send_form.wallet_index = idx;
+                        // Load party info
+                        if let Some(wallet) = app.wallets.get(idx) {
+                            app.send_form.threshold = wallet.threshold.unwrap_or(2);
+                            app.send_form.total_parties = wallet.total_parties.unwrap_or(3);
+                            app.send_form.selected_parties =
+                                vec![true; wallet.total_parties.unwrap_or(3) as usize];
+                        }
+                    }
+                    app.state = AppState::Send(SendState::SelectSigners { wallet_name });
+                }
+                WalletAction::ViewAddresses => {
+                    app.state = AppState::AddressList(AddressListState {
+                        wallet_name: wallet_name.clone(),
+                        addresses: Vec::new(),
+                        selected: 0,
+                        error: None,
+                        hd_enabled: false,
+                    });
+                    app.load_hd_addresses(&wallet_name);
+                }
+                WalletAction::BackupMnemonic => {
+                    let state_dir = keygen::get_state_dir(&wallet_name);
+
+                    // Scan for available party folders
+                    let mut available_parties = Vec::new();
+                    for i in 1..=10 {
+                        let party_dir = format!("{}/party{}", state_dir, i);
+                        let share_path = format!("{}/paired_secret_share.bin", party_dir);
+                        if std::path::Path::new(&share_path).exists() {
+                            available_parties.push(i);
+                        }
+                    }
+
+                    // Check for legacy structure
+                    let legacy_share_path = format!("{}/paired_secret_share.bin", state_dir);
+                    let has_legacy_share = std::path::Path::new(&legacy_share_path).exists();
+
+                    if available_parties.is_empty() && !has_legacy_share {
+                        app.set_message("No party shares found in this wallet");
+                        app.state = AppState::Home;
+                    } else if has_legacy_share && available_parties.is_empty() {
+                        app.state = AppState::MnemonicBackup(MnemonicState {
+                            wallet_name,
+                            available_parties: vec![0],
+                            selected_party: 0,
+                            words: Vec::new(),
+                            error: None,
+                            party_selected: false,
+                            revealed: false,
+                        });
+                    } else {
+                        app.state = AppState::MnemonicBackup(MnemonicState {
+                            wallet_name,
+                            available_parties,
+                            selected_party: 0,
+                            words: Vec::new(),
+                            error: None,
+                            party_selected: false,
+                            revealed: false,
+                        });
+                    }
+                }
+                WalletAction::Reshare => {
+                    app.state = AppState::Reshare(ReshareState::default());
+                }
+                WalletAction::FetchBalance => {
+                    // Find wallet and refresh balance
+                    if let Some(idx) = app.wallets.iter().position(|w| w.name == wallet_name) {
+                        app.wallet_list_state.select(Some(idx));
+                        app.refresh_balance();
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
 fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
     use state::KeygenFormField;
 
+    // Helper to get next field based on mode
+    fn next_field(current: KeygenFormField, hierarchical: bool) -> KeygenFormField {
+        match (current, hierarchical) {
+            // TSS mode: Name -> Threshold -> NParties -> Name
+            (KeygenFormField::Name, false) => KeygenFormField::Threshold,
+            (KeygenFormField::Threshold, false) => KeygenFormField::NParties,
+            (KeygenFormField::NParties, false) => KeygenFormField::Name,
+            // HTSS mode: Name -> NParties -> Name (skip Threshold)
+            (KeygenFormField::Name, true) => KeygenFormField::NParties,
+            (KeygenFormField::NParties, true) => KeygenFormField::Name,
+            (KeygenFormField::Threshold, true) => KeygenFormField::NParties,
+        }
+    }
+
+    fn prev_field(current: KeygenFormField, hierarchical: bool) -> KeygenFormField {
+        match (current, hierarchical) {
+            // TSS mode
+            (KeygenFormField::Name, false) => KeygenFormField::NParties,
+            (KeygenFormField::Threshold, false) => KeygenFormField::Name,
+            (KeygenFormField::NParties, false) => KeygenFormField::Threshold,
+            // HTSS mode
+            (KeygenFormField::Name, true) => KeygenFormField::NParties,
+            (KeygenFormField::NParties, true) => KeygenFormField::Name,
+            (KeygenFormField::Threshold, true) => KeygenFormField::Name,
+        }
+    }
+
     let state = app.state.clone();
     match state {
-        AppState::Keygen(KeygenState::Round1Setup) => match key.code {
+        AppState::Keygen(KeygenState::ModeSelect) => match key.code {
             KeyCode::Esc => {
                 app.keygen_form = screens::KeygenFormData::new();
                 app.state = AppState::Home;
             }
+            KeyCode::Up | KeyCode::Down => {
+                // Toggle between TSS and HTSS
+                app.keygen_form.hierarchical = !app.keygen_form.hierarchical;
+            }
+            KeyCode::Char('1') => {
+                app.keygen_form.hierarchical = false; // TSS
+            }
+            KeyCode::Char('2') => {
+                app.keygen_form.hierarchical = true; // HTSS
+            }
+            KeyCode::Enter => {
+                // Proceed to params setup
+                app.keygen_form.focused_field = KeygenFormField::Name;
+                app.state = AppState::Keygen(KeygenState::ParamsSetup);
+            }
+            _ => {}
+        },
+        AppState::Keygen(KeygenState::ParamsSetup) => match key.code {
+            KeyCode::Esc => {
+                // Go back to mode select
+                app.state = AppState::Keygen(KeygenState::ModeSelect);
+            }
             KeyCode::Tab | KeyCode::Down => {
-                app.keygen_form.focused_field = app.keygen_form.focused_field.next();
+                app.keygen_form.focused_field =
+                    next_field(app.keygen_form.focused_field, app.keygen_form.hierarchical);
             }
             KeyCode::BackTab | KeyCode::Up => {
-                app.keygen_form.focused_field = app.keygen_form.focused_field.prev();
-            }
-            KeyCode::Char(' ')
-                if app.keygen_form.focused_field == KeygenFormField::Hierarchical =>
-            {
-                app.keygen_form.hierarchical = !app.keygen_form.hierarchical;
+                app.keygen_form.focused_field =
+                    prev_field(app.keygen_form.focused_field, app.keygen_form.hierarchical);
             }
             KeyCode::Enter => {
                 // Validate and run keygen round 1
                 let name = app.keygen_form.name.value().to_string();
-                let threshold: u32 = app.keygen_form.threshold.value().parse().unwrap_or(0);
                 let n_parties: u32 = app.keygen_form.n_parties.value().parse().unwrap_or(0);
-                let my_index: u32 = app.keygen_form.my_index.value().parse().unwrap_or(0);
-                let my_rank: u32 = app.keygen_form.my_rank.value().parse().unwrap_or(0);
                 let hierarchical = app.keygen_form.hierarchical;
+
+                // For HTSS, threshold is based on ranks; for TSS, use user input
+                let threshold: u32 = if hierarchical {
+                    n_parties // HTSS: threshold = n_parties
+                } else {
+                    app.keygen_form.threshold.value().parse().unwrap_or(0)
+                };
 
                 if name.is_empty() {
                     app.keygen_form.error_message = Some("Wallet name is required".to_string());
                     return;
                 }
-                if threshold == 0 || threshold > n_parties {
-                    app.keygen_form.error_message = Some("Invalid threshold".to_string());
+                if n_parties < 2 {
+                    app.keygen_form.error_message = Some("Need at least 2 parties".to_string());
                     return;
                 }
-                if my_index == 0 || my_index > n_parties {
-                    app.keygen_form.error_message = Some("Invalid party index".to_string());
+                if !hierarchical && (threshold == 0 || threshold > n_parties) {
+                    app.keygen_form.error_message =
+                        Some("Invalid threshold (must be 1 ≤ t ≤ n)".to_string());
                     return;
                 }
 
-                // Run keygen round 1
-                let state_dir = keygen::get_state_dir(&name);
-                match FileStorage::new(&state_dir) {
-                    Ok(storage) => {
-                        match keygen::round1_core(
-                            threshold,
-                            n_parties,
-                            my_index,
-                            my_rank,
-                            hierarchical,
-                            &storage,
-                        ) {
-                            Ok(result) => {
-                                app.keygen_form.round1_output = result.result;
-                                app.keygen_form.error_message = None;
-                                app.state = AppState::Keygen(KeygenState::Round1Output {
-                                    output_json: app.keygen_form.round1_output.clone(),
-                                });
-                            }
-                            Err(e) => {
-                                app.keygen_form.error_message = Some(format!("Error: {}", e));
-                            }
-                        }
+                // Generate all parties at once
+                let ranks = if hierarchical {
+                    // Default ranks: 0, 1, 2, ...
+                    Some((0..n_parties).collect())
+                } else {
+                    None
+                };
+
+                match keygen::generate_all_parties(&name, threshold, n_parties, hierarchical, ranks)
+                {
+                    Ok(_result) => {
+                        app.keygen_form.error_message = None;
+                        app.reload_wallets();
+                        app.state = AppState::Keygen(KeygenState::Complete { wallet_name: name });
                     }
                     Err(e) => {
-                        app.keygen_form.error_message = Some(format!("Storage error: {}", e));
+                        app.keygen_form.error_message = Some(format!("Error: {}", e));
                     }
                 }
             }
@@ -217,18 +457,13 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
                         app.keygen_form.name.handle_key(key);
                     }
                     KeygenFormField::Threshold => {
-                        app.keygen_form.threshold.handle_key(key);
+                        if !app.keygen_form.hierarchical {
+                            app.keygen_form.threshold.handle_key(key);
+                        }
                     }
                     KeygenFormField::NParties => {
                         app.keygen_form.n_parties.handle_key(key);
                     }
-                    KeygenFormField::MyIndex => {
-                        app.keygen_form.my_index.handle_key(key);
-                    }
-                    KeygenFormField::MyRank => {
-                        app.keygen_form.my_rank.handle_key(key);
-                    }
-                    KeygenFormField::Hierarchical => {}
                 }
             }
         },
@@ -424,15 +659,19 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
                                 use schnorr_fun::fun::marker::EvenY;
 
                                 let paired_share: PairedSecretShare<EvenY> =
-                                    bincode::deserialize(&bytes).unwrap();
+                                    match bincode::deserialize(&bytes) {
+                                        Ok(share) => share,
+                                        Err(e) => {
+                                            app.reshare_form.error_message =
+                                                Some(format!("Corrupted wallet data: {}", e));
+                                            return;
+                                        }
+                                    };
 
-                                // Extract party index from Scalar (hack from signing.rs)
-                                let my_old_index = {
-                                    let mut u32_index_bytes = [0u8; 4];
-                                    u32_index_bytes
-                                        .copy_from_slice(&paired_share.index().to_bytes()[28..]);
-                                    u32::from_be_bytes(u32_index_bytes)
-                                };
+                                // Extract party index from scalar (big-endian, last 4 bytes)
+                                let index_bytes = paired_share.index().to_bytes();
+                                let my_old_index =
+                                    u32::from_be_bytes(index_bytes[28..32].try_into().unwrap());
 
                                 match reshare::reshare_round1_core(
                                     &wallet_name,
@@ -622,14 +861,87 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     app.send_form.error_message = Some("No wallets available".to_string());
                     return;
                 }
-                let wallet_name = app.wallets[app.send_form.wallet_index].name.clone();
+                let wallet = &app.wallets[app.send_form.wallet_index];
+                let wallet_name = wallet.name.clone();
+
+                // Load wallet info for party selection
+                let threshold = wallet.threshold.unwrap_or(2);
+                let total_parties = wallet.total_parties.unwrap_or(3);
+
+                // Load my party index from htss_metadata
+                let state_dir = keygen::get_state_dir(&wallet_name);
+                let my_index = if let Ok(storage) = FileStorage::new(&state_dir) {
+                    if let Ok(bytes) = storage.read("htss_metadata.json") {
+                        let json = String::from_utf8_lossy(&bytes);
+                        serde_json::from_str::<serde_json::Value>(&json)
+                            .ok()
+                            .and_then(|v| v.get("my_index").and_then(|i| i.as_u64()))
+                            .map(|i| i as u32)
+                            .unwrap_or(1)
+                    } else {
+                        1
+                    }
+                } else {
+                    1
+                };
+
+                // Initialize party selection
+                app.send_form.threshold = threshold;
+                app.send_form.total_parties = total_parties;
+                app.send_form.my_party_index = my_index;
+                app.send_form.selected_parties = vec![false; total_parties as usize];
+                // Auto-select self
+                if my_index > 0 && my_index <= total_parties {
+                    app.send_form.selected_parties[(my_index - 1) as usize] = true;
+                }
+                app.send_form.party_selector_index = 0;
+
+                app.state = AppState::Send(SendState::SelectSigners { wallet_name });
+            }
+            _ => {}
+        },
+        AppState::Send(SendState::SelectSigners { wallet_name }) => match key.code {
+            KeyCode::Esc => {
+                app.state = AppState::Send(SendState::SelectWallet);
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if app.send_form.party_selector_index > 0 {
+                    app.send_form.party_selector_index -= 1;
+                } else {
+                    app.send_form.party_selector_index = app.send_form.total_parties as usize - 1;
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                app.send_form.party_selector_index =
+                    (app.send_form.party_selector_index + 1) % app.send_form.total_parties as usize;
+            }
+            KeyCode::Char(' ') => {
+                // Toggle party selection
+                let idx = app.send_form.party_selector_index;
+                if idx < app.send_form.selected_parties.len() {
+                    app.send_form.selected_parties[idx] = !app.send_form.selected_parties[idx];
+                }
+            }
+            KeyCode::Enter => {
+                // Check if threshold is met
+                let selected = app.send_form.selected_count();
+                if selected < app.send_form.threshold as usize {
+                    app.send_form.error_message = Some(format!(
+                        "Need at least {} signers, only {} selected",
+                        app.send_form.threshold, selected
+                    ));
+                    return;
+                }
+                app.send_form.error_message = None;
                 app.state = AppState::Send(SendState::EnterDetails { wallet_name });
             }
             _ => {}
         },
         AppState::Send(SendState::EnterDetails { wallet_name }) => match key.code {
             KeyCode::Esc => {
-                app.state = AppState::Send(SendState::SelectWallet);
+                app.state = AppState::Send(SendState::SelectSigners {
+                    wallet_name: wallet_name.clone(),
+                });
             }
             KeyCode::Tab => {
                 app.send_form.focused_field = app.send_form.focused_field.next();
@@ -638,7 +950,6 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 app.send_form.focused_field = app.send_form.focused_field.prev();
             }
             KeyCode::Enter => {
-                // Generate a demo sighash (in real world, this would come from TX builder)
                 let to_addr = app.send_form.to_address.value().to_string();
                 let amount: u64 = app.send_form.amount.value().parse().unwrap_or(0);
 
@@ -651,25 +962,56 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     return;
                 }
 
-                // Generate session ID and demo sighash
-                let session_id = SendFormData::generate_session_id();
-                // Create a demo sighash based on the inputs (in real world this comes from TX)
-                let sighash = format!(
-                    "demo_sighash_{}_{}_{}",
-                    wallet_name,
-                    &to_addr[..8.min(to_addr.len())],
-                    amount
-                );
-                app.send_form.session_id = session_id.clone();
-                app.send_form.sighash = sighash.clone();
+                // Collect selected party indices (1-based)
+                let selected_parties: Vec<u32> = app
+                    .send_form
+                    .selected_parties
+                    .iter()
+                    .enumerate()
+                    .filter_map(
+                        |(i, &selected)| {
+                            if selected {
+                                Some((i + 1) as u32)
+                            } else {
+                                None
+                            }
+                        },
+                    )
+                    .collect();
 
-                app.state = AppState::Send(SendState::ShowSighash {
-                    wallet_name,
-                    to_address: to_addr,
+                if selected_parties.is_empty() {
+                    app.send_form.error_message = Some("No parties selected".to_string());
+                    return;
+                }
+
+                // Get network from app
+                let network = app.network.to_bitcoin_network();
+
+                // Call automated FROST signing
+                match frostdao::protocol::dkg_tx::frost_sign_all_local(
+                    &wallet_name,
+                    &to_addr,
                     amount,
-                    sighash,
-                    session_id,
-                });
+                    &selected_parties,
+                    None, // Use default fee rate
+                    network,
+                ) {
+                    Ok(result) => {
+                        app.send_form.error_message = None;
+                        // Extract txid from result
+                        let txid = if let Ok(parsed) =
+                            serde_json::from_str::<serde_json::Value>(&result.result)
+                        {
+                            parsed["txid"].as_str().unwrap_or("unknown").to_string()
+                        } else {
+                            result.result.clone()
+                        };
+                        app.state = AppState::Send(SendState::Complete { txid });
+                    }
+                    Err(e) => {
+                        app.send_form.error_message = Some(format!("Error: {}", e));
+                    }
+                }
             }
             _ => match app.send_form.focused_field {
                 SendFormField::ToAddress => {
@@ -728,8 +1070,6 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
             KeyCode::Esc => {
                 app.state = AppState::Send(SendState::ShowSighash {
                     wallet_name,
-                    to_address: app.send_form.to_address.value().to_string(),
-                    amount: app.send_form.amount.value().parse().unwrap_or(0),
                     sighash,
                     session_id,
                 });
@@ -746,7 +1086,6 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     wallet_name,
                     session_id,
                     sighash,
-                    my_nonce: nonce_output,
                 });
             }
             _ => {}
@@ -755,7 +1094,6 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
             wallet_name,
             session_id,
             sighash,
-            ..
         }) => match key.code {
             KeyCode::Esc => {
                 app.state = AppState::Send(SendState::GenerateNonce {
@@ -772,7 +1110,19 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     return;
                 }
 
-                // Generate signature share
+                // Count nonces by looking for "party_index" occurrences
+                let nonce_count = nonces_data.matches("\"party_index\"").count();
+                let threshold = app.send_form.threshold as usize;
+
+                if nonce_count < threshold {
+                    app.send_form.error_message = Some(format!(
+                        "Need {} nonces but only found {}. Collect more nonces from other signers!",
+                        threshold, nonce_count
+                    ));
+                    return;
+                }
+
+                // Generate signature share (real FROST)
                 let state_dir = keygen::get_state_dir(&wallet_name);
                 match FileStorage::new(&state_dir) {
                     Ok(storage) => {
@@ -787,8 +1137,6 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                                 app.send_form.error_message = None;
                                 app.state = AppState::Send(SendState::GenerateShare {
                                     wallet_name,
-                                    session_id,
-                                    sighash,
                                     share_output: result.result,
                                 });
                             }
@@ -808,8 +1156,6 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
         },
         AppState::Send(SendState::GenerateShare {
             wallet_name,
-            session_id,
-            sighash,
             share_output,
         }) => match key.code {
             KeyCode::Esc => {
@@ -826,20 +1172,14 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     "Paste signature shares from other parties",
                 );
                 app.send_form.shares_input.handle_paste(&share_output);
-                app.state = AppState::Send(SendState::CombineShares {
-                    wallet_name,
-                    session_id,
-                    sighash,
-                });
+                app.state = AppState::Send(SendState::CombineShares { wallet_name });
             }
             _ => {}
         },
-        AppState::Send(SendState::CombineShares { wallet_name, .. }) => match key.code {
+        AppState::Send(SendState::CombineShares { wallet_name }) => match key.code {
             KeyCode::Esc => {
                 app.state = AppState::Send(SendState::GenerateShare {
                     wallet_name,
-                    session_id: app.send_form.session_id.clone(),
-                    sighash: app.send_form.sighash.clone(),
                     share_output: app.send_form.share_output.clone(),
                 });
             }
@@ -850,7 +1190,19 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     return;
                 }
 
-                // Combine signatures
+                // Count shares
+                let share_count = shares_data.matches("\"party_index\"").count();
+                let threshold = app.send_form.threshold as usize;
+
+                if share_count < threshold {
+                    app.send_form.error_message = Some(format!(
+                        "Need {} shares but only found {}. Collect more shares!",
+                        threshold, share_count
+                    ));
+                    return;
+                }
+
+                // Combine signatures (real FROST)
                 let state_dir = keygen::get_state_dir(&wallet_name);
                 match FileStorage::new(&state_dir) {
                     Ok(storage) => match signing::combine_signatures_core(&shares_data, &storage) {
@@ -885,6 +1237,124 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
     }
 }
 
+fn handle_address_list_keys(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Esc => {
+            app.state = AppState::Home;
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if let AppState::AddressList(ref mut state) = app.state {
+                if state.selected > 0 {
+                    state.selected -= 1;
+                }
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if let AppState::AddressList(ref mut state) = app.state {
+                if state.selected + 1 < state.addresses.len() {
+                    state.selected += 1;
+                }
+            }
+        }
+        KeyCode::Char('c') => {
+            app.set_message("Address copied to clipboard (simulated)");
+        }
+        _ => {}
+    }
+}
+
+fn handle_mnemonic_keys(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Esc => {
+            app.state = AppState::Home;
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if let AppState::MnemonicBackup(ref mut state) = app.state {
+                if !state.party_selected && !state.available_parties.is_empty() {
+                    if state.selected_party > 0 {
+                        state.selected_party -= 1;
+                    } else {
+                        state.selected_party = state.available_parties.len() - 1;
+                    }
+                }
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if let AppState::MnemonicBackup(ref mut state) = app.state {
+                if !state.party_selected && !state.available_parties.is_empty() {
+                    state.selected_party =
+                        (state.selected_party + 1) % state.available_parties.len();
+                }
+            }
+        }
+        KeyCode::Enter => {
+            if let AppState::MnemonicBackup(ref mut state) = app.state {
+                if !state.party_selected {
+                    // Party selected, show security warning
+                    state.party_selected = true;
+                } else if !state.revealed {
+                    // Generate mnemonic from selected party's share
+                    let wallet_name = state.wallet_name.clone();
+                    let state_dir = keygen::get_state_dir(&wallet_name);
+                    let party_idx = state
+                        .available_parties
+                        .get(state.selected_party)
+                        .copied()
+                        .unwrap_or(1);
+
+                    // Party 0 = legacy (share in wallet root), otherwise in party subfolder
+                    let share_dir = if party_idx == 0 {
+                        state_dir.clone()
+                    } else {
+                        format!("{}/party{}", state_dir, party_idx)
+                    };
+
+                    match FileStorage::new(&share_dir) {
+                        Ok(storage) => match storage.read("paired_secret_share.bin") {
+                            Ok(bytes) => {
+                                use schnorr_fun::frost::PairedSecretShare;
+                                use schnorr_fun::fun::marker::EvenY;
+
+                                let paired_share: PairedSecretShare<EvenY> =
+                                    match bincode::deserialize(&bytes) {
+                                        Ok(share) => share,
+                                        Err(e) => {
+                                            state.error =
+                                                Some(format!("Corrupted wallet data: {}", e));
+                                            return;
+                                        }
+                                    };
+                                let share_bytes = paired_share.secret_share().share.to_bytes();
+
+                                match frostdao::crypto::mnemonic::share_to_mnemonic(&share_bytes) {
+                                    Ok(mnemonic) => {
+                                        state.words =
+                                            mnemonic.words().map(|s| s.to_string()).collect();
+                                        state.revealed = true;
+                                    }
+                                    Err(e) => {
+                                        state.error = Some(format!("Error: {}", e));
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                state.error = Some(format!("Cannot read share: {}", e));
+                            }
+                        },
+                        Err(e) => {
+                            state.error = Some(format!("Storage error: {}", e));
+                        }
+                    }
+                } else {
+                    // Already revealed, go home
+                    app.state = AppState::Home;
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
 fn ui(frame: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -901,6 +1371,9 @@ fn ui(frame: &mut Frame, app: &App) {
     // Main content based on state
     match &app.state {
         AppState::Home => screens::render_home(frame, app, chunks[1]),
+        AppState::WalletDetails(state) => {
+            screens::render_wallet_details(frame, app, state, chunks[1])
+        }
         AppState::ChainSelect => {
             screens::render_home(frame, app, chunks[1]);
             screens::render_chain_select(frame, app, frame.area());
@@ -908,6 +1381,8 @@ fn ui(frame: &mut Frame, app: &App) {
         AppState::Keygen(_) => screens::render_keygen(frame, app, &app.keygen_form, chunks[1]),
         AppState::Reshare(_) => screens::render_reshare(frame, app, &app.reshare_form, chunks[1]),
         AppState::Send(_) => screens::render_send(frame, app, &app.send_form, chunks[1]),
+        AppState::AddressList(state) => screens::render_address_list(frame, state, chunks[1]),
+        AppState::MnemonicBackup(state) => screens::render_mnemonic(frame, state, chunks[1]),
     }
 
     // Help bar
@@ -948,13 +1423,23 @@ fn render_help_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     } else {
         match &app.state {
             AppState::Home => {
-                "↑/↓:Navigate | Enter:Balance | n:Network | g:Keygen | h:Reshare | s:Send | q:Quit"
-                    .to_string()
+                "↑/↓:Navigate | Enter:Select Wallet | n:Network | g:New Wallet | q:Quit".to_string()
+            }
+            AppState::WalletDetails(_) => {
+                "↑/↓:Navigate | Enter:Select Action | Esc:Back".to_string()
             }
             AppState::ChainSelect => "↑/↓:Select | Enter:Confirm | Esc:Cancel".to_string(),
             AppState::Keygen(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
             AppState::Reshare(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
             AppState::Send(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
+            AppState::AddressList(_) => "↑/↓:Navigate | c:Copy | Esc:Back".to_string(),
+            AppState::MnemonicBackup(state) => {
+                if state.revealed {
+                    "Enter:Done | Esc:Back".to_string()
+                } else {
+                    "Enter:Reveal | Esc:Cancel".to_string()
+                }
+            }
         }
     };
 

@@ -22,14 +22,15 @@ FrostDAO implements FROST threshold signatures with **Hierarchical Threshold Sec
 6. [Hierarchical TSS (HTSS)](#hierarchical-tss-htss)
 7. [Resharing (Proactive Security)](#resharing-proactive-security)
 8. [Share Recovery](#share-recovery)
-9. [Bitcoin Transactions](#bitcoin-transactions)
-10. [DKG Threshold Transactions](#dkg-threshold-transactions)
-11. [Terminal UI (TUI)](#terminal-ui-tui)
-12. [CLI Reference](#cli-reference)
-13. [Web UI](#web-ui)
-14. [Architecture](#architecture)
-15. [Use Cases](#use-cases)
-16. [Security](#security)
+9. [HD Key Derivation (BIP-32/44)](#hd-key-derivation-bip-3244)
+10. [Bitcoin Transactions](#bitcoin-transactions)
+11. [DKG Threshold Transactions](#dkg-threshold-transactions)
+12. [Terminal UI (TUI)](#terminal-ui-tui)
+13. [CLI Reference](#cli-reference)
+14. [Web UI](#web-ui)
+15. [Architecture](#architecture)
+16. [Use Cases](#use-cases)
+17. [Security](#security)
 
 ---
 
@@ -40,6 +41,8 @@ FrostDAO implements FROST threshold signatures with **Hierarchical Threshold Sec
 | **Single-Signer Wallet** | BIP340 Schnorr signatures for Bitcoin Taproot |
 | **Threshold Signatures** | FROST-based t-of-n multisig without trusted dealer |
 | **Hierarchical TSS** | Rank-based signing authority (CEO must approve) |
+| **HD Derivation** | BIP-32/44 hierarchical addresses from one DKG wallet |
+| **BIP-39 Backup** | 24-word mnemonic phrases for share recovery |
 | **Resharing** | Proactive secret sharing - refresh shares without changing address |
 | **Share Recovery** | Reconstruct lost party's share from t other parties |
 | **DKG Transactions** | Multi-party threshold signing for Bitcoin transactions |
@@ -407,6 +410,81 @@ frostdao recover-finalize \
 
 ---
 
+## HD Key Derivation (BIP-32/44)
+
+FrostDAO supports **Hierarchical Deterministic (HD) key derivation**, allowing you to generate multiple Bitcoin addresses from a single DKG wallet. This follows BIP-32/BIP-44 standards using non-hardened derivation.
+
+### How It Works
+
+```
+Master Public Key (from DKG)
+         │
+    Chain Code (deterministic from group pubkey)
+         │
+    ┌────┴────┐
+    │ BIP-32  │  Non-hardened derivation
+    │ Child   │  child_pubkey = master + tweak * G
+    └────┬────┘
+         │
+    m/44'/0'/0'/change/index
+         │
+    ┌────┴────────────┐
+    │                 │
+  change=0          change=1
+  (receive)         (change)
+    │                 │
+  index: 0,1,2...   index: 0,1,2...
+```
+
+### Key Benefits
+
+- **Multiple addresses**: Generate unlimited addresses from one wallet
+- **Threshold compatible**: Each party derives locally using public data
+- **Privacy**: Use fresh addresses for each transaction
+- **Organized**: Separate receive vs change addresses
+
+### Commands
+
+```bash
+# Derive single address at path m/44'/0'/0'/0/5
+frostdao dkg-derive-address --name treasury --index 5 --network testnet
+
+# List first 10 receive addresses
+frostdao dkg-list-addresses --name treasury --count 10 --network testnet
+
+# Generate mnemonic backup for your share
+frostdao dkg-generate-mnemonic --name treasury
+```
+
+### Path Structure
+
+| Path Component | Value | Description |
+|----------------|-------|-------------|
+| Purpose | 44' | BIP-44 standard |
+| Coin Type | 0' | Bitcoin |
+| Account | 0' | Default account |
+| Change | 0/1 | 0=external (receive), 1=internal (change) |
+| Index | 0+ | Address index |
+
+### BIP-39 Mnemonic Backup
+
+Each party can backup their **secret share** as a 24-word mnemonic phrase:
+
+```bash
+# Generate backup words for your share
+frostdao dkg-generate-mnemonic --name treasury
+
+# Output:
+# Your 24-word backup phrase (KEEP SECRET):
+#  1. abandon   7. deputy   13. laptop   19. stone
+#  2. ability   8. desert   14. left     20. stove
+#  ...
+```
+
+**Important**: The mnemonic backs up your **share**, not the group key. Recovery still requires threshold cooperation.
+
+---
+
 ## Terminal UI (TUI)
 
 FrostDAO includes an interactive terminal UI for wallet management.
@@ -683,6 +761,14 @@ This ensures ~100% signature success rate (previously ~50% when parity was ignor
 | `dkg-nonce --name <wallet> --session <id>` | Generate signing nonce |
 | `dkg-sign --name <wallet> --session <id> --sighash <hex> --data <json>` | Create signature share |
 | `dkg-broadcast --name <wallet> --unsigned-tx <hex> --data <json>` | Combine and broadcast |
+
+### HD Derivation
+
+| Command | Description |
+|---------|-------------|
+| `dkg-derive-address --name <wallet> --index <n>` | Derive address at path m/44'/0'/0'/0/n |
+| `dkg-list-addresses --name <wallet> --count <n>` | List first n derived addresses |
+| `dkg-generate-mnemonic --name <wallet>` | Generate 24-word backup for share |
 
 ### Wallet Management
 

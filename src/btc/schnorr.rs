@@ -29,8 +29,8 @@ const STATE_DIR: &str = ".frost_state";
 // BIP340 Tagged Hash Functions
 // ============================================================================
 
-// Use shared tagged_hash from crypto_helpers
-use crate::crypto_helpers::tagged_hash;
+// Use shared tagged_hash from crypto helpers
+use crate::crypto::helpers::tagged_hash;
 
 /// BIP340/challenge tagged hash for signature verification
 fn challenge_hash(r_bytes: &[u8; 32], pubkey_bytes: &[u8; 32], message: &[u8]) -> [u8; 32] {
@@ -801,7 +801,7 @@ pub fn get_dkg_address_core(network: Network, storage: &dyn Storage) -> Result<C
 
 /// CLI wrapper for getting DKG testnet address
 pub fn get_dkg_address_testnet(name: &str) -> Result<()> {
-    let state_dir = crate::keygen::get_state_dir(name);
+    let state_dir = crate::protocol::keygen::get_state_dir(name);
     let path = std::path::Path::new(&state_dir);
 
     if !path.exists() {

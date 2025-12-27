@@ -26,6 +26,7 @@ pub struct TextArea {
     placeholder: String,
 }
 
+#[allow(dead_code)]
 impl TextArea {
     pub fn new(label: &str) -> Self {
         Self {

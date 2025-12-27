@@ -4,7 +4,7 @@ use wasm_bindgen::prelude::*;
 use serde::Serialize;
 
 #[cfg(target_arch = "wasm32")]
-use crate::{bitcoin_schnorr, keygen, signing};
+use crate::{btc::schnorr as bitcoin_schnorr, protocol::keygen, protocol::signing};
 
 /// Initialize panic hook for better error messages in browser
 #[wasm_bindgen(start)]

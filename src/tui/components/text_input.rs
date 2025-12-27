@@ -24,6 +24,7 @@ pub struct TextInput {
     numeric: bool,
 }
 
+#[allow(dead_code)]
 impl TextInput {
     pub fn new(label: &str) -> Self {
         Self {

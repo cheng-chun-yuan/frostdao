@@ -60,6 +60,13 @@ fn render_wallet_list(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
+    // Wallet details (no longer need Quick Actions - they're in WalletDetails screen)
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(10), Constraint::Length(4)])
+        .split(area);
+
+    // Wallet details
     let content = if let Some(wallet) = app.selected_wallet() {
         let mut lines = vec![
             Line::from(vec![
@@ -161,7 +168,7 @@ fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(Color::DarkGray),
             )),
             Line::from(""),
-            Line::from("Create a wallet with 'k' (keygen)"),
+            Line::from("Create a wallet with 'g' (keygen)"),
             Line::from("or use CLI:"),
             Line::from(Span::styled(
                 "  frostdao keygen-round1 --name <name> ...",
@@ -174,12 +181,22 @@ fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
         .block(Block::default().borders(Borders::ALL).title("Details"))
         .wrap(Wrap { trim: false });
 
-    frame.render_widget(details, area);
+    frame.render_widget(details, chunks[0]);
+
+    // Simple hint
+    let hint = Paragraph::new(Line::from(vec![
+        Span::styled("Tip: ", Style::default().fg(Color::Gray)),
+        Span::styled(
+            "Press Enter to see wallet actions",
+            Style::default().fg(Color::DarkGray),
+        ),
+    ]));
+    frame.render_widget(hint, chunks[1]);
 }
 
 /// Get address for the selected network
 fn get_address_for_network(
-    wallet: &crate::keygen::WalletSummary,
+    wallet: &frostdao::protocol::keygen::WalletSummary,
     network: NetworkSelection,
 ) -> Option<String> {
     // For now, return the stored address (testnet)

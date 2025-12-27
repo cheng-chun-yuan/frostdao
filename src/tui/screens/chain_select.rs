@@ -4,7 +4,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
     Frame,
 };
 
@@ -14,7 +14,7 @@ use crate::tui::state::NetworkSelection;
 /// Render chain selection popup
 pub fn render_chain_select(frame: &mut Frame, app: &App, area: Rect) {
     // Create centered popup
-    let popup_area = centered_rect(40, 30, area);
+    let popup_area = centered_rect(40, 40, area);
 
     // Clear the area behind the popup
     frame.render_widget(Clear, popup_area);
@@ -31,18 +31,26 @@ pub fn render_chain_select(frame: &mut Frame, app: &App, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(1),
-            Constraint::Min(3),
-            Constraint::Length(2),
+            Constraint::Min(5),
+            Constraint::Length(4),
         ])
         .split(inner);
 
-    // Network list
-    let items: Vec<ListItem> = NetworkSelection::all()
+    // Network list with hover highlight
+    let networks = NetworkSelection::all();
+    let items: Vec<ListItem> = networks
         .iter()
-        .map(|network| {
-            let is_selected = *network == app.network;
-            let prefix = if is_selected { "● " } else { "○ " };
-            let style = if is_selected {
+        .enumerate()
+        .map(|(idx, network)| {
+            let is_current = *network == app.network;
+            let is_hovered = idx == app.chain_selector_index;
+            let prefix = if is_current { "● " } else { "○ " };
+
+            let style = if is_hovered {
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
+            } else if is_current {
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD)
@@ -63,20 +71,40 @@ pub fn render_chain_select(frame: &mut Frame, app: &App, area: Rect) {
         })
         .collect();
 
-    let list = List::new(items).highlight_style(Style::default().bg(Color::DarkGray));
+    let list = List::new(items)
+        .highlight_style(
+            Style::default()
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("▶ ");
 
-    frame.render_widget(list, chunks[1]);
+    // Use ListState for proper highlight rendering
+    let mut list_state = ListState::default();
+    list_state.select(Some(app.chain_selector_index));
 
-    // Help text
-    let help = Paragraph::new(Line::from(vec![
-        Span::styled("↑/↓", Style::default().fg(Color::Yellow)),
-        Span::raw(": Select  "),
-        Span::styled("Enter", Style::default().fg(Color::Yellow)),
-        Span::raw(": Confirm  "),
-        Span::styled("Esc", Style::default().fg(Color::Yellow)),
-        Span::raw(": Cancel"),
-    ]))
-    .alignment(Alignment::Center);
+    frame.render_stateful_widget(list, chunks[1], &mut list_state);
+
+    // Enhanced help text
+    let help_lines = vec![
+        Line::from(vec![
+            Span::styled("↑/↓", Style::default().fg(Color::Yellow)),
+            Span::raw(": Navigate  "),
+            Span::styled("Enter", Style::default().fg(Color::Yellow)),
+            Span::raw(": Confirm  "),
+            Span::styled("Esc", Style::default().fg(Color::Yellow)),
+            Span::raw(": Cancel"),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("●", Style::default().fg(Color::Cyan)),
+            Span::raw(" = Current  "),
+            Span::styled("▶", Style::default().fg(Color::Yellow)),
+            Span::raw(" = Selected"),
+        ]),
+    ];
+
+    let help = Paragraph::new(help_lines).alignment(Alignment::Center);
 
     frame.render_widget(help, chunks[2]);
 }

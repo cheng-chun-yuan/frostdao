@@ -36,6 +36,11 @@ nalgebra = "0.33"
 rand = "0.8"
 rand_chacha = "0.3"
 sha2 = "0.10"
+
+# BIP-32/39 HD Key Derivation
+bip39 = "2.0"
+hmac = "0.12"
+zeroize = "1.7"
 getrandom = { version = "0.2", features = ["js"] }
 
 # Bitcoin
