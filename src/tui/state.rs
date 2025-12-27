@@ -41,22 +41,6 @@ impl NetworkSelection {
     pub fn all() -> &'static [NetworkSelection] {
         &[Self::Testnet, Self::Signet, Self::Mainnet]
     }
-
-    pub fn next(&self) -> Self {
-        match self {
-            Self::Testnet => Self::Signet,
-            Self::Signet => Self::Mainnet,
-            Self::Mainnet => Self::Testnet,
-        }
-    }
-
-    pub fn prev(&self) -> Self {
-        match self {
-            Self::Testnet => Self::Mainnet,
-            Self::Signet => Self::Testnet,
-            Self::Mainnet => Self::Signet,
-        }
-    }
 }
 
 /// Main application state
@@ -105,10 +89,16 @@ pub struct AddressListState {
 pub struct MnemonicState {
     /// Wallet name
     pub wallet_name: String,
+    /// Available party indices (e.g., [1, 2, 3])
+    pub available_parties: Vec<u32>,
+    /// Selected party index
+    pub selected_party: usize,
     /// Generated mnemonic words (24)
     pub words: Vec<String>,
     /// Error message if any
     pub error: Option<String>,
+    /// Whether party selection is done
+    pub party_selected: bool,
     /// Whether to show the mnemonic (security confirmation)
     pub revealed: bool,
 }
@@ -116,9 +106,11 @@ pub struct MnemonicState {
 /// Keygen wizard state
 #[derive(Clone, Default)]
 pub enum KeygenState {
-    /// Initial setup form
+    /// Choose TSS or HTSS mode
     #[default]
-    Round1Setup,
+    ModeSelect,
+    /// Setup params based on mode
+    ParamsSetup,
     /// Display round 1 output
     Round1Output { output_json: String },
     /// Input round 2 data
@@ -151,13 +143,13 @@ pub enum SendState {
     /// Select wallet to send from
     #[default]
     SelectWallet,
+    /// Select which parties will sign
+    SelectSigners { wallet_name: String },
     /// Enter recipient and amount
     EnterDetails { wallet_name: String },
     /// Show sighash for signing
     ShowSighash {
         wallet_name: String,
-        to_address: String,
-        amount: u64,
         sighash: String,
         session_id: String,
     },
@@ -173,21 +165,14 @@ pub enum SendState {
         wallet_name: String,
         session_id: String,
         sighash: String,
-        my_nonce: String,
     },
     /// Generate signature share
     GenerateShare {
         wallet_name: String,
-        session_id: String,
-        sighash: String,
         share_output: String,
     },
     /// Combine shares (aggregator)
-    CombineShares {
-        wallet_name: String,
-        session_id: String,
-        sighash: String,
-    },
+    CombineShares { wallet_name: String },
     /// Transaction complete
     Complete { txid: String },
 }
@@ -199,33 +184,6 @@ pub enum KeygenFormField {
     Name,
     Threshold,
     NParties,
-    MyIndex,
-    MyRank,
-    Hierarchical,
-}
-
-impl KeygenFormField {
-    pub fn next(&self) -> Self {
-        match self {
-            Self::Name => Self::Threshold,
-            Self::Threshold => Self::NParties,
-            Self::NParties => Self::MyIndex,
-            Self::MyIndex => Self::MyRank,
-            Self::MyRank => Self::Hierarchical,
-            Self::Hierarchical => Self::Name,
-        }
-    }
-
-    pub fn prev(&self) -> Self {
-        match self {
-            Self::Name => Self::Hierarchical,
-            Self::Threshold => Self::Name,
-            Self::NParties => Self::Threshold,
-            Self::MyIndex => Self::NParties,
-            Self::MyRank => Self::MyIndex,
-            Self::Hierarchical => Self::MyRank,
-        }
-    }
 }
 
 /// Reshare form field focus
