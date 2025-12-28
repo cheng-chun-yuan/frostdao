@@ -420,13 +420,13 @@ fn render_select_signers(frame: &mut Frame, form: &SendFormData, area: Rect) {
     );
     frame.render_widget(party_list, chunks[1]);
 
-    // Selection status
+    // Selection status - must be exactly threshold
     let selected_count = form.selected_count();
     let threshold = form.threshold;
-    let status_color = if selected_count >= threshold as usize {
+    let status_color = if selected_count == threshold as usize {
         Color::Green
     } else {
-        Color::Red
+        Color::Yellow
     };
 
     let selected_names: Vec<String> = form
@@ -434,6 +434,14 @@ fn render_select_signers(frame: &mut Frame, form: &SendFormData, area: Rect) {
         .iter()
         .map(|&idx| SendFormData::party_label(idx))
         .collect();
+
+    let status_msg = if selected_count == threshold as usize {
+        "✓ ready".to_string()
+    } else if selected_count < threshold as usize {
+        format!("need {}", threshold as usize - selected_count)
+    } else {
+        format!("too many, deselect {}", selected_count - threshold as usize)
+    };
 
     let status = Paragraph::new(vec![Line::from(vec![
         Span::styled("Selected: ", Style::default().fg(Color::Gray)),
@@ -443,14 +451,11 @@ fn render_select_signers(frame: &mut Frame, form: &SendFormData, area: Rect) {
                 .fg(status_color)
                 .add_modifier(Modifier::BOLD),
         ),
+        Span::styled(" exactly required ", Style::default().fg(Color::Gray)),
         Span::styled(
             format!(
-                " required ({} selected: {})",
-                if selected_count >= threshold as usize {
-                    "✓"
-                } else {
-                    "need more"
-                },
+                "({}: {})",
+                status_msg,
                 if selected_names.is_empty() {
                     "none".to_string()
                 } else {

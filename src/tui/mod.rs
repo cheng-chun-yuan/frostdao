@@ -1029,15 +1029,28 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 // Toggle party selection
                 let idx = app.send_form.party_selector_index;
                 if idx < app.send_form.selected_parties.len() {
-                    app.send_form.selected_parties[idx] = !app.send_form.selected_parties[idx];
+                    let currently_selected = app.send_form.selected_parties[idx];
+                    let selected_count = app.send_form.selected_count();
+
+                    // If trying to select and already at threshold, don't allow
+                    if !currently_selected && selected_count >= app.send_form.threshold as usize {
+                        app.send_form.error_message = Some(format!(
+                            "Cannot select more than {} parties",
+                            app.send_form.threshold
+                        ));
+                        return;
+                    }
+
+                    app.send_form.selected_parties[idx] = !currently_selected;
+                    app.send_form.error_message = None;
                 }
             }
             KeyCode::Enter => {
-                // Check if threshold is met
+                // Check if exactly threshold parties selected
                 let selected = app.send_form.selected_count();
-                if selected < app.send_form.threshold as usize {
+                if selected != app.send_form.threshold as usize {
                     app.send_form.error_message = Some(format!(
-                        "Need at least {} signers, only {} selected",
+                        "Must select exactly {} signers (selected {})",
                         app.send_form.threshold, selected
                     ));
                     return;

@@ -953,12 +953,12 @@ pub fn frost_sign_all_local(
         serde_json::from_str(&metadata_json)?
     };
 
-    // Validate threshold requirement
-    if (selected_parties.len() as u32) < wallet_metadata.threshold {
+    // Validate threshold requirement - must be exactly threshold parties
+    if (selected_parties.len() as u32) != wallet_metadata.threshold {
         anyhow::bail!(
-            "Insufficient parties for signing: selected {} but threshold requires at least {}",
-            selected_parties.len(),
-            wallet_metadata.threshold
+            "Must select exactly {} parties for signing (selected {})",
+            wallet_metadata.threshold,
+            selected_parties.len()
         );
     }
 
