@@ -384,15 +384,33 @@ pub fn reshare_round1_core(
         anyhow::bail!("Wallet '{}' not found at {}.", source_wallet, state_dir);
     }
 
-    let storage = FileStorage::new(&state_dir)?;
+    // Find the party folder or use legacy structure
+    let party_dir = format!("{}/party{}", state_dir, my_old_index);
+    let storage_path = if std::path::Path::new(&party_dir).exists() {
+        party_dir
+    } else {
+        // Legacy structure - share directly in wallet folder
+        state_dir.clone()
+    };
+
+    let storage = FileStorage::new(&storage_path)?;
 
     // Load my secret share
     let paired_share_bytes = storage.read("paired_secret_share.bin")?;
     let paired_share: frost::PairedSecretShare<EvenY> = bincode::deserialize(&paired_share_bytes)?;
 
-    // Load HTSS metadata for verification
-    let htss_json = String::from_utf8(storage.read("htss_metadata.json")?)?;
-    let htss: HtssMetadata = serde_json::from_str(&htss_json)?;
+    // Load HTSS metadata - try party folder first, then wallet root
+    let htss: HtssMetadata = {
+        if let Ok(htss_json) = storage.read("htss_metadata.json") {
+            let htss_str = String::from_utf8(htss_json)?;
+            serde_json::from_str(&htss_str)?
+        } else {
+            // Try wallet root for legacy
+            let root_storage = FileStorage::new(&state_dir)?;
+            let htss_json = String::from_utf8(root_storage.read("htss_metadata.json")?)?;
+            serde_json::from_str(&htss_json)?
+        }
+    };
 
     if htss.my_index != my_old_index {
         anyhow::bail!(

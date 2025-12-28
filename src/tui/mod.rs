@@ -725,56 +725,94 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
 
                 // Get my_old_index from the source wallet
                 let state_dir = keygen::get_state_dir(&wallet_name);
-                match FileStorage::new(&state_dir) {
-                    Ok(storage) => {
-                        // Load paired secret share to get my old index
-                        match storage.read("paired_secret_share.bin") {
-                            Ok(bytes) => {
-                                use schnorr_fun::frost::PairedSecretShare;
-                                use schnorr_fun::fun::marker::EvenY;
 
-                                let paired_share: PairedSecretShare<EvenY> =
-                                    match bincode::deserialize(&bytes) {
-                                        Ok(share) => share,
-                                        Err(e) => {
-                                            app.reshare_form.error_message =
-                                                Some(format!("Corrupted wallet data: {}", e));
-                                            return;
+                // Find available party folders
+                let mut party_path: Option<(String, u32)> = None;
+
+                // Check for party folders first (new structure)
+                for i in 1..=10 {
+                    let party_dir = format!("{}/party{}", state_dir, i);
+                    let share_path = format!("{}/paired_secret_share.bin", party_dir);
+                    if std::path::Path::new(&share_path).exists() {
+                        party_path = Some((party_dir, i as u32));
+                        break;
+                    }
+                }
+
+                // Check for legacy structure (share directly in wallet folder)
+                if party_path.is_none() {
+                    let legacy_path = format!("{}/paired_secret_share.bin", state_dir);
+                    if std::path::Path::new(&legacy_path).exists() {
+                        party_path = Some((state_dir.clone(), 0)); // 0 = will read from share
+                    }
+                }
+
+                match party_path {
+                    Some((path, _party_idx)) => {
+                        match FileStorage::new(&path) {
+                            Ok(storage) => {
+                                // Load paired secret share to get my old index
+                                match storage.read("paired_secret_share.bin") {
+                                    Ok(bytes) => {
+                                        use schnorr_fun::frost::PairedSecretShare;
+                                        use schnorr_fun::fun::marker::EvenY;
+
+                                        let paired_share: PairedSecretShare<EvenY> =
+                                            match bincode::deserialize(&bytes) {
+                                                Ok(share) => share,
+                                                Err(e) => {
+                                                    app.reshare_form.error_message = Some(format!(
+                                                        "Corrupted wallet data: {}",
+                                                        e
+                                                    ));
+                                                    return;
+                                                }
+                                            };
+
+                                        // Extract party index from scalar (big-endian, last 4 bytes)
+                                        let index_bytes = paired_share.index().to_bytes();
+                                        let my_old_index = u32::from_be_bytes(
+                                            index_bytes[28..32].try_into().unwrap(),
+                                        );
+
+                                        match reshare::reshare_round1_core(
+                                            &wallet_name,
+                                            new_threshold,
+                                            new_n_parties,
+                                            my_old_index,
+                                        ) {
+                                            Ok(result) => {
+                                                app.reshare_form.round1_output = result.result;
+                                                app.reshare_form.error_message = None;
+                                                app.state =
+                                                    AppState::Reshare(ReshareState::Round1Output {
+                                                        output_json: app
+                                                            .reshare_form
+                                                            .round1_output
+                                                            .clone(),
+                                                    });
+                                            }
+                                            Err(e) => {
+                                                app.reshare_form.error_message =
+                                                    Some(format!("Error: {}", e));
+                                            }
                                         }
-                                    };
-
-                                // Extract party index from scalar (big-endian, last 4 bytes)
-                                let index_bytes = paired_share.index().to_bytes();
-                                let my_old_index =
-                                    u32::from_be_bytes(index_bytes[28..32].try_into().unwrap());
-
-                                match reshare::reshare_round1_core(
-                                    &wallet_name,
-                                    new_threshold,
-                                    new_n_parties,
-                                    my_old_index,
-                                ) {
-                                    Ok(result) => {
-                                        app.reshare_form.round1_output = result.result;
-                                        app.reshare_form.error_message = None;
-                                        app.state = AppState::Reshare(ReshareState::Round1Output {
-                                            output_json: app.reshare_form.round1_output.clone(),
-                                        });
                                     }
                                     Err(e) => {
                                         app.reshare_form.error_message =
-                                            Some(format!("Error: {}", e));
+                                            Some(format!("Cannot read share: {}", e));
                                     }
                                 }
                             }
                             Err(e) => {
                                 app.reshare_form.error_message =
-                                    Some(format!("Cannot read wallet: {}", e));
+                                    Some(format!("Storage error: {}", e));
                             }
                         }
                     }
-                    Err(e) => {
-                        app.reshare_form.error_message = Some(format!("Storage error: {}", e));
+                    None => {
+                        app.reshare_form.error_message =
+                            Some("No party shares found in wallet".to_string());
                     }
                 }
             }
