@@ -183,44 +183,54 @@ fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
 
     frame.render_widget(details, chunks[0]);
 
-    // Keyboard shortcuts panel
-    render_shortcuts(frame, chunks[1]);
+    // Keyboard shortcuts panel (pass whether wallet is selected)
+    let has_wallet = app.selected_wallet().is_some();
+    render_shortcuts(frame, has_wallet, chunks[1]);
 }
 
-fn render_shortcuts(frame: &mut Frame, area: Rect) {
-    let shortcuts = vec![
+fn render_shortcuts(frame: &mut Frame, has_wallet: bool, area: Rect) {
+    // Basic shortcuts always shown
+    let mut shortcuts = vec![
         Line::from(vec![
             Span::styled("n", Style::default().fg(Color::Yellow)),
             Span::raw(" Network   "),
             Span::styled("g", Style::default().fg(Color::Yellow)),
             Span::raw(" Generate wallet   "),
-            Span::styled("s", Style::default().fg(Color::Yellow)),
-            Span::raw(" Send"),
-        ]),
-        Line::from(vec![
-            Span::styled("a", Style::default().fg(Color::Yellow)),
-            Span::raw(" Addresses "),
-            Span::styled("m", Style::default().fg(Color::Yellow)),
-            Span::raw(" Mnemonic backup   "),
-            Span::styled("h", Style::default().fg(Color::Yellow)),
-            Span::raw(" Reshare"),
-        ]),
-        Line::from(vec![
-            Span::styled("r", Style::default().fg(Color::Yellow)),
-            Span::raw(" Refresh   "),
             Span::styled("R", Style::default().fg(Color::Yellow)),
-            Span::raw(" Reload wallets    "),
+            Span::raw(" Reload wallets"),
+        ]),
+        Line::from(vec![
+            Span::styled("↑/↓", Style::default().fg(Color::Green)),
+            Span::raw(" Navigate  "),
+            Span::styled("Enter", Style::default().fg(Color::Green)),
+            Span::raw(" Open wallet       "),
             Span::styled("q", Style::default().fg(Color::Yellow)),
             Span::raw(" Quit"),
         ]),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("Enter", Style::default().fg(Color::Green)),
-            Span::raw(" Open wallet actions  "),
-            Span::styled("↑/↓", Style::default().fg(Color::Green)),
-            Span::raw(" Navigate"),
-        ]),
     ];
+
+    // Wallet-specific shortcuts only shown when a wallet is selected
+    if has_wallet {
+        shortcuts.push(Line::from(""));
+        shortcuts.push(Line::from(Span::styled(
+            "Wallet actions:",
+            Style::default().fg(Color::Cyan),
+        )));
+        shortcuts.push(Line::from(vec![
+            Span::styled("s", Style::default().fg(Color::Yellow)),
+            Span::raw(" Send      "),
+            Span::styled("a", Style::default().fg(Color::Yellow)),
+            Span::raw(" Addresses   "),
+            Span::styled("m", Style::default().fg(Color::Yellow)),
+            Span::raw(" Mnemonic"),
+        ]));
+        shortcuts.push(Line::from(vec![
+            Span::styled("h", Style::default().fg(Color::Yellow)),
+            Span::raw(" Reshare   "),
+            Span::styled("r", Style::default().fg(Color::Yellow)),
+            Span::raw(" Refresh bal"),
+        ]));
+    }
 
     let shortcuts_widget = Paragraph::new(shortcuts)
         .block(
