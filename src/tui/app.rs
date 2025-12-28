@@ -179,6 +179,102 @@ impl App {
         })
     }
 
+    /// Fetch UTXOs and recent transactions for send form
+    pub fn fetch_utxos_for_send(&mut self, address: &str) {
+        use super::screens::{TxDisplay, UtxoDisplay};
+
+        let api_base = self.network.mempool_api_base();
+        let client = reqwest::blocking::Client::new();
+
+        // Fetch UTXOs
+        let utxo_url = format!("{}/address/{}/utxo", api_base, address);
+        if let Ok(response) = client.get(&utxo_url).send() {
+            if let Ok(utxos) = response.json::<Vec<serde_json::Value>>() {
+                self.send_form.utxos = utxos
+                    .iter()
+                    .filter_map(|u| {
+                        Some(UtxoDisplay {
+                            txid: u.get("txid")?.as_str()?.to_string(),
+                            vout: u.get("vout")?.as_u64()? as u32,
+                            value: u.get("value")?.as_u64()?,
+                            confirmed: u
+                                .get("status")
+                                .and_then(|s| s.get("confirmed"))
+                                .and_then(|c| c.as_bool())
+                                .unwrap_or(false),
+                        })
+                    })
+                    .collect();
+
+                self.send_form.total_balance = self.send_form.utxos.iter().map(|u| u.value).sum();
+            }
+        }
+
+        // Fetch recent transactions
+        let txs_url = format!("{}/address/{}/txs", api_base, address);
+        if let Ok(response) = client.get(&txs_url).send() {
+            if let Ok(txs) = response.json::<Vec<serde_json::Value>>() {
+                self.send_form.recent_txs = txs
+                    .iter()
+                    .take(10)
+                    .filter_map(|tx| {
+                        let txid = tx.get("txid")?.as_str()?.to_string();
+                        let confirmed = tx
+                            .get("status")
+                            .and_then(|s| s.get("confirmed"))
+                            .and_then(|c| c.as_bool())
+                            .unwrap_or(false);
+                        let time = tx
+                            .get("status")
+                            .and_then(|s| s.get("block_time"))
+                            .and_then(|t| t.as_u64());
+
+                        // Calculate net amount for this address
+                        let mut received: i64 = 0;
+                        let mut sent: i64 = 0;
+
+                        if let Some(vout) = tx.get("vout").and_then(|v| v.as_array()) {
+                            for out in vout {
+                                if let Some(scriptpubkey_address) =
+                                    out.get("scriptpubkey_address").and_then(|a| a.as_str())
+                                {
+                                    if scriptpubkey_address == address {
+                                        received +=
+                                            out.get("value").and_then(|v| v.as_i64()).unwrap_or(0);
+                                    }
+                                }
+                            }
+                        }
+
+                        if let Some(vin) = tx.get("vin").and_then(|v| v.as_array()) {
+                            for inp in vin {
+                                if let Some(prevout) = inp.get("prevout") {
+                                    if let Some(scriptpubkey_address) =
+                                        prevout.get("scriptpubkey_address").and_then(|a| a.as_str())
+                                    {
+                                        if scriptpubkey_address == address {
+                                            sent += prevout
+                                                .get("value")
+                                                .and_then(|v| v.as_i64())
+                                                .unwrap_or(0);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Some(TxDisplay {
+                            txid,
+                            amount: received - sent,
+                            confirmed,
+                            time,
+                        })
+                    })
+                    .collect();
+            }
+        }
+    }
+
     /// Reload wallet list
     pub fn reload_wallets(&mut self) {
         if let Ok(wallets) = list_wallets() {

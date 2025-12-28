@@ -14,6 +14,24 @@ use crate::tui::app::App;
 use crate::tui::components::{TextArea, TextInput};
 use crate::tui::state::{SendFormField, SendState};
 
+/// UTXO display info
+#[derive(Clone, Debug)]
+pub struct UtxoDisplay {
+    pub txid: String,
+    pub vout: u32,
+    pub value: u64,
+    pub confirmed: bool,
+}
+
+/// Transaction display info
+#[derive(Clone, Debug)]
+pub struct TxDisplay {
+    pub txid: String,
+    pub amount: i64, // Positive = received, negative = sent
+    pub confirmed: bool,
+    pub time: Option<u64>,
+}
+
 /// Send wizard form data
 #[derive(Clone)]
 #[allow(dead_code)]
@@ -41,6 +59,10 @@ pub struct SendFormData {
     pub hd_addresses: Vec<(String, String, u32)>, // (address, pubkey_hex, index)
     pub hd_selected_index: usize,                 // Currently selected HD address
     pub use_hd_address: bool,                     // Whether to use HD derived address
+    // UTXO and transaction info
+    pub utxos: Vec<UtxoDisplay>,
+    pub recent_txs: Vec<TxDisplay>,
+    pub total_balance: u64,
 }
 
 impl Default for SendFormData {
@@ -74,6 +96,10 @@ impl SendFormData {
             hd_addresses: Vec::new(),
             hd_selected_index: 0,
             use_hd_address: false,
+            // UTXO and transaction info defaults
+            utxos: Vec::new(),
+            recent_txs: Vec::new(),
+            total_balance: 0,
         }
     }
 
@@ -562,36 +588,168 @@ fn render_enter_details(frame: &mut Frame, form: &SendFormData, area: Rect) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let chunks = Layout::default()
+    // Split into left (inputs) and right (UTXOs/TXs)
+    let main_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(inner);
+
+    // Left side: inputs
+    let left_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // To address
             Constraint::Length(3), // Amount
+            Constraint::Length(3), // Balance info
             Constraint::Min(1),    // Spacer
             Constraint::Length(2), // Error
             Constraint::Length(2), // Help
         ])
-        .split(inner);
+        .split(main_chunks[0]);
 
     form.to_address.render(
         frame,
-        chunks[0],
+        left_chunks[0],
         form.focused_field == SendFormField::ToAddress,
     );
     form.amount.render(
         frame,
-        chunks[1],
+        left_chunks[1],
         form.focused_field == SendFormField::Amount,
     );
 
+    // Balance info
+    let balance_btc = form.total_balance as f64 / 100_000_000.0;
+    let confirmed_count = form.utxos.iter().filter(|u| u.confirmed).count();
+    let pending_count = form.utxos.len() - confirmed_count;
+    let balance_text = format!(
+        "Balance: {} sats ({:.8} BTC) | UTXOs: {} confirmed, {} pending",
+        form.total_balance, balance_btc, confirmed_count, pending_count
+    );
+    let balance_para = Paragraph::new(balance_text).style(Style::default().fg(Color::Green));
+    frame.render_widget(balance_para, left_chunks[2]);
+
     if let Some(error) = &form.error_message {
         let error_para = Paragraph::new(error.as_str()).style(Style::default().fg(Color::Red));
-        frame.render_widget(error_para, chunks[3]);
+        frame.render_widget(error_para, left_chunks[4]);
     }
 
     let help = Paragraph::new("Tab: Next field | Enter: Prepare TX | Esc: Back")
         .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(help, chunks[4]);
+    frame.render_widget(help, left_chunks[5]);
+
+    // Right side: UTXOs and recent transactions
+    let right_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(main_chunks[1]);
+
+    // UTXOs panel
+    render_utxos_panel(frame, form, right_chunks[0]);
+
+    // Recent transactions panel
+    render_recent_txs_panel(frame, form, right_chunks[1]);
+}
+
+fn render_utxos_panel(frame: &mut Frame, form: &SendFormData, area: Rect) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Yellow))
+        .title(" UTXOs ");
+
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let mut lines: Vec<Line> = Vec::new();
+
+    if form.utxos.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "No UTXOs found",
+            Style::default().fg(Color::DarkGray),
+        )));
+    } else {
+        for utxo in form.utxos.iter().take(5) {
+            let status = if utxo.confirmed { "✓" } else { "⏳" };
+            let status_color = if utxo.confirmed {
+                Color::Green
+            } else {
+                Color::Yellow
+            };
+            lines.push(Line::from(vec![
+                Span::styled(status, Style::default().fg(status_color)),
+                Span::styled(
+                    format!(" {} sats ", utxo.value),
+                    Style::default().fg(Color::White),
+                ),
+                Span::styled(
+                    format!("{}:{}", &utxo.txid[..8], utxo.vout),
+                    Style::default().fg(Color::DarkGray),
+                ),
+            ]));
+        }
+        if form.utxos.len() > 5 {
+            lines.push(Line::from(Span::styled(
+                format!("... and {} more", form.utxos.len() - 5),
+                Style::default().fg(Color::DarkGray),
+            )));
+        }
+    }
+
+    let para = Paragraph::new(lines);
+    frame.render_widget(para, inner);
+}
+
+fn render_recent_txs_panel(frame: &mut Frame, form: &SendFormData, area: Rect) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Magenta))
+        .title(" Recent Transactions ");
+
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let mut lines: Vec<Line> = Vec::new();
+
+    if form.recent_txs.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "No transactions found",
+            Style::default().fg(Color::DarkGray),
+        )));
+    } else {
+        for tx in form.recent_txs.iter().take(5) {
+            let status = if tx.confirmed { "✓" } else { "⏳" };
+            let status_color = if tx.confirmed {
+                Color::Green
+            } else {
+                Color::Yellow
+            };
+            let (amount_str, amount_color) = if tx.amount >= 0 {
+                (format!("+{}", tx.amount), Color::Green)
+            } else {
+                (format!("{}", tx.amount), Color::Red)
+            };
+            lines.push(Line::from(vec![
+                Span::styled(status, Style::default().fg(status_color)),
+                Span::styled(
+                    format!(" {} sats ", amount_str),
+                    Style::default().fg(amount_color),
+                ),
+                Span::styled(
+                    format!("{}...", &tx.txid[..8]),
+                    Style::default().fg(Color::DarkGray),
+                ),
+            ]));
+        }
+        if form.recent_txs.len() > 5 {
+            lines.push(Line::from(Span::styled(
+                format!("... and {} more", form.recent_txs.len() - 5),
+                Style::default().fg(Color::DarkGray),
+            )));
+        }
+    }
+
+    let para = Paragraph::new(lines);
+    frame.render_widget(para, inner);
 }
 
 fn render_show_sighash(frame: &mut Frame, sighash: &str, area: Rect) {

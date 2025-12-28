@@ -1047,6 +1047,48 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
             }
             KeyCode::Enter => {
                 app.send_form.error_message = None;
+
+                // Get the source address to fetch UTXOs
+                let source_address = if app.send_form.use_hd_address {
+                    app.send_form
+                        .hd_addresses
+                        .get(app.send_form.hd_selected_index)
+                        .map(|(addr, _, _)| addr.clone())
+                } else {
+                    // Get root address
+                    let state_dir = frostdao::protocol::keygen::get_state_dir(&wallet_name);
+                    FileStorage::new(&state_dir).ok().and_then(|storage| {
+                        storage.read("shared_key.bin").ok().and_then(|bytes| {
+                            bincode::deserialize::<
+                                schnorr_fun::frost::SharedKey<schnorr_fun::fun::marker::EvenY>,
+                            >(&bytes)
+                            .ok()
+                            .map(|sk| {
+                                let pubkey_bytes: [u8; 32] = sk.public_key().to_xonly_bytes();
+                                let xonly =
+                                    bitcoin::secp256k1::XOnlyPublicKey::from_slice(&pubkey_bytes)
+                                        .ok()?;
+                                let secp = bitcoin::secp256k1::Secp256k1::new();
+                                Some(
+                                    bitcoin::Address::p2tr(
+                                        &secp,
+                                        xonly,
+                                        None,
+                                        app.network.to_bitcoin_network(),
+                                    )
+                                    .to_string(),
+                                )
+                            })
+                            .flatten()
+                        })
+                    })
+                };
+
+                // Fetch UTXOs and transactions for the source address
+                if let Some(addr) = source_address {
+                    app.fetch_utxos_for_send(&addr);
+                }
+
                 app.state = AppState::Send(SendState::EnterDetails { wallet_name });
             }
             _ => {}
