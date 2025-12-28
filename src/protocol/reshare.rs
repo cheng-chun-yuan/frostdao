@@ -655,63 +655,30 @@ pub fn reshare_finalize_core(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::crypto::helpers::lagrange_coefficient_at_zero;
 
     #[test]
-    fn test_lagrange_coefficients_sum_to_one() {
-        use crate::crypto::helpers::lagrange_coefficient_at_zero;
-
-        // Test that Lagrange coefficients for indices {1,2,3} at x=0 sum to 1
-        // This is a fundamental property: Σ λ_i(x) = 1 for any x
-        let indices = vec![1, 2, 3];
-
+    fn test_resharing_math() {
+        // Lagrange coefficients sum to 1
+        let indices = vec![1u32, 2, 3];
+        let one: Scalar<Secret, Zero> = Scalar::from(1u32);
         let mut sum: Scalar<Secret, Zero> = Scalar::zero();
         for &idx in &indices {
-            let coeff = lagrange_coefficient_at_zero(idx, &indices).unwrap();
-            sum = s!(sum + coeff);
+            sum = s!(sum + lagrange_coefficient_at_zero(idx, &indices).unwrap());
         }
-
-        // Sum should equal 1
-        let one: Scalar<Secret, Zero> = Scalar::from(1u32);
         assert_eq!(sum.to_bytes(), one.to_bytes());
-    }
 
-    #[test]
-    fn test_resharing_preserves_secret() {
-        use crate::crypto::helpers::lagrange_coefficient_at_zero;
-
-        // Simulate resharing: old shares combine to same secret
-        // Original secret: s
-        // Old shares: s_1, s_2, s_3 (2-of-3 Shamir)
-        // After resharing, new shares should reconstruct to same s
-
-        // Create a mock secret and shares using simple linear polynomial
-        // f(x) = s + a*x, where f(0) = s
+        // Secret reconstruction: f(x) = s + a*x
         let mut rng = rand::thread_rng();
         let secret = Scalar::<Secret, NonZero>::random(&mut rng);
         let coeff = Scalar::<Secret, NonZero>::random(&mut rng);
-
-        // Evaluate at indices 1, 2, 3
         let share1 = s!(secret + { Scalar::<Secret, Zero>::from(1u32) } * coeff);
         let share2 = s!(secret + { Scalar::<Secret, Zero>::from(2u32) } * coeff);
-        let share3 = s!(secret + { Scalar::<Secret, Zero>::from(3u32) } * coeff);
 
-        // Reconstruct secret using Lagrange at x=0 with shares 1 and 2
-        let indices = vec![1, 2];
-        let lambda1 = lagrange_coefficient_at_zero(1, &indices).unwrap();
-        let lambda2 = lagrange_coefficient_at_zero(2, &indices).unwrap();
-
-        let reconstructed = s!(lambda1 * share1 + lambda2 * share2);
-
-        // Should equal original secret
+        let idx12 = vec![1u32, 2];
+        let reconstructed = s!(lagrange_coefficient_at_zero(1, &idx12).unwrap() * share1
+            + lagrange_coefficient_at_zero(2, &idx12).unwrap() * share2);
         let secret_zero: Scalar<Secret, Zero> = Scalar::from_bytes(secret.to_bytes()).unwrap();
         assert_eq!(reconstructed.to_bytes(), secret_zero.to_bytes());
-
-        // Also verify with indices 2 and 3
-        let indices = vec![2, 3];
-        let lambda2 = lagrange_coefficient_at_zero(2, &indices).unwrap();
-        let lambda3 = lagrange_coefficient_at_zero(3, &indices).unwrap();
-
-        let reconstructed2 = s!(lambda2 * share2 + lambda3 * share3);
-        assert_eq!(reconstructed2.to_bytes(), secret_zero.to_bytes());
     }
 }

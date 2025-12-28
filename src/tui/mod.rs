@@ -1169,13 +1169,100 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     app.fetch_utxos_for_send(&addr);
                 }
 
+                // Reset script config for new transaction
+                app.send_form.script_config = crate::tui::screens::ScriptConfig::new();
+
+                app.state = AppState::Send(SendState::ConfigureScript { wallet_name });
+            }
+            _ => {}
+        },
+        AppState::Send(SendState::ConfigureScript { wallet_name }) => match key.code {
+            KeyCode::Esc => {
+                app.state = AppState::Send(SendState::SelectAddress {
+                    wallet_name: wallet_name.clone(),
+                });
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if app.send_form.script_config.selected_index > 0 {
+                    app.send_form.script_config.selected_index -= 1;
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                let max = crate::tui::screens::ScriptType::all().len();
+                if app.send_form.script_config.selected_index + 1 < max {
+                    app.send_form.script_config.selected_index += 1;
+                }
+            }
+            KeyCode::Char(' ') => {
+                // Toggle/select script type
+                let types = crate::tui::screens::ScriptType::all();
+                if let Some(selected) = types.get(app.send_form.script_config.selected_index) {
+                    app.send_form.script_config.script_type = selected.clone();
+                    app.send_form.script_config.focused_field = 0;
+                }
+            }
+            KeyCode::Tab => {
+                // Cycle through config fields based on script type
+                use crate::tui::screens::ScriptType;
+                let max_fields = match app.send_form.script_config.script_type {
+                    ScriptType::None => 0,
+                    ScriptType::TimelockAbsolute | ScriptType::TimelockRelative => 1,
+                    ScriptType::Recovery => 2,
+                    ScriptType::HTLC => 3,
+                };
+                if max_fields > 0 {
+                    app.send_form.script_config.focused_field =
+                        (app.send_form.script_config.focused_field + 1) % max_fields;
+                }
+            }
+            KeyCode::Char(_) | KeyCode::Backspace => {
+                // Input to focused field
+                use crate::tui::screens::ScriptType;
+                let config = &mut app.send_form.script_config;
+                match &config.script_type {
+                    ScriptType::TimelockAbsolute => {
+                        if config.focused_field == 0 {
+                            config.timelock_height.handle_key(key);
+                        }
+                    }
+                    ScriptType::TimelockRelative => {
+                        if config.focused_field == 0 {
+                            config.timelock_blocks.handle_key(key);
+                        }
+                    }
+                    ScriptType::Recovery => match config.focused_field {
+                        0 => {
+                            config.recovery_timeout.handle_key(key);
+                        }
+                        1 => {
+                            config.recovery_pubkey.handle_key(key);
+                        }
+                        _ => {}
+                    },
+                    ScriptType::HTLC => match config.focused_field {
+                        0 => {
+                            config.htlc_hash.handle_key(key);
+                        }
+                        1 => {
+                            config.htlc_timeout.handle_key(key);
+                        }
+                        2 => {
+                            config.htlc_refund_pubkey.handle_key(key);
+                        }
+                        _ => {}
+                    },
+                    _ => {}
+                }
+            }
+            KeyCode::Enter => {
+                app.send_form.error_message = None;
                 app.state = AppState::Send(SendState::EnterDetails { wallet_name });
             }
             _ => {}
         },
         AppState::Send(SendState::EnterDetails { wallet_name }) => match key.code {
             KeyCode::Esc => {
-                app.state = AppState::Send(SendState::SelectAddress {
+                app.state = AppState::Send(SendState::ConfigureScript {
                     wallet_name: wallet_name.clone(),
                 });
             }

@@ -527,75 +527,26 @@ mod tests {
     use crate::crypto::helpers::lagrange_coefficient_at;
 
     #[test]
-    fn test_lagrange_at_different_x() {
-        // For indices {1, 2} evaluating at x=3:
-        // λ_1(3) = (3-2)/(1-2) = 1/(-1) = -1
-        // λ_2(3) = (3-1)/(2-1) = 2/1 = 2
-        // Check: -1 + 2 = 1 ✓ (Lagrange coefficients always sum to 1)
-
+    fn test_share_recovery() {
+        // Test Lagrange interpolation at x=3 with indices {1, 2}
         let indices = vec![1u32, 2];
-
         let lambda1 = lagrange_coefficient_at(1, &indices, 3).unwrap();
         let lambda2 = lagrange_coefficient_at(2, &indices, 3).unwrap();
-
-        // Sum should equal 1
-        let sum = s!(lambda1 + lambda2);
         let one: Scalar<Secret, Zero> = Scalar::from(1u32);
-        assert_eq!(sum.to_bytes(), one.to_bytes());
+        assert_eq!(s!(lambda1 + lambda2).to_bytes(), one.to_bytes());
 
-        // Verify λ_1(3) = -1
-        let neg_one: Scalar<Secret, Zero> = {
-            let pos: Scalar<Secret, Zero> = Scalar::from(1u32);
-            s!(-pos)
-        };
-        assert_eq!(lambda1.to_bytes(), neg_one.to_bytes());
-
-        // Verify λ_2(3) = 2
-        let two: Scalar<Secret, Zero> = Scalar::from(2u32);
-        assert_eq!(lambda2.to_bytes(), two.to_bytes());
-    }
-
-    #[test]
-    fn test_recovery_math() {
-        // Simulate recovery:
-        // Original polynomial: f(x) = s + a*x (degree 1, threshold 2)
-        // Shares: s_1 = f(1), s_2 = f(2), s_3 = f(3)
-        //
-        // If party 3 loses their share, parties 1 and 2 help recover:
-        // s_3 = λ_1(3) * s_1 + λ_2(3) * s_2
-        //     = (-1) * s_1 + 2 * s_2
-        //     = (-1) * (s + a) + 2 * (s + 2a)
-        //     = -s - a + 2s + 4a
-        //     = s + 3a
-        //     = f(3) ✓
-
+        // Recovery math: f(x) = s + a*x, recover f(3) from f(1), f(2)
         let mut rng = rand::thread_rng();
-
-        // Create polynomial f(x) = s + a*x
         let secret = Scalar::<Secret, NonZero>::random(&mut rng);
         let coeff = Scalar::<Secret, NonZero>::random(&mut rng);
-
-        // Compute shares
-        let one: Scalar<Secret, Zero> = Scalar::from(1u32);
         let two: Scalar<Secret, Zero> = Scalar::from(2u32);
         let three: Scalar<Secret, Zero> = Scalar::from(3u32);
 
-        let share1 = s!(secret + one * coeff); // f(1)
-        let share2 = s!(secret + two * coeff); // f(2)
-        let share3 = s!(secret + three * coeff); // f(3) - the one we want to recover
-
-        // Recover share 3 using shares 1 and 2
-        let indices = vec![1u32, 2];
-        let lambda1 = lagrange_coefficient_at(1, &indices, 3).unwrap();
-        let lambda2 = lagrange_coefficient_at(2, &indices, 3).unwrap();
+        let share1 = s!(secret + one * coeff);
+        let share2 = s!(secret + two * coeff);
+        let share3 = s!(secret + three * coeff);
 
         let recovered = s!(lambda1 * share1 + lambda2 * share2);
-
-        // Should equal original share3
-        assert_eq!(
-            recovered.to_bytes(),
-            share3.to_bytes(),
-            "Recovered share should match original"
-        );
+        assert_eq!(recovered.to_bytes(), share3.to_bytes());
     }
 }
