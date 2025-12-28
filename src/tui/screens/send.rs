@@ -14,6 +14,153 @@ use crate::tui::app::App;
 use crate::tui::components::{TextArea, TextInput};
 use crate::tui::state::{SendFormField, SendState};
 
+/// Script type for Taproot spending conditions
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum ScriptType {
+    /// Standard key path spending (no script)
+    #[default]
+    None,
+    /// Absolute timelock (CLTV) - block height
+    TimelockAbsolute,
+    /// Relative timelock (CSV) - blocks after confirmation
+    TimelockRelative,
+    /// Recovery script - fallback after timeout
+    Recovery,
+    /// Hash Time-Locked Contract
+    HTLC,
+}
+
+impl ScriptType {
+    pub fn all() -> &'static [ScriptType] {
+        &[
+            ScriptType::None,
+            ScriptType::TimelockAbsolute,
+            ScriptType::TimelockRelative,
+            ScriptType::Recovery,
+            ScriptType::HTLC,
+        ]
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            ScriptType::None => "Standard (Key Path)",
+            ScriptType::TimelockAbsolute => "Timelock (Absolute)",
+            ScriptType::TimelockRelative => "Timelock (Relative)",
+            ScriptType::Recovery => "Recovery Script",
+            ScriptType::HTLC => "HTLC (Hash Lock)",
+        }
+    }
+
+    pub fn description(&self) -> &'static str {
+        match self {
+            ScriptType::None => "Normal threshold signature spending",
+            ScriptType::TimelockAbsolute => "Cannot spend until block height X",
+            ScriptType::TimelockRelative => "Cannot spend until N blocks after confirmation",
+            ScriptType::Recovery => "Fallback: recovery key can spend after timeout",
+            ScriptType::HTLC => "Requires hash preimage OR timeout for refund",
+        }
+    }
+
+    /// Convert to the btc taproot_scripts module type
+    pub fn to_script_type_input(&self) -> frostdao::btc::taproot_scripts::ScriptTypeInput {
+        use frostdao::btc::taproot_scripts::ScriptTypeInput;
+        match self {
+            ScriptType::None => ScriptTypeInput::None,
+            ScriptType::TimelockAbsolute => ScriptTypeInput::TimelockAbsolute,
+            ScriptType::TimelockRelative => ScriptTypeInput::TimelockRelative,
+            ScriptType::Recovery => ScriptTypeInput::Recovery,
+            ScriptType::HTLC => ScriptTypeInput::Htlc,
+        }
+    }
+}
+
+/// Script configuration for advanced spending conditions
+#[derive(Clone)]
+pub struct ScriptConfig {
+    /// Selected script type
+    pub script_type: ScriptType,
+    /// Absolute timelock: block height
+    pub timelock_height: TextInput,
+    /// Relative timelock: number of blocks
+    pub timelock_blocks: TextInput,
+    /// Recovery: timeout in blocks
+    pub recovery_timeout: TextInput,
+    /// Recovery: pubkey (x-only hex)
+    pub recovery_pubkey: TextInput,
+    /// HTLC: hash (SHA256 hex)
+    pub htlc_hash: TextInput,
+    /// HTLC: timeout in blocks
+    pub htlc_timeout: TextInput,
+    /// HTLC: refund pubkey (x-only hex)
+    pub htlc_refund_pubkey: TextInput,
+    /// Currently selected script type index
+    pub selected_index: usize,
+    /// Currently focused field in config
+    pub focused_field: usize,
+}
+
+impl Default for ScriptConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ScriptConfig {
+    pub fn new() -> Self {
+        Self {
+            script_type: ScriptType::None,
+            timelock_height: TextInput::new("Block Height")
+                .with_placeholder("850000")
+                .numeric(),
+            timelock_blocks: TextInput::new("Blocks").with_placeholder("144").numeric(),
+            recovery_timeout: TextInput::new("Timeout (blocks)")
+                .with_placeholder("4320")
+                .numeric(),
+            recovery_pubkey: TextInput::new("Recovery Pubkey")
+                .with_placeholder("x-only hex (64 chars)"),
+            htlc_hash: TextInput::new("Hash (SHA256)").with_placeholder("64 char hex"),
+            htlc_timeout: TextInput::new("Timeout (blocks)")
+                .with_placeholder("144")
+                .numeric(),
+            htlc_refund_pubkey: TextInput::new("Refund Pubkey")
+                .with_placeholder("x-only hex (64 chars)"),
+            selected_index: 0,
+            focused_field: 0,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        *self = Self::new();
+    }
+
+    /// Convert to ScriptParams for use with taproot_scripts module
+    pub fn to_script_params(&self) -> anyhow::Result<frostdao::btc::taproot_scripts::ScriptParams> {
+        use frostdao::btc::taproot_scripts::ScriptParams;
+
+        // Determine timeout based on script type
+        let timeout = match self.script_type {
+            ScriptType::Recovery => self.recovery_timeout.value(),
+            ScriptType::HTLC => self.htlc_timeout.value(),
+            _ => "",
+        };
+
+        ScriptParams::from_strings(
+            self.script_type.to_script_type_input(),
+            self.timelock_height.value(),
+            self.timelock_blocks.value(),
+            timeout,
+            self.recovery_pubkey.value(),
+            self.htlc_hash.value(),
+            self.htlc_refund_pubkey.value(),
+        )
+    }
+
+    /// Check if this is a standard key-path spend (no scripts)
+    pub fn is_key_path_only(&self) -> bool {
+        self.script_type == ScriptType::None
+    }
+}
+
 /// UTXO display info
 #[derive(Clone, Debug)]
 pub struct UtxoDisplay {
@@ -67,6 +214,8 @@ pub struct SendFormData {
     pub fee_rate: u64,       // sats/vbyte
     pub estimated_fee: u64,  // estimated fee for current amount
     pub utxos_needed: usize, // how many UTXOs needed
+    // Script options (timelock, recovery, HTLC)
+    pub script_config: ScriptConfig,
 }
 
 impl Default for SendFormData {
@@ -108,6 +257,7 @@ impl SendFormData {
             fee_rate: 1, // 1 sat/vbyte default
             estimated_fee: 0,
             utxos_needed: 0,
+            script_config: ScriptConfig::new(),
         }
     }
 
@@ -209,6 +359,7 @@ pub fn render_send(frame: &mut Frame, app: &App, form: &SendFormData, area: Rect
             SendState::SelectWallet => render_select_wallet(frame, app, form, area),
             SendState::SelectSigners { .. } => render_select_signers(frame, form, area),
             SendState::SelectAddress { .. } => render_select_address(frame, form, area),
+            SendState::ConfigureScript { .. } => render_configure_script(frame, form, area),
             SendState::EnterDetails { .. } => render_enter_details(frame, form, area),
             SendState::ShowSighash { sighash, .. } => render_show_sighash(frame, sighash, area),
             SendState::GenerateNonce { nonce_output, .. } => {
@@ -626,6 +777,297 @@ fn render_select_address(frame: &mut Frame, form: &SendFormData, area: Rect) {
 
     let help = Paragraph::new("↑/↓: Navigate | Enter: Continue | Esc: Back")
         .style(Style::default().fg(Color::DarkGray));
+    frame.render_widget(help, chunks[4]);
+}
+
+fn render_configure_script(frame: &mut Frame, form: &SendFormData, area: Rect) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .title(" Send - Step 4: Script Options (Optional) ");
+
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),  // Header
+            Constraint::Length(12), // Script type selector
+            Constraint::Min(8),     // Config fields
+            Constraint::Length(2),  // Error
+            Constraint::Length(2),  // Help
+        ])
+        .split(inner);
+
+    // Header
+    let header = Paragraph::new(vec![
+        Line::from(vec![Span::styled(
+            "🔒 Configure spending conditions (optional):",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(vec![Span::styled(
+            "   These add script paths to your Taproot output",
+            Style::default().fg(Color::DarkGray),
+        )]),
+    ]);
+    frame.render_widget(header, chunks[0]);
+
+    // Script type selector
+    let script_types = ScriptType::all();
+    let mut type_lines = vec![];
+
+    for (i, script_type) in script_types.iter().enumerate() {
+        let is_selected = i == form.script_config.selected_index;
+        let prefix = if is_selected { "▶ " } else { "  " };
+        let checkbox = if form.script_config.script_type == *script_type {
+            "[●]"
+        } else {
+            "[ ]"
+        };
+
+        let style = if is_selected {
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::White)
+        };
+
+        type_lines.push(Line::from(vec![
+            Span::styled(prefix, style),
+            Span::styled(checkbox, style),
+            Span::styled(format!(" {}", script_type.label()), style),
+        ]));
+        type_lines.push(Line::from(vec![
+            Span::raw("       "),
+            Span::styled(
+                script_type.description(),
+                Style::default().fg(Color::DarkGray),
+            ),
+        ]));
+    }
+
+    let type_list = Paragraph::new(type_lines)
+        .block(Block::default().borders(Borders::ALL).title("Script Type"));
+    frame.render_widget(type_list, chunks[1]);
+
+    // Config fields based on selected type
+    let config_content = match &form.script_config.script_type {
+        ScriptType::None => vec![
+            Line::from(vec![Span::styled(
+                "No additional configuration needed.",
+                Style::default().fg(Color::DarkGray),
+            )]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "Standard key path spending will be used.",
+                Style::default().fg(Color::Gray),
+            )]),
+        ],
+        ScriptType::TimelockAbsolute => {
+            let focused = form.script_config.focused_field == 0;
+            vec![
+                Line::from(vec![
+                    Span::styled(
+                        if focused { "▶ " } else { "  " },
+                        Style::default().fg(Color::Yellow),
+                    ),
+                    Span::styled("Block Height: ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        form.script_config.timelock_height.value(),
+                        if focused {
+                            Style::default().fg(Color::Yellow)
+                        } else {
+                            Style::default().fg(Color::White)
+                        },
+                    ),
+                ]),
+                Line::from(""),
+                Line::from(vec![Span::styled(
+                    "   Transaction cannot be spent until this block height.",
+                    Style::default().fg(Color::DarkGray),
+                )]),
+                Line::from(vec![Span::styled(
+                    "   Current testnet height: ~2,800,000",
+                    Style::default().fg(Color::DarkGray),
+                )]),
+            ]
+        }
+        ScriptType::TimelockRelative => {
+            let focused = form.script_config.focused_field == 0;
+            vec![
+                Line::from(vec![
+                    Span::styled(
+                        if focused { "▶ " } else { "  " },
+                        Style::default().fg(Color::Yellow),
+                    ),
+                    Span::styled("Blocks: ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        form.script_config.timelock_blocks.value(),
+                        if focused {
+                            Style::default().fg(Color::Yellow)
+                        } else {
+                            Style::default().fg(Color::White)
+                        },
+                    ),
+                ]),
+                Line::from(""),
+                Line::from(vec![Span::styled(
+                    "   Cannot spend until N blocks after confirmation.",
+                    Style::default().fg(Color::DarkGray),
+                )]),
+                Line::from(vec![Span::styled(
+                    "   144 blocks ≈ 1 day, 1008 ≈ 1 week",
+                    Style::default().fg(Color::DarkGray),
+                )]),
+            ]
+        }
+        ScriptType::Recovery => {
+            let timeout_focused = form.script_config.focused_field == 0;
+            let pubkey_focused = form.script_config.focused_field == 1;
+            vec![
+                Line::from(vec![
+                    Span::styled(
+                        if timeout_focused { "▶ " } else { "  " },
+                        Style::default().fg(Color::Yellow),
+                    ),
+                    Span::styled("Timeout (blocks): ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        form.script_config.recovery_timeout.value(),
+                        if timeout_focused {
+                            Style::default().fg(Color::Yellow)
+                        } else {
+                            Style::default().fg(Color::White)
+                        },
+                    ),
+                ]),
+                Line::from(vec![
+                    Span::styled(
+                        if pubkey_focused { "▶ " } else { "  " },
+                        Style::default().fg(Color::Yellow),
+                    ),
+                    Span::styled("Recovery Pubkey: ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        if form.script_config.recovery_pubkey.value().is_empty() {
+                            "(enter x-only pubkey)".to_string()
+                        } else {
+                            let v = form.script_config.recovery_pubkey.value();
+                            if v.len() > 20 {
+                                format!("{}...", &v[..20])
+                            } else {
+                                v.to_string()
+                            }
+                        },
+                        if pubkey_focused {
+                            Style::default().fg(Color::Yellow)
+                        } else {
+                            Style::default().fg(Color::White)
+                        },
+                    ),
+                ]),
+                Line::from(""),
+                Line::from(vec![Span::styled(
+                    "   After timeout, recovery key can spend.",
+                    Style::default().fg(Color::DarkGray),
+                )]),
+            ]
+        }
+        ScriptType::HTLC => {
+            let hash_focused = form.script_config.focused_field == 0;
+            let timeout_focused = form.script_config.focused_field == 1;
+            let refund_focused = form.script_config.focused_field == 2;
+            vec![
+                Line::from(vec![
+                    Span::styled(
+                        if hash_focused { "▶ " } else { "  " },
+                        Style::default().fg(Color::Yellow),
+                    ),
+                    Span::styled("Hash (SHA256): ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        if form.script_config.htlc_hash.value().is_empty() {
+                            "(64 char hex)".to_string()
+                        } else {
+                            let v = form.script_config.htlc_hash.value();
+                            if v.len() > 20 {
+                                format!("{}...", &v[..20])
+                            } else {
+                                v.to_string()
+                            }
+                        },
+                        if hash_focused {
+                            Style::default().fg(Color::Yellow)
+                        } else {
+                            Style::default().fg(Color::White)
+                        },
+                    ),
+                ]),
+                Line::from(vec![
+                    Span::styled(
+                        if timeout_focused { "▶ " } else { "  " },
+                        Style::default().fg(Color::Yellow),
+                    ),
+                    Span::styled("Timeout (blocks): ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        form.script_config.htlc_timeout.value(),
+                        if timeout_focused {
+                            Style::default().fg(Color::Yellow)
+                        } else {
+                            Style::default().fg(Color::White)
+                        },
+                    ),
+                ]),
+                Line::from(vec![
+                    Span::styled(
+                        if refund_focused { "▶ " } else { "  " },
+                        Style::default().fg(Color::Yellow),
+                    ),
+                    Span::styled("Refund Pubkey: ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        if form.script_config.htlc_refund_pubkey.value().is_empty() {
+                            "(x-only pubkey)".to_string()
+                        } else {
+                            let v = form.script_config.htlc_refund_pubkey.value();
+                            if v.len() > 20 {
+                                format!("{}...", &v[..20])
+                            } else {
+                                v.to_string()
+                            }
+                        },
+                        if refund_focused {
+                            Style::default().fg(Color::Yellow)
+                        } else {
+                            Style::default().fg(Color::White)
+                        },
+                    ),
+                ]),
+                Line::from(""),
+                Line::from(vec![Span::styled(
+                    "   Recipient needs preimage; you can refund after timeout.",
+                    Style::default().fg(Color::DarkGray),
+                )]),
+            ]
+        }
+    };
+
+    let config_widget = Paragraph::new(config_content).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title("Configuration"),
+    );
+    frame.render_widget(config_widget, chunks[2]);
+
+    if let Some(error) = &form.error_message {
+        let error_para = Paragraph::new(error.as_str()).style(Style::default().fg(Color::Red));
+        frame.render_widget(error_para, chunks[3]);
+    }
+
+    let help = Paragraph::new(
+        "↑/↓: Select type | Tab: Next field | Space: Toggle | Enter: Continue | Esc: Back",
+    )
+    .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[4]);
 }
 

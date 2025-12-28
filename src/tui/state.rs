@@ -207,6 +207,8 @@ pub enum SendState {
     SelectSigners { wallet_name: String },
     /// Select HD address to send from (optional)
     SelectAddress { wallet_name: String },
+    /// Configure script options (timelock, recovery, HTLC)
+    ConfigureScript { wallet_name: String },
     /// Enter recipient and amount
     EnterDetails { wallet_name: String },
     /// Show sighash for signing
