@@ -85,10 +85,13 @@ fn render_delete_confirmation(frame: &mut Frame, wallet_name: &str, area: Rect) 
 fn render_wallet_info(frame: &mut Frame, app: &App, wallet_name: &str, area: Rect) {
     let wallet = app.wallets.iter().find(|w| w.name == wallet_name);
 
-    // Split area: info on top, QR code on bottom
+    // Get address for QR code
+    let address = wallet.and_then(|w| w.address.clone());
+
+    // Split area: info on left, QR code on right
     let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(12), Constraint::Length(15)])
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(45), Constraint::Length(35)])
         .split(area);
 
     let content = if let Some(wallet) = wallet {
@@ -203,10 +206,8 @@ fn render_wallet_info(frame: &mut Frame, app: &App, wallet_name: &str, area: Rec
     frame.render_widget(details, chunks[0]);
 
     // Render QR code if address available
-    if let Some(wallet) = wallet {
-        if let Some(addr) = &wallet.address {
-            render_qr_code(frame, addr, chunks[1]);
-        }
+    if let Some(addr) = address {
+        render_qr_code(frame, &addr, chunks[1]);
     }
 }
 

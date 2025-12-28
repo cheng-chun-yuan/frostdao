@@ -186,6 +186,18 @@ impl App {
         let api_base = self.network.mempool_api_base();
         let client = reqwest::blocking::Client::new();
 
+        // Fetch fee estimates
+        let fee_url = format!("{}/v1/fees/recommended", api_base);
+        if let Ok(response) = client.get(&fee_url).send() {
+            if let Ok(fees) = response.json::<serde_json::Value>() {
+                // Use half hour fee as default (reasonable balance of speed/cost)
+                self.send_form.fee_rate = fees
+                    .get("halfHourFee")
+                    .and_then(|f| f.as_u64())
+                    .unwrap_or(1);
+            }
+        }
+
         // Fetch UTXOs
         let utxo_url = format!("{}/address/{}/utxo", api_base, address);
         if let Ok(response) = client.get(&utxo_url).send() {
@@ -207,6 +219,8 @@ impl App {
                     .collect();
 
                 self.send_form.total_balance = self.send_form.utxos.iter().map(|u| u.value).sum();
+                // Update fee estimate
+                self.send_form.estimate_fee();
             }
         }
 

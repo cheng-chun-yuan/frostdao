@@ -1188,6 +1188,8 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 }
                 SendFormField::Amount => {
                     app.send_form.amount.handle_key(key);
+                    // Recalculate fee estimate when amount changes
+                    app.send_form.estimate_fee();
                 }
             },
         },

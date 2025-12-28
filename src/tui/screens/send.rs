@@ -63,6 +63,10 @@ pub struct SendFormData {
     pub utxos: Vec<UtxoDisplay>,
     pub recent_txs: Vec<TxDisplay>,
     pub total_balance: u64,
+    // Fee estimation
+    pub fee_rate: u64,       // sats/vbyte
+    pub estimated_fee: u64,  // estimated fee for current amount
+    pub utxos_needed: usize, // how many UTXOs needed
 }
 
 impl Default for SendFormData {
@@ -100,7 +104,48 @@ impl SendFormData {
             utxos: Vec::new(),
             recent_txs: Vec::new(),
             total_balance: 0,
+            // Fee estimation defaults
+            fee_rate: 1, // 1 sat/vbyte default
+            estimated_fee: 0,
+            utxos_needed: 0,
         }
+    }
+
+    /// Estimate fee for the current amount using coin selection
+    pub fn estimate_fee(&mut self) {
+        let amount: u64 = self.amount.value().parse().unwrap_or(0);
+        if amount == 0 {
+            self.estimated_fee = 0;
+            self.utxos_needed = 0;
+            return;
+        }
+
+        // Get confirmed UTXOs sorted by value (largest first for fewer inputs)
+        let mut confirmed: Vec<&UtxoDisplay> = self.utxos.iter().filter(|u| u.confirmed).collect();
+        confirmed.sort_by(|a, b| b.value.cmp(&a.value));
+
+        // Coin selection: select minimum UTXOs needed
+        let mut selected_value: u64 = 0;
+        let mut num_inputs: usize = 0;
+
+        for utxo in confirmed {
+            if selected_value >= amount {
+                break;
+            }
+            selected_value += utxo.value;
+            num_inputs += 1;
+        }
+
+        if num_inputs == 0 {
+            self.estimated_fee = 0;
+            self.utxos_needed = 0;
+            return;
+        }
+
+        // Estimate vsize: 10 (overhead) + 58 per input + 43 per output (2 outputs: recipient + change)
+        let estimated_vsize = 10 + (num_inputs as u64 * 58) + (2 * 43);
+        self.estimated_fee = estimated_vsize * self.fee_rate;
+        self.utxos_needed = num_inputs;
     }
 
     #[allow(dead_code)]
@@ -618,15 +663,83 @@ fn render_enter_details(frame: &mut Frame, form: &SendFormData, area: Rect) {
         form.focused_field == SendFormField::Amount,
     );
 
-    // Balance info
+    // Balance and fee info
     let balance_btc = form.total_balance as f64 / 100_000_000.0;
     let confirmed_count = form.utxos.iter().filter(|u| u.confirmed).count();
-    let pending_count = form.utxos.len() - confirmed_count;
-    let balance_text = format!(
-        "Balance: {} sats ({:.8} BTC) | UTXOs: {} confirmed, {} pending",
-        form.total_balance, balance_btc, confirmed_count, pending_count
-    );
-    let balance_para = Paragraph::new(balance_text).style(Style::default().fg(Color::Green));
+    let confirmed_balance: u64 = form
+        .utxos
+        .iter()
+        .filter(|u| u.confirmed)
+        .map(|u| u.value)
+        .sum();
+
+    let amount: u64 = form.amount.value().parse().unwrap_or(0);
+    let total_needed = amount + form.estimated_fee;
+
+    let mut balance_lines = vec![Line::from(vec![
+        Span::styled("Balance: ", Style::default().fg(Color::Gray)),
+        Span::styled(
+            format!("{} sats", confirmed_balance),
+            Style::default().fg(Color::Green),
+        ),
+        Span::styled(
+            format!(" ({:.8} BTC)", balance_btc),
+            Style::default().fg(Color::DarkGray),
+        ),
+    ])];
+
+    if form.estimated_fee > 0 {
+        balance_lines.push(Line::from(vec![
+            Span::styled("Est. fee: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                format!("{} sats", form.estimated_fee),
+                Style::default().fg(Color::Yellow),
+            ),
+            Span::styled(
+                format!(" ({} UTXOs, {} sat/vB)", form.utxos_needed, form.fee_rate),
+                Style::default().fg(Color::DarkGray),
+            ),
+        ]));
+
+        // Show total and remaining
+        let remaining = confirmed_balance.saturating_sub(total_needed);
+        let fee_warning = form.estimated_fee > amount / 2; // Warn if fee > 50% of amount
+
+        balance_lines.push(Line::from(vec![
+            Span::styled("Total: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                format!("{} sats", total_needed),
+                Style::default().fg(if total_needed > confirmed_balance {
+                    Color::Red
+                } else {
+                    Color::White
+                }),
+            ),
+            Span::styled(" → Remaining: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                format!("{} sats", remaining),
+                Style::default().fg(if remaining == 0 {
+                    Color::Red
+                } else {
+                    Color::Green
+                }),
+            ),
+        ]));
+
+        if fee_warning && amount > 0 {
+            balance_lines.push(Line::from(Span::styled(
+                "⚠ High fee ratio! Consider sending more or waiting for lower fees",
+                Style::default().fg(Color::Yellow),
+            )));
+        }
+    } else {
+        balance_lines.push(Line::from(vec![Span::styled(
+            format!("{} confirmed UTXOs", confirmed_count),
+            Style::default().fg(Color::DarkGray),
+        )]));
+    }
+
+    let balance_para = Paragraph::new(balance_lines);
     frame.render_widget(balance_para, left_chunks[2]);
 
     if let Some(error) = &form.error_message {
