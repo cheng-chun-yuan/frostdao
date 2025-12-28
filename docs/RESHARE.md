@@ -259,6 +259,15 @@ P₅ never receives a new share → effectively removed
 
 ## Implementation Details
 
+| Component | File | Line |
+|-----------|------|------|
+| Reshare round 1 CLI | `src/protocol/reshare.rs` | - |
+| Zero polynomial generation | `src/protocol/reshare.rs` | 93-136 |
+| Sub-share computation | `src/protocol/reshare.rs` | - |
+| Reshare finalize | `src/protocol/reshare.rs` | 221-253 |
+| Lagrange coefficients | `src/crypto/helpers.rs` | 102 |
+| TUI reshare screen | `src/tui/screens/reshare.rs` | - |
+
 ### File Structure
 
 ```

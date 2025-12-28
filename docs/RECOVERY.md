@@ -88,14 +88,73 @@ frostdao recover-finalize \
 
 ## Mathematical Foundation
 
-For Lagrange recovery at index `j`:
+### Standard Lagrange Recovery
+
+For a polynomial `f(x)` of degree `t-1`, any `t` points can reconstruct any other point.
+
+To recover share at index `j` from helpers at indices `{i₁, i₂, ..., iₜ}`:
 
 ```
-s_j = Σᵢ λᵢ(j) * sᵢ
+s_j = f(j) = Σₖ λₖ(j) · sₖ
 
-where λᵢ(j) = Π_{k≠i} (j - k)/(i - k)
+where λₖ(j) = Π_{m≠k} (j - iₘ)/(iₖ - iₘ)  (Lagrange coefficient at x=j)
 ```
 
-For HTSS with Birkhoff, derivatives are used based on rank.
+### Example: Recover Party 3 from Parties 1 and 2
 
-See [CRYPTOGRAPHIC_ANALYSIS.md](CRYPTOGRAPHIC_ANALYSIS.md) for details.
+```
+Helpers: {1, 2}, Lost index: 3
+
+λ₁(3) = (3 - 2)/(1 - 2) = 1/(-1) = -1
+λ₂(3) = (3 - 1)/(2 - 1) = 2/1 = 2
+
+Recovered share:
+  s₃ = λ₁(3)·s₁ + λ₂(3)·s₂
+     = (-1)·s₁ + 2·s₂
+```
+
+### Sub-Share Protocol
+
+To avoid exposing helper shares directly, each helper computes a sub-share:
+
+```
+Helper i computes: sub_share_i = λᵢ(lost_index) · sᵢ
+
+Lost party combines: s_lost = Σᵢ sub_share_i
+```
+
+This ensures:
+- Helpers don't reveal their actual shares
+- Lost party only learns their own share
+
+### HTSS Recovery with Birkhoff
+
+For hierarchical wallets, recovery uses Birkhoff interpolation with derivatives:
+
+```
+Party with rank r holds: f^(r)(xᵢ) (r-th derivative at their index)
+
+Birkhoff coefficient βᵢⱼ depends on:
+  - Helper ranks
+  - Lost party's rank
+  - All party indices
+
+sub_share_i = βᵢ,lost · share_i
+
+Recovered: s_lost = Σᵢ sub_share_i
+```
+
+The Birkhoff matrix must satisfy the Pólya condition for recovery to work.
+
+## Implementation
+
+| Component | File | Line |
+|-----------|------|------|
+| Recovery round 1 (CLI) | `src/protocol/recovery.rs` | 63 |
+| Recovery round 1 (core) | `src/protocol/recovery.rs` | 106 |
+| Recovery finalize | `src/protocol/recovery.rs` | - |
+| Lagrange at target x | `src/crypto/helpers.rs` | 59 |
+| Birkhoff coefficients | `src/crypto/birkhoff.rs` | 325 |
+| Signer set validation | `src/crypto/birkhoff.rs` | 41 |
+
+See [CRYPTOGRAPHIC_ANALYSIS.md](CRYPTOGRAPHIC_ANALYSIS.md) for security proofs and [HTSS.md](HTSS.md) for Birkhoff details.

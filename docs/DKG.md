@@ -133,19 +133,74 @@ treasury/
 
 ## Mathematical Foundation
 
-Each party `i` generates polynomial:
+### Polynomial Secret Sharing
+
+Each party `i` generates a random polynomial of degree `t-1`:
+
 ```
-f_i(x) = a_{i,0} + a_{i,1}x + ... + a_{i,t-1}x^{t-1}
+f_i(x) = a_{i,0} + a_{i,1}·x + a_{i,2}·x² + ... + a_{i,t-1}·xᵗ⁻¹
+
+where:
+  - a_{i,0} = party i's secret contribution (random scalar)
+  - a_{i,1}...a_{i,t-1} = random coefficients
+  - t = threshold (minimum signers needed)
 ```
 
-Final secret share for party `j`:
+### Share Computation
+
+Party `j`'s final secret share combines evaluations from all parties:
+
 ```
-s_j = Σ f_i(j) for all i
+s_j = Σᵢ f_i(j)
+
+Expanded:
+  s_j = f_1(j) + f_2(j) + ... + f_n(j)
+
+This is equivalent to evaluating a combined polynomial F(x) at x=j:
+  F(x) = Σᵢ f_i(x)
+  s_j = F(j)
 ```
 
-Group public key:
+### Group Key Derivation
+
+The group public key is the sum of all parties' first coefficients times generator:
+
 ```
-PK = Σ a_{i,0} * G for all i
+PK = Σᵢ (a_{i,0} · G)
+
+The corresponding private key (never computed) would be:
+  sk = Σᵢ a_{i,0} = F(0)
 ```
+
+### Lagrange Reconstruction
+
+Given `t` shares `{(j₁, s_{j₁}), ..., (jₜ, s_{jₜ})}`, the secret can be reconstructed:
+
+```
+sk = F(0) = Σⱼ λⱼ · sⱼ
+
+where λⱼ = Π_{k≠j} (0 - k)/(j - k)  (Lagrange coefficient at x=0)
+```
+
+### Proof of Possession (PoP)
+
+Each party proves knowledge of their secret contribution without revealing it:
+
+```
+PoP = Sign(a_{i,0}, pubkey_i)
+
+Verification proves party actually generated the polynomial
+(prevents rogue-key attacks)
+```
+
+## Implementation
+
+| Component | File | Line |
+|-----------|------|------|
+| Round 1 core logic | `src/protocol/keygen.rs` | 370 |
+| Round 2 share exchange | `src/protocol/keygen.rs` | 581 |
+| Finalize & derive keys | `src/protocol/keygen.rs` | 727 |
+| Lagrange coefficients | `src/crypto/helpers.rs` | 59 |
+| Storage helpers | `src/storage.rs` | - |
 
 See [CRYPTOGRAPHIC_ANALYSIS.md](CRYPTOGRAPHIC_ANALYSIS.md) for detailed security analysis.

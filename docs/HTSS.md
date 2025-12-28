@@ -51,15 +51,82 @@ frostdao keygen-round1 --name corp --threshold 3 --n-parties 4 \
 
 **CEO must always be involved!**
 
-## Birkhoff Interpolation
+## Mathematical Foundation
 
-HTSS uses Birkhoff interpolation instead of Lagrange:
+### Birkhoff Interpolation
 
-- Rank 0: Evaluates polynomial value `f(x)`
-- Rank 1: Evaluates first derivative `f'(x)`
-- Rank k: Evaluates k-th derivative `f^(k)(x)`
+HTSS uses **Birkhoff interpolation** instead of standard Lagrange interpolation.
 
-This mathematical property enforces the rank constraint.
+In standard Shamir, party `i` holds `sᵢ = f(xᵢ)` (function value).
+
+In HTSS, party `i` with rank `rᵢ` holds the **rᵢ-th derivative**:
+
+```
+sᵢ = f^(rᵢ)(xᵢ)
+
+Rank 0: sᵢ = f(xᵢ)      — function value
+Rank 1: sᵢ = f'(xᵢ)     — first derivative
+Rank 2: sᵢ = f''(xᵢ)    — second derivative
+```
+
+### Birkhoff Matrix
+
+For polynomial `f(x) = a₀ + a₁x + a₂x² + ... + aₜ₋₁xᵗ⁻¹`:
+
+The k-th derivative: `f^(k)(x) = Σⱼ₌ₖ (j!/(j-k)!) · aⱼ · xʲ⁻ᵏ`
+
+Given signers at indices `{x₁,...,xₜ}` with ranks `{r₁,...,rₜ}`:
+
+```
+        ┌                                        ┐   ┌    ┐   ┌    ┐
+        │ B₁,₀  B₁,₁  B₁,₂  ...  B₁,ₜ₋₁        │   │ a₀ │   │ v₁ │
+        │ B₂,₀  B₂,₁  B₂,₂  ...  B₂,ₜ₋₁        │   │ a₁ │   │ v₂ │
+    B = │  ...                                  │ · │ .. │ = │ .. │
+        │ Bₜ,₀  Bₜ,₁  Bₜ,₂  ...  Bₜ,ₜ₋₁        │   │aₜ₋₁│   │ vₜ │
+        └                                        ┘   └    ┘   └    ┘
+
+where: Bᵢ,ⱼ = (j!/(j-rᵢ)!) · xᵢʲ⁻ʳⁱ  if j ≥ rᵢ, else 0
+```
+
+### Example: 3-of-5 with ranks [0,1,2]
+
+Signers: Party 1 (rank 0), Party 2 (rank 1), Party 4 (rank 2)
+
+```
+Polynomial: f(x) = a₀ + a₁x + a₂x²
+
+Known values:
+  v₁ = f(1)   = a₀ + a₁ + a₂       (rank 0 at x=1)
+  v₂ = f'(2)  = a₁ + 4a₂           (rank 1 at x=2)
+  v₄ = f''(4) = 2a₂                (rank 2 at x=4)
+
+Birkhoff Matrix:
+    ┌         ┐
+B = │ 1  1  1 │  ← rank 0 at x=1
+    │ 0  1  4 │  ← rank 1 at x=2
+    │ 0  0  2 │  ← rank 2 at x=4
+    └         ┘
+```
+
+### Birkhoff Coefficients
+
+To recover the secret `a₀`, compute first row of `B⁻¹`:
+
+```
+[β₁, β₂, β₄] = first row of B⁻¹
+
+Secret: s = β₁·v₁ + β₂·v₂ + β₄·v₄
+```
+
+### Pólya Condition (Validity Rule)
+
+The Birkhoff matrix is invertible **iff** the Pólya condition holds:
+
+```
+For sorted ranks [r₀, r₁, ..., rₜ₋₁]: rᵢ ≤ i for all i
+```
+
+This is why higher-ranked parties (lower rank number) are required!
 
 ## Use Cases
 
@@ -89,7 +156,18 @@ Policy: Security/CTO approval required
 
 ## Implementation
 
-The signing validation is in `src/crypto/birkhoff.rs`:
+| Component | File | Line |
+|-----------|------|------|
+| Signer set validation | `src/crypto/birkhoff.rs` | 41 |
+| Birkhoff matrix computation | `src/crypto/birkhoff.rs` | 78 |
+| Birkhoff coefficient to scalar | `src/crypto/birkhoff.rs` | 325 |
+| HTSS keygen (with ranks) | `src/protocol/keygen.rs` | 370 |
+| HTSS signing | `src/protocol/signing.rs` | - |
+| Lagrange helpers | `src/crypto/helpers.rs` | 59 |
+
+### Validation Code
+
+The signing validation in `src/crypto/birkhoff.rs:41`:
 
 ```rust
 pub fn validate_signer_set(ranks: &[u32], threshold: u32) -> Result<()> {

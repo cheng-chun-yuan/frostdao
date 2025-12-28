@@ -99,22 +99,79 @@ The signing process:
 3. Signs with derived share
 4. Same threshold requirement applies
 
+## Mathematical Foundation
+
+### BIP-32 Non-Hardened Derivation
+
+For a parent public key `P` and chain code `c`, child derivation at index `i`:
+
+```
+data = P || i            (33-byte compressed pubkey + 4-byte index)
+I = HMAC-SHA512(c, data)
+I_L = first 32 bytes    (tweak scalar)
+I_R = last 32 bytes     (child chain code)
+
+child_pubkey = P + I_L·G
+child_chaincode = I_R
+```
+
+### FROST HD Derivation
+
+In threshold setting, no party has the full private key. Derivation works on public data:
+
+```
+Given:
+  - Group public key: PK = Σᵢ sᵢ·G
+  - Chain code: c (derived from group pubkey)
+
+Child derivation:
+  tweak = BIP32_derive(PK, c, path)
+  child_PK = PK + tweak·G
+
+For signing at derived path:
+  Each party's effective share: s'ᵢ = sᵢ + tweak
+  Combined: Σᵢ λᵢ·s'ᵢ = Σᵢ λᵢ·sᵢ + tweak = sk + tweak
+```
+
+### Tweak Accumulation
+
+For multi-level paths (e.g., m/44'/0'/0'/0/5):
+
+```
+tweak_total = 0
+For each level:
+  tweak_level = derive(current_pubkey, chain_code, index)
+  tweak_total += tweak_level
+  current_pubkey = current_pubkey + tweak_level·G
+
+Final: child_pubkey = PK + tweak_total·G
+```
+
+### BIP-340 Parity Handling
+
+For Taproot (x-only pubkeys), if derived key has odd Y:
+
+```
+If child_pubkey.y is odd:
+  child_pubkey = -child_pubkey  (negate to get even Y)
+  tweak_total = -tweak_total    (track sign flip for signing)
+```
+
 ## Implementation
 
-Key derivation in `src/crypto/hd.rs`:
-
-```rust
-pub fn derive_at_path(context: &HdContext, path: &DerivationPath) -> Result<DerivedKeyInfo> {
-    // Non-hardened derivation: child = parent + tweak * G
-    let tweak = tagged_hash("BIP0032/derive", &data);
-    let child_pubkey = parent_pubkey + tweak * G;
-    // ...
-}
-```
+| Component | File | Line |
+|-----------|------|------|
+| Path-based derivation | `src/crypto/hd.rs` | 180 |
+| Child tweak computation | `src/crypto/hd.rs` | 116 |
+| Child pubkey derivation | `src/crypto/hd.rs` | 156 |
+| Share tweak for signing | `src/crypto/hd.rs` | 246 |
+| BIP-340 tagged hash | `src/crypto/helpers.rs` | 31 |
+| Address derivation CLI | `src/btc/hd_address.rs` | - |
 
 ## Security
 
-- Non-hardened derivation only (public derivation)
-- Chain code is deterministic from group public key
-- Each party derives independently using same public data
-- Threshold requirement unchanged for all derived addresses
+- **Non-hardened only**: Hardened derivation requires private key (impossible in threshold)
+- **Deterministic chain code**: Derived from group pubkey hash (consistent across parties)
+- **Independent derivation**: Each party derives locally using same public data
+- **Threshold preserved**: Same t-of-n requirement for all derived addresses
+- **No key exposure**: Derivation never reveals individual shares or group secret
