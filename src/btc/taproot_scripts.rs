@@ -399,31 +399,413 @@ impl ScriptParams {
 mod tests {
     use super::*;
 
+    // Helper to create a valid test pubkey
+    fn test_pubkey() -> [u8; 32] {
+        // A valid x-only pubkey (generator point G)
+        let mut pubkey = [0u8; 32];
+        pubkey[31] = 1; // Simple non-zero pubkey for testing
+        pubkey
+    }
+
+    fn test_internal_key() -> XOnlyPublicKey {
+        // Use a known valid x-only public key for testing
+        let bytes = hex::decode("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
+            .unwrap();
+        XOnlyPublicKey::from_slice(&bytes).unwrap()
+    }
+
+    // ==================== Script Building Tests ====================
+
     #[test]
     fn test_cltv_script() {
-        let pubkey = [0u8; 32];
+        let pubkey = test_pubkey();
         let script = SpendingCondition::build_cltv_script(800000, &pubkey);
         assert!(!script.is_empty());
-        // Script should contain CLTV opcode
-        assert!(script.as_bytes().contains(&0xb1)); // OP_CLTV
+        // Script should contain CLTV opcode (0xb1)
+        assert!(script.as_bytes().contains(&0xb1));
+        // Script should contain DROP opcode (0x75)
+        assert!(script.as_bytes().contains(&0x75));
+        // Script should contain CHECKSIG opcode (0xac)
+        assert!(script.as_bytes().contains(&0xac));
     }
 
     #[test]
     fn test_csv_script() {
-        let pubkey = [0u8; 32];
+        let pubkey = test_pubkey();
         let script = SpendingCondition::build_csv_script(144, &pubkey);
         assert!(!script.is_empty());
-        // Script should contain CSV opcode
-        assert!(script.as_bytes().contains(&0xb2)); // OP_CSV
+        // Script should contain CSV opcode (0xb2)
+        assert!(script.as_bytes().contains(&0xb2));
+        // Script should contain DROP opcode
+        assert!(script.as_bytes().contains(&0x75));
+        // Script should contain CHECKSIG opcode
+        assert!(script.as_bytes().contains(&0xac));
+    }
+
+    #[test]
+    fn test_owner_script() {
+        let pubkey = test_pubkey();
+        let script = SpendingCondition::build_owner_script(&pubkey);
+        assert!(!script.is_empty());
+        // Script should contain CHECKSIG opcode
+        assert!(script.as_bytes().contains(&0xac));
+        // Should NOT contain timelock opcodes
+        assert!(!script.as_bytes().contains(&0xb1));
+        assert!(!script.as_bytes().contains(&0xb2));
+    }
+
+    #[test]
+    fn test_recovery_script() {
+        let pubkey = test_pubkey();
+        let script = SpendingCondition::build_recovery_script(1000, &pubkey);
+        assert!(!script.is_empty());
+        // Script should contain CLTV opcode
+        assert!(script.as_bytes().contains(&0xb1));
     }
 
     #[test]
     fn test_htlc_claim_script() {
-        let hash = [0u8; 32];
-        let pubkey = [0u8; 32];
+        let hash = [0xab; 32];
+        let pubkey = test_pubkey();
         let script = SpendingCondition::build_htlc_claim_script(&hash, &pubkey);
         assert!(!script.is_empty());
-        // Script should contain SHA256 opcode
-        assert!(script.as_bytes().contains(&0xa8)); // OP_SHA256
+        // Script should contain SHA256 opcode (0xa8)
+        assert!(script.as_bytes().contains(&0xa8));
+        // Script should contain EQUALVERIFY opcode (0x88)
+        assert!(script.as_bytes().contains(&0x88));
+        // Script should contain CHECKSIG opcode
+        assert!(script.as_bytes().contains(&0xac));
+    }
+
+    #[test]
+    fn test_htlc_refund_script() {
+        let pubkey = test_pubkey();
+        let script = SpendingCondition::build_htlc_refund_script(500, &pubkey);
+        assert!(!script.is_empty());
+        // Script should contain CLTV opcode
+        assert!(script.as_bytes().contains(&0xb1));
+    }
+
+    // ==================== SpendingCondition Tests ====================
+
+    #[test]
+    fn test_spending_condition_key_path_only() {
+        let internal_key = test_internal_key();
+        let condition = SpendingCondition::KeyPathOnly;
+
+        let spend_info = condition.build_taproot_spend_info(&internal_key);
+        assert!(spend_info.is_ok());
+    }
+
+    #[test]
+    fn test_spending_condition_timelock_absolute() {
+        let internal_key = test_internal_key();
+        let recipient = test_pubkey();
+        let condition = SpendingCondition::TimelockAbsolute {
+            lock_height: 850000,
+            recipient_pubkey: recipient,
+        };
+
+        let spend_info = condition.build_taproot_spend_info(&internal_key);
+        assert!(spend_info.is_ok());
+
+        // Test address generation
+        let address = condition.to_address(&internal_key, Network::Testnet);
+        assert!(address.is_ok());
+        let addr_str = address.unwrap().to_string();
+        assert!(addr_str.starts_with("tb1p")); // Testnet taproot
+    }
+
+    #[test]
+    fn test_spending_condition_timelock_relative() {
+        let internal_key = test_internal_key();
+        let recipient = test_pubkey();
+        let condition = SpendingCondition::TimelockRelative {
+            blocks: 144,
+            recipient_pubkey: recipient,
+        };
+
+        let spend_info = condition.build_taproot_spend_info(&internal_key);
+        assert!(spend_info.is_ok());
+    }
+
+    #[test]
+    fn test_spending_condition_recovery() {
+        let internal_key = test_internal_key();
+        let owner = test_pubkey();
+        let mut recovery = test_pubkey();
+        recovery[0] = 0x02; // Different key
+
+        let condition = SpendingCondition::Recovery {
+            owner_pubkey: owner,
+            recovery_pubkey: recovery,
+            timeout_height: 900000,
+        };
+
+        let spend_info = condition.build_taproot_spend_info(&internal_key);
+        assert!(spend_info.is_ok());
+    }
+
+    #[test]
+    fn test_spending_condition_htlc() {
+        let internal_key = test_internal_key();
+        let recipient = test_pubkey();
+        let mut refund = test_pubkey();
+        refund[0] = 0x03;
+        let hash = [0xde; 32];
+
+        let condition = SpendingCondition::Htlc {
+            hash,
+            recipient_pubkey: recipient,
+            refund_pubkey: refund,
+            timeout_height: 100,
+        };
+
+        let spend_info = condition.build_taproot_spend_info(&internal_key);
+        assert!(spend_info.is_ok());
+    }
+
+    // ==================== ScriptParams Tests ====================
+
+    #[test]
+    fn test_script_params_from_strings_none() {
+        let params = ScriptParams::from_strings(ScriptTypeInput::None, "", "", "", "", "", "");
+        assert!(params.is_ok());
+        let params = params.unwrap();
+        assert_eq!(params.script_type, ScriptTypeInput::None);
+    }
+
+    #[test]
+    fn test_script_params_from_strings_timelock_absolute() {
+        let params = ScriptParams::from_strings(
+            ScriptTypeInput::TimelockAbsolute,
+            "850000",
+            "",
+            "",
+            "",
+            "",
+            "",
+        );
+        assert!(params.is_ok());
+        let params = params.unwrap();
+        assert_eq!(params.timelock_height, Some(850000));
+    }
+
+    #[test]
+    fn test_script_params_from_strings_timelock_relative() {
+        let params = ScriptParams::from_strings(
+            ScriptTypeInput::TimelockRelative,
+            "",
+            "144",
+            "",
+            "",
+            "",
+            "",
+        );
+        assert!(params.is_ok());
+        let params = params.unwrap();
+        assert_eq!(params.timelock_blocks, Some(144));
+    }
+
+    #[test]
+    fn test_script_params_from_strings_recovery() {
+        let recovery_pk = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+        let params = ScriptParams::from_strings(
+            ScriptTypeInput::Recovery,
+            "",
+            "",
+            "4320",
+            recovery_pk,
+            "",
+            "",
+        );
+        assert!(params.is_ok());
+        let params = params.unwrap();
+        assert_eq!(params.timeout, Some(4320));
+        assert!(params.recovery_pubkey.is_some());
+    }
+
+    #[test]
+    fn test_script_params_from_strings_htlc() {
+        let hash = "0000000000000000000000000000000000000000000000000000000000000001";
+        let refund_pk = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+        let params =
+            ScriptParams::from_strings(ScriptTypeInput::Htlc, "", "", "144", "", hash, refund_pk);
+        assert!(params.is_ok());
+        let params = params.unwrap();
+        assert!(params.htlc_hash.is_some());
+        assert!(params.htlc_refund_pubkey.is_some());
+        assert_eq!(params.timeout, Some(144));
+    }
+
+    #[test]
+    fn test_script_params_invalid_number() {
+        let params = ScriptParams::from_strings(
+            ScriptTypeInput::TimelockAbsolute,
+            "not_a_number",
+            "",
+            "",
+            "",
+            "",
+            "",
+        );
+        assert!(params.is_err());
+    }
+
+    #[test]
+    fn test_script_params_invalid_pubkey() {
+        let params = ScriptParams::from_strings(
+            ScriptTypeInput::Recovery,
+            "",
+            "",
+            "100",
+            "invalid_hex",
+            "",
+            "",
+        );
+        assert!(params.is_err());
+    }
+
+    #[test]
+    fn test_script_params_to_spending_condition() {
+        let recipient = test_pubkey();
+        let params = ScriptParams {
+            script_type: ScriptTypeInput::TimelockAbsolute,
+            timelock_height: Some(850000),
+            ..Default::default()
+        };
+
+        let condition = params.to_spending_condition(&recipient);
+        assert!(condition.is_ok());
+
+        match condition.unwrap() {
+            SpendingCondition::TimelockAbsolute {
+                lock_height,
+                recipient_pubkey,
+            } => {
+                assert_eq!(lock_height, 850000);
+                assert_eq!(recipient_pubkey, recipient);
+            }
+            _ => panic!("Wrong condition type"),
+        }
+    }
+
+    #[test]
+    fn test_script_params_missing_required_field() {
+        let recipient = test_pubkey();
+        let params = ScriptParams {
+            script_type: ScriptTypeInput::TimelockAbsolute,
+            timelock_height: None, // Missing required field
+            ..Default::default()
+        };
+
+        let condition = params.to_spending_condition(&recipient);
+        assert!(condition.is_err());
+    }
+
+    // ==================== Parse Helper Tests ====================
+
+    #[test]
+    fn test_parse_pubkey_hex_valid() {
+        let hex = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+        let result = parse_pubkey_hex(hex);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 32);
+    }
+
+    #[test]
+    fn test_parse_pubkey_hex_invalid_length() {
+        let hex = "79be667ef9dcbbac55a06295"; // Too short
+        let result = parse_pubkey_hex(hex);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_pubkey_hex_invalid_hex() {
+        let hex = "not_valid_hex_string_at_all_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+        let result = parse_pubkey_hex(hex);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_hash_hex_valid() {
+        let hex = "0000000000000000000000000000000000000000000000000000000000000001";
+        let result = parse_hash_hex(hex);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 32);
+    }
+
+    // ==================== Address Generation Tests ====================
+
+    #[test]
+    fn test_address_generation_mainnet() {
+        let internal_key = test_internal_key();
+        let condition = SpendingCondition::KeyPathOnly;
+
+        let address = condition.to_address(&internal_key, Network::Bitcoin);
+        assert!(address.is_ok());
+        let addr_str = address.unwrap().to_string();
+        assert!(addr_str.starts_with("bc1p")); // Mainnet taproot
+    }
+
+    #[test]
+    fn test_address_generation_testnet() {
+        let internal_key = test_internal_key();
+        let condition = SpendingCondition::KeyPathOnly;
+
+        let address = condition.to_address(&internal_key, Network::Testnet);
+        assert!(address.is_ok());
+        let addr_str = address.unwrap().to_string();
+        assert!(addr_str.starts_with("tb1p")); // Testnet taproot
+    }
+
+    #[test]
+    fn test_address_generation_signet() {
+        let internal_key = test_internal_key();
+        let condition = SpendingCondition::KeyPathOnly;
+
+        let address = condition.to_address(&internal_key, Network::Signet);
+        assert!(address.is_ok());
+        let addr_str = address.unwrap().to_string();
+        assert!(addr_str.starts_with("tb1p")); // Signet uses same prefix
+    }
+
+    #[test]
+    fn test_script_pubkey_generation() {
+        let internal_key = test_internal_key();
+        let condition = SpendingCondition::KeyPathOnly;
+
+        let script_pubkey = condition.script_pubkey(&internal_key);
+        assert!(script_pubkey.is_ok());
+        let spk = script_pubkey.unwrap();
+        // P2TR script pubkey starts with OP_1 (0x51) followed by 32-byte push
+        assert!(spk.as_bytes()[0] == 0x51);
+        assert!(spk.as_bytes()[1] == 0x20); // 32-byte push
+        assert_eq!(spk.len(), 34); // 1 + 1 + 32
+    }
+
+    // ==================== Different Spending Conditions Produce Different Addresses ====================
+
+    #[test]
+    fn test_different_conditions_different_addresses() {
+        let internal_key = test_internal_key();
+        let recipient = test_pubkey();
+
+        let key_path = SpendingCondition::KeyPathOnly;
+        let timelock = SpendingCondition::TimelockAbsolute {
+            lock_height: 850000,
+            recipient_pubkey: recipient,
+        };
+
+        let addr1 = key_path
+            .to_address(&internal_key, Network::Testnet)
+            .unwrap();
+        let addr2 = timelock
+            .to_address(&internal_key, Network::Testnet)
+            .unwrap();
+
+        // Different conditions should produce different addresses
+        // (due to different script tree Merkle roots)
+        assert_ne!(addr1.to_string(), addr2.to_string());
     }
 }
