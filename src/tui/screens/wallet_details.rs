@@ -26,6 +26,14 @@ pub fn render_wallet_details(frame: &mut Frame, app: &App, state: &WalletDetails
     if state.confirm_delete {
         render_delete_confirmation(frame, &state.wallet_name, area);
     }
+
+    // Render QR code popup if showing
+    if state.show_qr {
+        let wallet = app.wallets.iter().find(|w| w.name == state.wallet_name);
+        if let Some(addr) = wallet.and_then(|w| w.address.as_ref()) {
+            render_qr_popup(frame, addr, area);
+        }
+    }
 }
 
 fn render_delete_confirmation(frame: &mut Frame, wallet_name: &str, area: Rect) {
@@ -84,15 +92,6 @@ fn render_delete_confirmation(frame: &mut Frame, wallet_name: &str, area: Rect) 
 
 fn render_wallet_info(frame: &mut Frame, app: &App, wallet_name: &str, area: Rect) {
     let wallet = app.wallets.iter().find(|w| w.name == wallet_name);
-
-    // Get address for QR code
-    let address = wallet.and_then(|w| w.address.clone());
-
-    // Split area: info on left, QR code on right
-    let chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(45), Constraint::Length(35)])
-        .split(area);
 
     let content = if let Some(wallet) = wallet {
         let mut lines = vec![
@@ -186,6 +185,14 @@ fn render_wallet_info(frame: &mut Frame, app: &App, wallet_name: &str, area: Rec
             ]));
         }
 
+        // Add hint for QR code
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("Press ", Style::default().fg(Color::DarkGray)),
+            Span::styled("q", Style::default().fg(Color::Yellow)),
+            Span::styled(" for QR code", Style::default().fg(Color::DarkGray)),
+        ]));
+
         lines
     } else {
         vec![Line::from(Span::styled(
@@ -203,23 +210,19 @@ fn render_wallet_info(frame: &mut Frame, app: &App, wallet_name: &str, area: Rec
         )
         .wrap(Wrap { trim: false });
 
-    frame.render_widget(details, chunks[0]);
-
-    // Render QR code if address available
-    if let Some(addr) = address {
-        render_qr_code(frame, &addr, chunks[1]);
-    }
+    frame.render_widget(details, area);
 }
 
-/// Generate ASCII QR code from address
-fn render_qr_code(frame: &mut Frame, address: &str, area: Rect) {
+/// Render QR code popup overlay
+fn render_qr_popup(frame: &mut Frame, address: &str, area: Rect) {
+    use ratatui::widgets::Clear;
+
     let qr_lines = match QrCode::new(address.as_bytes()) {
         Ok(code) => {
             let width = code.width();
             let mut lines: Vec<Line> = Vec::new();
 
             // Use half-block characters for better resolution
-            // Each character represents 2 vertical modules
             for y in (0..width).step_by(2) {
                 let mut spans: Vec<Span> = Vec::new();
                 for x in 0..width {
@@ -240,26 +243,79 @@ fn render_qr_code(frame: &mut Frame, address: &str, area: Rect) {
                 }
                 lines.push(Line::from(spans));
             }
-            lines
+
+            // Add address below QR code
+            lines.push(Line::from(""));
+            // Show address in chunks for readability
+            let addr_len = address.len();
+            if addr_len > 40 {
+                lines.push(Line::from(Span::styled(
+                    &address[..addr_len / 2],
+                    Style::default().fg(Color::Green),
+                )));
+                lines.push(Line::from(Span::styled(
+                    &address[addr_len / 2..],
+                    Style::default().fg(Color::Green),
+                )));
+            } else {
+                lines.push(Line::from(Span::styled(
+                    address,
+                    Style::default().fg(Color::Green),
+                )));
+            }
+
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                "Press q or Esc to close",
+                Style::default().fg(Color::DarkGray),
+            )));
+
+            (lines, width)
         }
         Err(_) => {
-            vec![Line::from(Span::styled(
-                "QR code generation failed",
-                Style::default().fg(Color::Red),
-            ))]
+            let lines = vec![
+                Line::from(Span::styled(
+                    "QR code generation failed",
+                    Style::default().fg(Color::Red),
+                )),
+                Line::from(""),
+                Line::from(Span::styled(
+                    "Press q or Esc to close",
+                    Style::default().fg(Color::DarkGray),
+                )),
+            ];
+            (lines, 30)
         }
     };
 
-    let qr_widget = Paragraph::new(qr_lines)
+    let (lines, qr_width) = qr_lines;
+
+    // Calculate popup size based on QR code
+    let popup_width = (qr_width as u16 + 4).max(50);
+    let popup_height = (lines.len() as u16 + 2).min(area.height - 2);
+
+    // Center the popup
+    let popup_area = Rect {
+        x: area.x + (area.width.saturating_sub(popup_width)) / 2,
+        y: area.y + (area.height.saturating_sub(popup_height)) / 2,
+        width: popup_width.min(area.width),
+        height: popup_height,
+    };
+
+    // Clear the area behind the popup
+    frame.render_widget(Clear, popup_area);
+
+    let qr_widget = Paragraph::new(lines)
         .block(
             Block::default()
                 .borders(Borders::ALL)
                 .title(" QR Code ")
-                .border_style(Style::default().fg(Color::Green)),
+                .border_style(Style::default().fg(Color::Green))
+                .style(Style::default().bg(Color::Black)),
         )
         .alignment(ratatui::layout::Alignment::Center);
 
-    frame.render_widget(qr_widget, area);
+    frame.render_widget(qr_widget, popup_area);
 }
 
 fn render_action_menu(frame: &mut Frame, state: &WalletDetailsState, area: Rect) {

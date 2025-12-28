@@ -105,6 +105,7 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
                     wallet_name: wallet.name.clone(),
                     selected_action: 0,
                     confirm_delete: false,
+                    show_qr: false,
                 });
             } else {
                 app.set_message("No wallet selected");
@@ -236,6 +237,19 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
     } else {
         return;
     };
+
+    // Handle QR code popup mode
+    if state.show_qr {
+        match code {
+            KeyCode::Esc | KeyCode::Char('q') => {
+                if let AppState::WalletDetails(ref mut s) = app.state {
+                    s.show_qr = false;
+                }
+            }
+            _ => {}
+        }
+        return;
+    }
 
     // Handle confirm delete mode
     if state.confirm_delete {
@@ -392,6 +406,12 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
             if let Some(idx) = app.wallets.iter().position(|w| w.name == wallet_name) {
                 app.wallet_list_state.select(Some(idx));
                 app.refresh_balance();
+            }
+        }
+        KeyCode::Char('q') => {
+            // Show QR code popup
+            if let AppState::WalletDetails(ref mut s) = app.state {
+                s.show_qr = true;
             }
         }
         _ => {}

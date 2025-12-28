@@ -123,6 +123,8 @@ pub struct WalletDetailsState {
     pub selected_action: usize,
     /// Confirm delete mode
     pub confirm_delete: bool,
+    /// Show QR code popup
+    pub show_qr: bool,
 }
 
 /// HD Address list state
