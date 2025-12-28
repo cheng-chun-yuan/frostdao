@@ -2,6 +2,10 @@
 
 > **Fork from [nickfarrow/yushan](https://github.com/nickfarrow/yushan)**
 
+> **🏆 Winner at [BTC++ Taipei 2025](https://devpost.com/software/frostdao)**
+> - **1st Place Overall**
+> - **Best Use of Cryptography**
+
 **No single party ever knows the full private key.**
 
 FrostDAO implements FROST threshold signatures with **Hierarchical TSS (HTSS)** for Bitcoin Taproot. Create `t-of-n` multisig wallets with optional rank-based access control.
