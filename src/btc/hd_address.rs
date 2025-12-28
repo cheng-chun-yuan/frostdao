@@ -296,7 +296,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_network() {
+    fn test_hd_address_helpers() {
+        // Network parsing
         assert!(matches!(
             parse_network("mainnet").unwrap(),
             Network::Bitcoin
@@ -310,16 +311,11 @@ mod tests {
             Network::Bitcoin
         ));
         assert!(parse_network("invalid").is_err());
-    }
 
-    #[test]
-    fn test_derivation_path_helpers() {
+        // Derivation paths
         let receive = DerivationPath::receive(5);
-        assert_eq!(receive.change, 0);
-        assert_eq!(receive.address_index, 5);
-
+        assert_eq!((receive.change, receive.address_index), (0, 5));
         let change = DerivationPath::change(3);
-        assert_eq!(change.change, 1);
-        assert_eq!(change.address_index, 3);
+        assert_eq!((change.change, change.address_index), (1, 3));
     }
 }

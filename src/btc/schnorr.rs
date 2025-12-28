@@ -829,77 +829,46 @@ pub fn get_dkg_address_testnet(name: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::storage::MemoryStorage;
 
     #[test]
-    fn test_tagged_hash() {
-        // Test vector from BIP340
-        let hash = tagged_hash("BIP0340/challenge", b"test");
-        assert_eq!(hash.len(), 32);
-    }
-
-    #[test]
-    fn test_sign_and_verify() {
-        use crate::storage::MemoryStorage;
+    fn test_schnorr_signing() {
+        // Tagged hash
+        assert_eq!(tagged_hash("BIP0340/challenge", b"test").len(), 32);
 
         let storage = MemoryStorage::new();
 
-        // Generate keypair
+        // Generate and sign
         let key_result = generate_keypair_core(&storage).unwrap();
         let key_output: BitcoinKeyOutput = serde_json::from_str(&key_result.result).unwrap();
 
-        // Sign message
         let message = b"Hello, Bitcoin!";
         let sig_result = sign_message_core(message, None, &storage).unwrap();
         let sig_output: BitcoinSignatureOutput = serde_json::from_str(&sig_result.result).unwrap();
 
-        // Verify signature
-        let verify_result =
+        // Valid signature
+        let verify =
             verify_signature_core(&sig_output.signature, &key_output.public_key, message).unwrap();
+        assert_eq!(verify.result, "VALID");
 
-        assert_eq!(verify_result.result, "VALID");
-    }
+        // Invalid signature (wrong message)
+        let verify_bad =
+            verify_signature_core(&sig_output.signature, &key_output.public_key, b"Wrong").unwrap();
+        assert_eq!(verify_bad.result, "INVALID");
 
-    #[test]
-    fn test_deterministic_signing() {
-        use crate::storage::MemoryStorage;
-
-        let storage = MemoryStorage::new();
-
-        // Import a known secret key
-        let secret_hex = "0000000000000000000000000000000000000000000000000000000000000001";
-        import_key_core(secret_hex, &storage).unwrap();
-
-        // Sign the same message twice
-        let message = b"test message";
-        let sig1 = sign_message_core(message, None, &storage).unwrap();
-        let sig2 = sign_message_core(message, None, &storage).unwrap();
-
-        let out1: BitcoinSignatureOutput = serde_json::from_str(&sig1.result).unwrap();
-        let out2: BitcoinSignatureOutput = serde_json::from_str(&sig2.result).unwrap();
-
-        // Signatures should be identical (deterministic)
-        assert_eq!(out1.signature, out2.signature);
-    }
-
-    #[test]
-    fn test_invalid_signature() {
-        use crate::storage::MemoryStorage;
-
-        let storage = MemoryStorage::new();
-        generate_keypair_core(&storage).unwrap();
-
-        let message = b"Hello, Bitcoin!";
-        let sig_result = sign_message_core(message, None, &storage).unwrap();
-        let sig_output: BitcoinSignatureOutput = serde_json::from_str(&sig_result.result).unwrap();
-
-        // Verify with wrong message
-        let verify_result = verify_signature_core(
-            &sig_output.signature,
-            &sig_output.public_key,
-            b"Wrong message",
+        // Deterministic signing
+        let storage2 = MemoryStorage::new();
+        import_key_core(
+            "0000000000000000000000000000000000000000000000000000000000000001",
+            &storage2,
         )
         .unwrap();
-
-        assert_eq!(verify_result.result, "INVALID");
+        let sig1: BitcoinSignatureOutput =
+            serde_json::from_str(&sign_message_core(b"test", None, &storage2).unwrap().result)
+                .unwrap();
+        let sig2: BitcoinSignatureOutput =
+            serde_json::from_str(&sign_message_core(b"test", None, &storage2).unwrap().result)
+                .unwrap();
+        assert_eq!(sig1.signature, sig2.signature);
     }
 }

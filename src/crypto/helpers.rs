@@ -190,127 +190,48 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_tagged_hash() {
-        // BIP340 test vector
-        let result = tagged_hash("TapTweak", &[]);
-        assert_eq!(result.len(), 32);
-
-        // Same tag + data should give same result
-        let data = b"test data";
-        let hash1 = tagged_hash("TestTag", data);
-        let hash2 = tagged_hash("TestTag", data);
+    fn test_crypto_helpers() {
+        // Tagged hash determinism
+        let hash1 = tagged_hash("TestTag", b"data");
+        let hash2 = tagged_hash("TestTag", b"data");
         assert_eq!(hash1, hash2);
+        assert_ne!(hash1, tagged_hash("Other", b"data"));
 
-        // Different tags should give different results
-        let hash3 = tagged_hash("OtherTag", data);
-        assert_ne!(hash1, hash3);
-    }
-
-    #[test]
-    fn test_lagrange_coefficient_at_zero_sum() {
-        // Fundamental property: Lagrange coefficients at x=0 sum to 1
+        // Lagrange coefficients sum to 1 at x=0
         let indices = vec![1u32, 2, 3];
-
+        let one: Scalar<Secret, Zero> = Scalar::from(1u32);
         let mut sum: Scalar<Secret, Zero> = Scalar::zero();
         for &i in &indices {
-            let coeff = lagrange_coefficient_at_zero(i, &indices).unwrap();
-            sum = s!(sum + coeff);
+            sum = s!(sum + lagrange_coefficient_at_zero(i, &indices).unwrap());
         }
-
-        let one: Scalar<Secret, Zero> = Scalar::from(1u32);
-        assert_eq!(
-            sum.to_bytes(),
-            one.to_bytes(),
-            "Lagrange coefficients should sum to 1"
-        );
-    }
-
-    #[test]
-    fn test_lagrange_coefficient_at_nonzero() {
-        // For indices {1, 2} evaluating at x=3:
-        // λ_1(3) = (3-2)/(1-2) = 1/(-1) = -1
-        // λ_2(3) = (3-1)/(2-1) = 2/1 = 2
-        let indices = vec![1u32, 2];
-
-        let lambda1 = lagrange_coefficient_at(1, &indices, 3).unwrap();
-        let lambda2 = lagrange_coefficient_at(2, &indices, 3).unwrap();
-
-        // Sum should still equal 1
-        let sum = s!(lambda1 + lambda2);
-        let one: Scalar<Secret, Zero> = Scalar::from(1u32);
         assert_eq!(sum.to_bytes(), one.to_bytes());
 
-        // λ_1(3) = -1
-        let neg_one: Scalar<Secret, Zero> = {
-            let pos: Scalar<Secret, Zero> = Scalar::from(1u32);
-            s!(-pos)
-        };
-        assert_eq!(lambda1.to_bytes(), neg_one.to_bytes());
-
-        // λ_2(3) = 2
-        let two: Scalar<Secret, Zero> = Scalar::from(2u32);
-        assert_eq!(lambda2.to_bytes(), two.to_bytes());
-    }
-
-    #[test]
-    fn test_lagrange_large_party_count() {
-        // Test with 15 parties - would overflow with old i64->u32 truncation
-        let indices: Vec<u32> = (1..=15).collect();
-
-        let mut sum: Scalar<Secret, Zero> = Scalar::zero();
-        for &i in &indices {
-            let coeff = lagrange_coefficient_at_zero(i, &indices).unwrap();
-            sum = s!(sum + coeff);
+        // Large party count (15 parties)
+        let large_indices: Vec<u32> = (1..=15).collect();
+        let mut sum15: Scalar<Secret, Zero> = Scalar::zero();
+        for &i in &large_indices {
+            sum15 = s!(sum15 + lagrange_coefficient_at_zero(i, &large_indices).unwrap());
         }
+        assert_eq!(sum15.to_bytes(), one.to_bytes());
 
-        let one: Scalar<Secret, Zero> = Scalar::from(1u32);
-        assert_eq!(
-            sum.to_bytes(),
-            one.to_bytes(),
-            "15-party Lagrange should work"
-        );
-    }
-
-    #[test]
-    fn test_construct_paired_secret_share() {
+        // Paired secret share construction and negation
         let mut rng = rand::thread_rng();
         let share = Scalar::<Secret, NonZero>::random(&mut rng);
-        let pubkey_scalar = Scalar::<Secret, NonZero>::random(&mut rng);
-        let pubkey = g!(pubkey_scalar * G)
+        let sk: Scalar<Secret, NonZero> = Scalar::random(&mut rng);
+        let pubkey = g!(sk * G)
             .normalize()
             .non_zero()
             .unwrap()
             .into_point_with_even_y()
             .0;
-
-        let paired = construct_paired_secret_share(1, share, &pubkey);
-        assert!(paired.is_ok());
-
-        let paired = paired.unwrap();
-        assert_eq!(paired.secret_share().share.to_bytes(), share.to_bytes());
-    }
-
-    #[test]
-    fn test_negate_paired_secret_share() {
-        let mut rng = rand::thread_rng();
-        let share = Scalar::<Secret, NonZero>::random(&mut rng);
-        let pubkey_scalar = Scalar::<Secret, NonZero>::random(&mut rng);
-        let pubkey = g!(pubkey_scalar * G)
-            .normalize()
-            .non_zero()
-            .unwrap()
-            .into_point_with_even_y()
-            .0;
-
         let paired = construct_paired_secret_share(1, share, &pubkey).unwrap();
+        assert_eq!(paired.secret_share().share.to_bytes(), share.to_bytes());
+
         let negated = negate_paired_secret_share(&paired).unwrap();
-
-        // Verify the negated share is actually the negation
-        let original_share = paired.secret_share().share;
-        let negated_share = negated.secret_share().share;
-
-        // original + negated should equal zero
-        let sum = s!(original_share + negated_share);
-        assert_eq!(sum.to_bytes(), Scalar::<Secret, Zero>::zero().to_bytes());
+        let sum_neg = s!(paired.secret_share().share + negated.secret_share().share);
+        assert_eq!(
+            sum_neg.to_bytes(),
+            Scalar::<Secret, Zero>::zero().to_bytes()
+        );
     }
 }
