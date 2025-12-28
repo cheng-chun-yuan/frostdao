@@ -150,6 +150,24 @@ pub struct HtssMetadata {
     pub party_ranks: std::collections::BTreeMap<u32, u32>,
 }
 
+/// HD wallet metadata for BIP-32/BIP-44 key derivation
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct HdMetadata {
+    /// 32-byte chain code for HD derivation (hex encoded)
+    pub chain_code: String,
+    /// Whether HD derivation is enabled for this wallet
+    pub hd_enabled: bool,
+    /// Optional mnemonic hint (first/last word reminder, NOT the full phrase)
+    pub mnemonic_hint: Option<String>,
+    /// Number of derived addresses (defaults to 5 for backwards compatibility)
+    #[serde(default = "default_derived_count")]
+    pub derived_count: u32,
+}
+
+fn default_derived_count() -> u32 {
+    5
+}
+
 /// Party info for group_info.json
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PartyInfo {
@@ -208,44 +226,68 @@ pub fn list_wallets() -> Result<Vec<WalletSummary>> {
             continue;
         }
 
-        // Try to load group_info.json for more details
-        let group_info_path = path.join("group_info.json");
-        let (threshold, total_parties, hierarchical, address) = if group_info_path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&group_info_path) {
-                if let Ok(info) = serde_json::from_str::<GroupInfo>(&content) {
+        // Try to load metadata from htss_metadata.json
+        let htss_path = path.join("htss_metadata.json");
+        let (threshold, total_parties, hierarchical) = if htss_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&htss_path) {
+                if let Ok(htss) = serde_json::from_str::<HtssMetadata>(&content) {
                     (
-                        Some(info.threshold),
-                        Some(info.total_parties),
-                        Some(info.hierarchical),
-                        Some(info.taproot_address_testnet),
+                        Some(htss.threshold),
+                        Some(htss.party_ranks.len() as u32),
+                        Some(htss.hierarchical),
                     )
                 } else {
-                    (None, None, None, None)
+                    (None, None, None)
                 }
             } else {
-                (None, None, None, None)
+                (None, None, None)
             }
         } else {
-            // Try to load from htss_metadata.json
-            let htss_path = path.join("htss_metadata.json");
-            if htss_path.exists() {
-                if let Ok(content) = std::fs::read_to_string(&htss_path) {
-                    if let Ok(htss) = serde_json::from_str::<HtssMetadata>(&content) {
+            // Try group_info.json as fallback
+            let group_info_path = path.join("group_info.json");
+            if group_info_path.exists() {
+                if let Ok(content) = std::fs::read_to_string(&group_info_path) {
+                    if let Ok(info) = serde_json::from_str::<GroupInfo>(&content) {
                         (
-                            Some(htss.threshold),
-                            Some(htss.party_ranks.len() as u32),
-                            Some(htss.hierarchical),
-                            None,
+                            Some(info.threshold),
+                            Some(info.total_parties),
+                            Some(info.hierarchical),
                         )
                     } else {
-                        (None, None, None, None)
+                        (None, None, None)
                     }
                 } else {
-                    (None, None, None, None)
+                    (None, None, None)
                 }
             } else {
-                (None, None, None, None)
+                (None, None, None)
             }
+        };
+
+        // Derive address from shared_key.bin
+        let address = if let Ok(shared_key_bytes) = std::fs::read(&shared_key_path) {
+            if let Ok(shared_key) = bincode::deserialize::<
+                schnorr_fun::frost::SharedKey<schnorr_fun::fun::marker::EvenY>,
+            >(&shared_key_bytes)
+            {
+                let pubkey_bytes: [u8; 32] = shared_key.public_key().to_xonly_bytes();
+                if let Ok(xonly_pubkey) = bitcoin::XOnlyPublicKey::from_slice(&pubkey_bytes) {
+                    let secp = bitcoin::secp256k1::Secp256k1::new();
+                    let addr = bitcoin::Address::p2tr(
+                        &secp,
+                        xonly_pubkey,
+                        None,
+                        bitcoin::Network::Testnet,
+                    );
+                    Some(addr.to_string())
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
         };
 
         wallets.push(WalletSummary {
@@ -842,8 +884,26 @@ pub fn finalize_core(data: &str, storage: &dyn Storage) -> Result<CommandResult>
         serde_json::to_string_pretty(&htss_metadata)?.as_bytes(),
     )?;
 
+    // Generate and save HD metadata for BIP-32/BIP-44 derivation
+    // Chain code is derived deterministically from group public key
+    let chain_code = crate::crypto::helpers::tagged_hash(
+        "FrostDAO/ChainCode",
+        &xonly_shared_key.public_key().to_xonly_bytes(),
+    );
+    let hd_metadata = HdMetadata {
+        chain_code: hex::encode(chain_code),
+        hd_enabled: true,
+        mnemonic_hint: None,
+        derived_count: 10, // Default to 10 addresses
+    };
+    storage.write(
+        "hd_metadata.json",
+        serde_json::to_string_pretty(&hd_metadata)?.as_bytes(),
+    )?;
+
     out.push_str("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
     out.push_str("❄️  Key generation complete!\n");
+    out.push_str("   HD derivation enabled for multiple addresses.\n");
     out.push_str("   Compare public keys with other tables to verify!\n\n");
 
     if state.hierarchical {
@@ -1028,4 +1088,126 @@ pub fn regenerate_group_info(name: &str) -> Result<()> {
     println!("\nSaved to: {}/group_info.json", state_dir);
 
     Ok(())
+}
+
+/// Generate all parties' keys at once (for demo/single-user mode)
+/// This runs the complete DKG protocol locally, creating keys for all parties
+pub fn generate_all_parties(
+    name: &str,
+    threshold: u32,
+    n_parties: u32,
+    hierarchical: bool,
+    ranks: Option<Vec<u32>>, // Optional ranks for HTSS mode
+) -> Result<CommandResult> {
+    let mut out = String::new();
+
+    let mode_name = if hierarchical { "HTSS" } else { "TSS" };
+    out.push_str(&format!("FROST {} - Generate All Parties\n\n", mode_name));
+    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str(&format!("  Wallet: {}\n", name));
+    out.push_str(&format!("  Threshold: {}\n", threshold));
+    out.push_str(&format!("  Parties: {}\n", n_parties));
+    if hierarchical {
+        out.push_str(&format!(
+            "  Ranks: {:?}\n",
+            ranks.as_ref().unwrap_or(&vec![])
+        ));
+    }
+    out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n");
+
+    // Determine ranks
+    let party_ranks: Vec<u32> = if hierarchical {
+        ranks.unwrap_or_else(|| (0..n_parties).collect()) // Default: 0, 1, 2, ...
+    } else {
+        vec![0; n_parties as usize] // TSS: all rank 0
+    };
+
+    // Create storage for each party (nested inside main wallet folder)
+    let main_dir = get_state_dir(name);
+    let mut storages: Vec<FileStorage> = Vec::new();
+    for i in 1..=n_parties {
+        let party_dir = format!("{}/party{}", main_dir, i);
+        let storage = FileStorage::new(&party_dir)?;
+        storages.push(storage);
+    }
+
+    out.push_str("⚙️  Round 1: Generating commitments...\n");
+
+    // Round 1: Generate commitments for all parties
+    let mut round1_outputs: Vec<String> = Vec::new();
+    for i in 1..=n_parties {
+        let storage = &storages[(i - 1) as usize];
+        let my_rank = party_ranks[(i - 1) as usize];
+
+        let result = round1_core(threshold, n_parties, i, my_rank, hierarchical, storage)?;
+        round1_outputs.push(result.result);
+        out.push_str(&format!("   Party {}: ✓\n", i));
+    }
+
+    out.push_str("\n⚙️  Round 2: Generating shares...\n");
+
+    // Round 2: Generate shares for all parties
+    let all_round1_data = round1_outputs.join(" ");
+    let mut round2_outputs: Vec<String> = Vec::new();
+    for i in 1..=n_parties {
+        let storage = &storages[(i - 1) as usize];
+
+        let result = round2_core(&all_round1_data, storage)?;
+        round2_outputs.push(result.result);
+        out.push_str(&format!("   Party {}: ✓\n", i));
+    }
+
+    out.push_str("\n⚙️  Finalize: Computing secret shares...\n");
+
+    // Finalize: Compute secret shares for all parties
+    let all_round2_data = round2_outputs.join(" ");
+    let mut public_key = String::new();
+    for i in 1..=n_parties {
+        let storage = &storages[(i - 1) as usize];
+
+        let result = finalize_core(&all_round2_data, storage)?;
+        // Extract public key from first party's result
+        if i == 1 {
+            for line in result.result.lines() {
+                if line.starts_with("Public Key:") {
+                    public_key = line.replace("Public Key:", "").trim().to_string();
+                    break;
+                }
+            }
+        }
+        out.push_str(&format!("   Party {}: ✓\n", i));
+    }
+
+    // Copy public data to the main wallet folder (no secret shares!)
+    // Main wallet is for viewing only - each party subfolder has its own secret share
+    let main_storage = FileStorage::new(&main_dir)?;
+    let party1_storage = &storages[0];
+
+    // Only copy public key and metadata - NOT the secret share
+    for file in &["shared_key.bin", "htss_metadata.json", "hd_metadata.json"] {
+        if let Ok(data) = party1_storage.read(file) {
+            main_storage.write(file, &data)?;
+        }
+    }
+
+    out.push_str("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    out.push_str("❄️  Key generation complete!\n\n");
+    out.push_str(&format!("📍 Public Key: {}\n", public_key));
+    out.push_str(&format!("📁 Wallet: {}\n", main_dir));
+    out.push_str(&format!(
+        "📁 Parties: {}/party[1-{}]\n",
+        main_dir, n_parties
+    ));
+
+    if hierarchical {
+        out.push_str("\n🔐 HTSS Ranks:\n");
+        for (i, rank) in party_ranks.iter().enumerate() {
+            out.push_str(&format!("   Party {}: rank {}\n", i + 1, rank));
+        }
+    }
+
+    Ok(CommandResult {
+        output: out,
+        result: format!("Wallet: {}\nPublic Key: {}", name, public_key),
+    })
 }

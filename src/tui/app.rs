@@ -5,17 +5,16 @@ use bitcoin::{Address, XOnlyPublicKey};
 use ratatui::widgets::ListState;
 use std::collections::HashMap;
 
-use crate::keygen::{list_wallets, WalletSummary};
-use crate::storage::{FileStorage, Storage};
 use crate::tui::screens::{KeygenFormData, ReshareFormData, SendFormData};
 use crate::tui::state::{AppState, NetworkSelection};
+use frostdao::protocol::keygen::{list_wallets, WalletSummary};
+use frostdao::storage::{FileStorage, Storage};
 
 /// Balance information for a wallet
 #[derive(Clone)]
 pub struct BalanceInfo {
     pub balance_sats: u64,
     pub utxo_count: usize,
-    pub address: String,
 }
 
 /// Main application state
@@ -147,7 +146,7 @@ impl App {
 
     /// Fetch balance for a wallet on the current network
     fn fetch_balance(&self, wallet_name: &str) -> Result<BalanceInfo> {
-        let state_dir = crate::keygen::get_state_dir(wallet_name);
+        let state_dir = frostdao::protocol::keygen::get_state_dir(wallet_name);
         let storage = FileStorage::new(&state_dir)?;
 
         // Load shared key
@@ -177,8 +176,117 @@ impl App {
         Ok(BalanceInfo {
             balance_sats,
             utxo_count: utxos.len(),
-            address,
         })
+    }
+
+    /// Fetch UTXOs and recent transactions for send form
+    pub fn fetch_utxos_for_send(&mut self, address: &str) {
+        use super::screens::{TxDisplay, UtxoDisplay};
+
+        let api_base = self.network.mempool_api_base();
+        let client = reqwest::blocking::Client::new();
+
+        // Fetch fee estimates
+        let fee_url = format!("{}/v1/fees/recommended", api_base);
+        if let Ok(response) = client.get(&fee_url).send() {
+            if let Ok(fees) = response.json::<serde_json::Value>() {
+                // Use half hour fee as default (reasonable balance of speed/cost)
+                self.send_form.fee_rate = fees
+                    .get("halfHourFee")
+                    .and_then(|f| f.as_u64())
+                    .unwrap_or(1);
+            }
+        }
+
+        // Fetch UTXOs
+        let utxo_url = format!("{}/address/{}/utxo", api_base, address);
+        if let Ok(response) = client.get(&utxo_url).send() {
+            if let Ok(utxos) = response.json::<Vec<serde_json::Value>>() {
+                self.send_form.utxos = utxos
+                    .iter()
+                    .filter_map(|u| {
+                        Some(UtxoDisplay {
+                            txid: u.get("txid")?.as_str()?.to_string(),
+                            vout: u.get("vout")?.as_u64()? as u32,
+                            value: u.get("value")?.as_u64()?,
+                            confirmed: u
+                                .get("status")
+                                .and_then(|s| s.get("confirmed"))
+                                .and_then(|c| c.as_bool())
+                                .unwrap_or(false),
+                        })
+                    })
+                    .collect();
+
+                self.send_form.total_balance = self.send_form.utxos.iter().map(|u| u.value).sum();
+                // Update fee estimate
+                self.send_form.estimate_fee();
+            }
+        }
+
+        // Fetch recent transactions
+        let txs_url = format!("{}/address/{}/txs", api_base, address);
+        if let Ok(response) = client.get(&txs_url).send() {
+            if let Ok(txs) = response.json::<Vec<serde_json::Value>>() {
+                self.send_form.recent_txs = txs
+                    .iter()
+                    .take(10)
+                    .filter_map(|tx| {
+                        let txid = tx.get("txid")?.as_str()?.to_string();
+                        let confirmed = tx
+                            .get("status")
+                            .and_then(|s| s.get("confirmed"))
+                            .and_then(|c| c.as_bool())
+                            .unwrap_or(false);
+                        let time = tx
+                            .get("status")
+                            .and_then(|s| s.get("block_time"))
+                            .and_then(|t| t.as_u64());
+
+                        // Calculate net amount for this address
+                        let mut received: i64 = 0;
+                        let mut sent: i64 = 0;
+
+                        if let Some(vout) = tx.get("vout").and_then(|v| v.as_array()) {
+                            for out in vout {
+                                if let Some(scriptpubkey_address) =
+                                    out.get("scriptpubkey_address").and_then(|a| a.as_str())
+                                {
+                                    if scriptpubkey_address == address {
+                                        received +=
+                                            out.get("value").and_then(|v| v.as_i64()).unwrap_or(0);
+                                    }
+                                }
+                            }
+                        }
+
+                        if let Some(vin) = tx.get("vin").and_then(|v| v.as_array()) {
+                            for inp in vin {
+                                if let Some(prevout) = inp.get("prevout") {
+                                    if let Some(scriptpubkey_address) =
+                                        prevout.get("scriptpubkey_address").and_then(|a| a.as_str())
+                                    {
+                                        if scriptpubkey_address == address {
+                                            sent += prevout
+                                                .get("value")
+                                                .and_then(|v| v.as_i64())
+                                                .unwrap_or(0);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Some(TxDisplay {
+                            txid,
+                            amount: received - sent,
+                            confirmed,
+                            time,
+                        })
+                    })
+                    .collect();
+            }
+        }
     }
 
     /// Reload wallet list
@@ -230,8 +338,147 @@ impl App {
         self.message = Some(msg.to_string());
     }
 
-    /// Clear status message
-    pub fn clear_message(&mut self) {
-        self.message = None;
+    /// Copy text to clipboard
+    pub fn copy_to_clipboard(&mut self, text: &str) {
+        match arboard::Clipboard::new() {
+            Ok(mut clipboard) => match clipboard.set_text(text) {
+                Ok(_) => {
+                    // Use char_indices for safe UTF-8 slicing (avoids panic on multi-byte chars)
+                    let preview = if text.chars().count() > 20 {
+                        let end_byte = text
+                            .char_indices()
+                            .nth(20)
+                            .map(|(i, _)| i)
+                            .unwrap_or(text.len());
+                        format!("{}...", &text[..end_byte])
+                    } else {
+                        text.to_string()
+                    };
+                    self.message = Some(format!("Copied: {}", preview));
+                }
+                Err(e) => {
+                    self.message = Some(format!("Clipboard error: {}", e));
+                }
+            },
+            Err(e) => {
+                self.message = Some(format!("Clipboard unavailable: {}", e));
+            }
+        }
+    }
+
+    /// Load HD addresses for a wallet
+    pub fn load_hd_addresses(&mut self, wallet_name: &str) {
+        let btc_network = self.network.to_bitcoin_network();
+        let state_dir = frostdao::protocol::keygen::get_state_dir(wallet_name);
+
+        match FileStorage::new(&state_dir) {
+            Ok(storage) => {
+                // Check if HD is enabled
+                match storage.read("hd_metadata.json") {
+                    Ok(bytes) => {
+                        let hd_json = String::from_utf8_lossy(&bytes);
+                        match serde_json::from_str::<frostdao::protocol::keygen::HdMetadata>(
+                            &hd_json,
+                        ) {
+                            Ok(metadata) => {
+                                if metadata.hd_enabled {
+                                    // Load addresses using stored derived_count
+                                    match frostdao::btc::hd_address::list_derived_addresses(
+                                        &storage,
+                                        metadata.derived_count,
+                                        btc_network,
+                                    ) {
+                                        Ok(addresses) => {
+                                            if let AppState::AddressList(ref mut state) = self.state
+                                            {
+                                                state.addresses = addresses;
+                                                state.hd_enabled = true;
+                                            }
+                                        }
+                                        Err(e) => {
+                                            if let AppState::AddressList(ref mut state) = self.state
+                                            {
+                                                state.error = Some(format!("Error loading: {}", e));
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    if let AppState::AddressList(ref mut state) = self.state {
+                                        state.error =
+                                            Some("HD not enabled for this wallet".to_string());
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                if let AppState::AddressList(ref mut state) = self.state {
+                                    state.error =
+                                        Some(format!("Invalid HD metadata format: {}", e));
+                                }
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        if let AppState::AddressList(ref mut state) = self.state {
+                            state.error = Some("HD not enabled for this wallet".to_string());
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                if let AppState::AddressList(ref mut state) = self.state {
+                    state.error = Some(format!("Storage error: {}", e));
+                }
+            }
+        }
+    }
+
+    /// Add a new HD address (derive next index)
+    pub fn add_hd_address(&mut self, wallet_name: &str) {
+        let state_dir = frostdao::protocol::keygen::get_state_dir(wallet_name);
+        if let Ok(storage) = FileStorage::new(&state_dir) {
+            match frostdao::btc::hd_address::add_address(&storage) {
+                Ok(new_count) => {
+                    self.message = Some(format!("Added address {}", new_count - 1));
+                    // Reload addresses
+                    self.load_hd_addresses(wallet_name);
+                }
+                Err(e) => {
+                    self.message = Some(format!("Error adding address: {}", e));
+                }
+            }
+        }
+    }
+
+    /// Remove the last HD address
+    pub fn remove_hd_address(&mut self, wallet_name: &str) {
+        let state_dir = frostdao::protocol::keygen::get_state_dir(wallet_name);
+        if let Ok(storage) = FileStorage::new(&state_dir) {
+            // Get current count first
+            if let Ok(current) = frostdao::btc::hd_address::get_derived_count(&storage) {
+                if current <= 1 {
+                    self.message = Some("Cannot remove: minimum 1 address required".to_string());
+                    return;
+                }
+            }
+
+            match frostdao::btc::hd_address::remove_address(&storage) {
+                Ok(new_count) => {
+                    self.message = Some(format!(
+                        "Removed address. Now showing {} addresses",
+                        new_count
+                    ));
+                    // Reload addresses and adjust selection if needed
+                    self.load_hd_addresses(wallet_name);
+                    if let AppState::AddressList(ref mut state) = self.state {
+                        if state.selected >= state.addresses.len() && !state.addresses.is_empty() {
+                            state.selected = state.addresses.len() - 1;
+                        }
+                    }
+                }
+                Err(e) => {
+                    self.message = Some(format!("Error removing address: {}", e));
+                }
+            }
+        }
     }
 }

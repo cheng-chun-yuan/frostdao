@@ -60,6 +60,13 @@ fn render_wallet_list(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
+    // Split into wallet info (top) and keyboard shortcuts (bottom)
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(10), Constraint::Length(12)])
+        .split(area);
+
+    // Wallet details
     let content = if let Some(wallet) = app.selected_wallet() {
         let mut lines = vec![
             Line::from(vec![
@@ -161,7 +168,7 @@ fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(Color::DarkGray),
             )),
             Line::from(""),
-            Line::from("Create a wallet with 'k' (keygen)"),
+            Line::from("Create a wallet with 'g' (keygen)"),
             Line::from("or use CLI:"),
             Line::from(Span::styled(
                 "  frostdao keygen-round1 --name <name> ...",
@@ -174,12 +181,74 @@ fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
         .block(Block::default().borders(Borders::ALL).title("Details"))
         .wrap(Wrap { trim: false });
 
-    frame.render_widget(details, area);
+    frame.render_widget(details, chunks[0]);
+
+    // Keyboard shortcuts panel (pass whether wallet is selected)
+    let has_wallet = app.selected_wallet().is_some();
+    render_shortcuts(frame, has_wallet, chunks[1]);
+}
+
+fn render_shortcuts(frame: &mut Frame, has_wallet: bool, area: Rect) {
+    // Basic shortcuts always shown
+    let mut shortcuts = vec![
+        Line::from(vec![
+            Span::styled("n", Style::default().fg(Color::Yellow)),
+            Span::raw(" Network   "),
+            Span::styled("g", Style::default().fg(Color::Yellow)),
+            Span::raw(" Generate wallet   "),
+            Span::styled("R", Style::default().fg(Color::Yellow)),
+            Span::raw(" Reload wallets"),
+        ]),
+        Line::from(vec![
+            Span::styled("↑/↓", Style::default().fg(Color::Green)),
+            Span::raw(" Navigate  "),
+            Span::styled("Enter", Style::default().fg(Color::Green)),
+            Span::raw(" Open wallet       "),
+            Span::styled("q", Style::default().fg(Color::Yellow)),
+            Span::raw(" Quit"),
+        ]),
+    ];
+
+    // Wallet-specific shortcuts only shown when a wallet is selected
+    if has_wallet {
+        shortcuts.push(Line::from(""));
+        shortcuts.push(Line::from(Span::styled(
+            "Wallet actions:",
+            Style::default().fg(Color::Cyan),
+        )));
+        shortcuts.push(Line::from(vec![
+            Span::styled("s", Style::default().fg(Color::Yellow)),
+            Span::raw(" Send      "),
+            Span::styled("a", Style::default().fg(Color::Yellow)),
+            Span::raw(" Addresses   "),
+            Span::styled("m", Style::default().fg(Color::Yellow)),
+            Span::raw(" Mnemonic"),
+        ]));
+        shortcuts.push(Line::from(vec![
+            Span::styled("h", Style::default().fg(Color::Yellow)),
+            Span::raw(" Reshare   "),
+            Span::styled("r", Style::default().fg(Color::Yellow)),
+            Span::raw(" Refresh     "),
+            Span::styled("c", Style::default().fg(Color::Yellow)),
+            Span::raw(" Copy addr"),
+        ]));
+    }
+
+    let shortcuts_widget = Paragraph::new(shortcuts)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Shortcuts ")
+                .border_style(Style::default().fg(Color::DarkGray)),
+        )
+        .style(Style::default().fg(Color::White));
+
+    frame.render_widget(shortcuts_widget, area);
 }
 
 /// Get address for the selected network
 fn get_address_for_network(
-    wallet: &crate::keygen::WalletSummary,
+    wallet: &frostdao::protocol::keygen::WalletSummary,
     network: NetworkSelection,
 ) -> Option<String> {
     // For now, return the stored address (testnet)

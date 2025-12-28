@@ -19,7 +19,7 @@
 //!
 //! Result: New shares s'_j for the same group secret s
 
-use crate::keygen::{get_state_dir, GroupInfo, HtssMetadata};
+use crate::protocol::keygen::{get_state_dir, GroupInfo, HtssMetadata};
 use crate::storage::{FileStorage, Storage};
 use anyhow::Result;
 use schnorr_fun::frost;
@@ -170,7 +170,7 @@ pub fn reshare_finalize(
 
     // Parse round1 outputs (space-separated JSON objects)
     let round1_outputs: Vec<ReshareRound1Output> =
-        crate::keygen::parse_space_separated_json(round1_data)?;
+        crate::protocol::keygen::parse_space_separated_json(round1_data)?;
 
     if round1_outputs.is_empty() {
         anyhow::bail!("No round1 data provided");
@@ -239,7 +239,7 @@ pub fn reshare_finalize(
             .ok_or_else(|| anyhow::anyhow!("Invalid sub-share scalar"))?;
 
         // Compute Lagrange coefficient for this old party at x=0
-        let lagrange_coeff = crate::crypto_helpers::lagrange_coefficient_at_zero(
+        let lagrange_coeff = crate::crypto::helpers::lagrange_coefficient_at_zero(
             output.old_party_index,
             &old_indices,
         )?;
@@ -277,9 +277,9 @@ pub fn reshare_finalize(
     // Create PairedSecretShare using helper function
     let share_scalar: Scalar<Secret, Zero> = Scalar::from_bytes(new_share_bytes)
         .ok_or_else(|| anyhow::anyhow!("Invalid computed share"))?;
-    let share_nonzero = crate::crypto_helpers::share_to_nonzero(share_scalar)?;
+    let share_nonzero = crate::crypto::helpers::share_to_nonzero(share_scalar)?;
 
-    let paired_share = crate::crypto_helpers::construct_paired_secret_share(
+    let paired_share = crate::crypto::helpers::construct_paired_secret_share(
         my_new_index,
         share_nonzero,
         &group_public_key,
@@ -384,15 +384,33 @@ pub fn reshare_round1_core(
         anyhow::bail!("Wallet '{}' not found at {}.", source_wallet, state_dir);
     }
 
-    let storage = FileStorage::new(&state_dir)?;
+    // Find the party folder or use legacy structure
+    let party_dir = format!("{}/party{}", state_dir, my_old_index);
+    let storage_path = if std::path::Path::new(&party_dir).exists() {
+        party_dir
+    } else {
+        // Legacy structure - share directly in wallet folder
+        state_dir.clone()
+    };
+
+    let storage = FileStorage::new(&storage_path)?;
 
     // Load my secret share
     let paired_share_bytes = storage.read("paired_secret_share.bin")?;
     let paired_share: frost::PairedSecretShare<EvenY> = bincode::deserialize(&paired_share_bytes)?;
 
-    // Load HTSS metadata for verification
-    let htss_json = String::from_utf8(storage.read("htss_metadata.json")?)?;
-    let htss: HtssMetadata = serde_json::from_str(&htss_json)?;
+    // Load HTSS metadata - try party folder first, then wallet root
+    let htss: HtssMetadata = {
+        if let Ok(htss_json) = storage.read("htss_metadata.json") {
+            let htss_str = String::from_utf8(htss_json)?;
+            serde_json::from_str(&htss_str)?
+        } else {
+            // Try wallet root for legacy
+            let root_storage = FileStorage::new(&state_dir)?;
+            let htss_json = String::from_utf8(root_storage.read("htss_metadata.json")?)?;
+            serde_json::from_str(&htss_json)?
+        }
+    };
 
     if htss.my_index != my_old_index {
         anyhow::bail!(
@@ -480,7 +498,7 @@ pub fn reshare_finalize_core(
 ) -> Result<CommandResult> {
     // Parse round1 outputs
     let round1_outputs: Vec<ReshareRound1Output> =
-        crate::keygen::parse_space_separated_json(round1_data)?;
+        crate::protocol::keygen::parse_space_separated_json(round1_data)?;
 
     if round1_outputs.is_empty() {
         anyhow::bail!("No round1 data provided");
@@ -527,7 +545,7 @@ pub fn reshare_finalize_core(
         let sub_share: Scalar<Secret, Zero> = Scalar::from_bytes(sub_share_bytes)
             .ok_or_else(|| anyhow::anyhow!("Invalid sub-share scalar"))?;
 
-        let lagrange_coeff = crate::crypto_helpers::lagrange_coefficient_at_zero(
+        let lagrange_coeff = crate::crypto::helpers::lagrange_coefficient_at_zero(
             output.old_party_index,
             &old_indices,
         )?;
@@ -558,9 +576,9 @@ pub fn reshare_finalize_core(
     // Create PairedSecretShare using helper function
     let share_scalar: Scalar<Secret, Zero> = Scalar::from_bytes(new_share_bytes)
         .ok_or_else(|| anyhow::anyhow!("Invalid computed share"))?;
-    let share_nonzero = crate::crypto_helpers::share_to_nonzero(share_scalar)?;
+    let share_nonzero = crate::crypto::helpers::share_to_nonzero(share_scalar)?;
 
-    let paired_share = crate::crypto_helpers::construct_paired_secret_share(
+    let paired_share = crate::crypto::helpers::construct_paired_secret_share(
         my_new_index,
         share_nonzero,
         &group_public_key,
@@ -640,7 +658,7 @@ mod tests {
 
     #[test]
     fn test_lagrange_coefficients_sum_to_one() {
-        use crate::crypto_helpers::lagrange_coefficient_at_zero;
+        use crate::crypto::helpers::lagrange_coefficient_at_zero;
 
         // Test that Lagrange coefficients for indices {1,2,3} at x=0 sum to 1
         // This is a fundamental property: Σ λ_i(x) = 1 for any x
@@ -659,7 +677,7 @@ mod tests {
 
     #[test]
     fn test_resharing_preserves_secret() {
-        use crate::crypto_helpers::lagrange_coefficient_at_zero;
+        use crate::crypto::helpers::lagrange_coefficient_at_zero;
 
         // Simulate resharing: old shares combine to same secret
         // Original secret: s

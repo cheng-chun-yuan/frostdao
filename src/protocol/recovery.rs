@@ -26,10 +26,10 @@
 //!
 //! Result: The lost party gets their original share s_j back!
 
-use crate::birkhoff::{
+use crate::crypto::birkhoff::{
     birkhoff_coefficient_to_scalar, compute_birkhoff_recovery_coefficients, BirkhoffParameter,
 };
-use crate::keygen::{get_state_dir, GroupInfo, HtssMetadata};
+use crate::protocol::keygen::{get_state_dir, GroupInfo, HtssMetadata};
 use crate::storage::{FileStorage, Storage};
 use crate::CommandResult;
 use anyhow::Result;
@@ -231,7 +231,7 @@ pub fn recover_finalize_core(
 
     // Parse round1 outputs
     let round1_outputs: Vec<RecoveryRound1Output> =
-        crate::keygen::parse_space_separated_json(round1_data)?;
+        crate::protocol::keygen::parse_space_separated_json(round1_data)?;
 
     if round1_outputs.is_empty() {
         anyhow::bail!("No recovery round1 data provided");
@@ -391,7 +391,7 @@ pub fn recover_finalize_core(
                 .ok_or_else(|| anyhow::anyhow!("Invalid sub-share scalar"))?;
 
             // Compute Lagrange coefficient at x = my_index
-            let lagrange_coeff = crate::crypto_helpers::lagrange_coefficient_at(
+            let lagrange_coeff = crate::crypto::helpers::lagrange_coefficient_at(
                 output.helper_index,
                 &helper_indices,
                 my_index,
@@ -429,9 +429,9 @@ pub fn recover_finalize_core(
     // Create PairedSecretShare using helper function
     let share_scalar: Scalar<Secret, Zero> = Scalar::from_bytes(recovered_share_bytes)
         .ok_or_else(|| anyhow::anyhow!("Invalid recovered share bytes"))?;
-    let share_nonzero = crate::crypto_helpers::share_to_nonzero(share_scalar)?;
+    let share_nonzero = crate::crypto::helpers::share_to_nonzero(share_scalar)?;
 
-    let paired_share = crate::crypto_helpers::construct_paired_secret_share(
+    let paired_share = crate::crypto::helpers::construct_paired_secret_share(
         my_index,
         share_nonzero,
         &group_public_key,
@@ -524,7 +524,7 @@ pub fn recover_finalize_core(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crypto_helpers::lagrange_coefficient_at;
+    use crate::crypto::helpers::lagrange_coefficient_at;
 
     #[test]
     fn test_lagrange_at_different_x() {

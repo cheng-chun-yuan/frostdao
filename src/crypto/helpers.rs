@@ -10,7 +10,7 @@
 //! - **Tagged hash**: BIP340-style tagged hashing for Bitcoin protocols
 
 use anyhow::Result;
-use schnorr_fun::frost::PairedSecretShare;
+use schnorr_fun::frost::{PairedSecretShare, SharedKey};
 use schnorr_fun::fun::marker::*;
 use secp256kfun::prelude::*;
 use sha2::{Digest, Sha256};
@@ -169,6 +169,20 @@ pub fn share_to_nonzero(share: Scalar<Secret, Zero>) -> Result<Scalar<Secret, No
     share
         .non_zero()
         .ok_or_else(|| anyhow::anyhow!("Share value is zero (extremely unlikely)"))
+}
+
+// ============================================================================
+// SharedKey Helpers
+// ============================================================================
+
+/// Construct a SharedKey from a public key point.
+///
+/// This is used for HD derivation where we need a SharedKey with the derived
+/// public key but don't have the full polynomial info.
+pub fn construct_shared_key(public_key: &Point<EvenY>) -> Result<SharedKey<EvenY>> {
+    // SharedKey is serialized as just the 32-byte x-only public key
+    let shared_key: SharedKey<EvenY> = bincode::deserialize(&public_key.to_xonly_bytes())?;
+    Ok(shared_key)
 }
 
 #[cfg(test)]

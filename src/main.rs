@@ -1,25 +1,12 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-/// Result from a command, separating educational output from copy-paste result
-#[derive(Debug, Clone)]
-pub struct CommandResult {
-    /// Educational output with explanations (🧠, ⚙️, ❄️, etc.)
-    pub output: String,
-    /// Clean JSON result for copy-pasting
-    pub result: String,
-}
+// Use library crate for core functionality
+use frostdao::btc::{schnorr as bitcoin_schnorr, transaction as bitcoin_tx};
+use frostdao::protocol::{dkg_tx, keygen, recovery, reshare, signing};
+use frostdao::storage::Storage; // For HD commands
 
-mod birkhoff;
-mod bitcoin_schnorr;
-mod bitcoin_tx;
-mod crypto_helpers;
-mod dkg_tx;
-mod keygen;
-mod recovery;
-mod reshare;
-mod signing;
-mod storage;
+// TUI is CLI-only, not part of lib
 mod tui;
 
 #[derive(Parser)]
@@ -221,6 +208,50 @@ enum Commands {
     /// Regenerate group_info.json for a wallet
     DkgInfo {
         /// Wallet/session name
+        #[arg(long)]
+        name: String,
+    },
+
+    // ========================================================================
+    // HD Key Derivation (BIP-32/BIP-44) Commands
+    // ========================================================================
+    /// Derive address at BIP-44 path (m/44'/0'/0'/change/index)
+    DkgDeriveAddress {
+        /// Wallet name
+        #[arg(long)]
+        name: String,
+
+        /// Change level (0=external/receive, 1=internal/change)
+        #[arg(long, default_value = "0")]
+        change: u32,
+
+        /// Address index
+        #[arg(long, default_value = "0")]
+        index: u32,
+
+        /// Network (testnet, mainnet, signet)
+        #[arg(long, default_value = "testnet")]
+        network: String,
+    },
+
+    /// List multiple derived addresses
+    DkgListAddresses {
+        /// Wallet name
+        #[arg(long)]
+        name: String,
+
+        /// Number of addresses to derive
+        #[arg(long, default_value = "10")]
+        count: u32,
+
+        /// Network (testnet, mainnet, signet)
+        #[arg(long, default_value = "testnet")]
+        network: String,
+    },
+
+    /// Generate BIP-39 mnemonic backup for share
+    DkgGenerateMnemonic {
+        /// Wallet name
         #[arg(long)]
         name: String,
     },
@@ -526,6 +557,67 @@ fn main() -> Result<()> {
         Commands::DkgInfo { name } => {
             keygen::regenerate_group_info(&name)?;
         }
+
+        // HD Key Derivation commands
+        Commands::DkgDeriveAddress {
+            name,
+            change,
+            index,
+            network,
+        } => {
+            use frostdao::btc::hd_address;
+            use frostdao::storage::FileStorage;
+
+            let state_dir = keygen::get_state_dir(&name);
+            let storage = FileStorage::new(&state_dir)?;
+            let result = hd_address::derive_address_core(change, index, &network, &storage)?;
+            println!("{}", result.output);
+        }
+        Commands::DkgListAddresses {
+            name,
+            count,
+            network,
+        } => {
+            use frostdao::btc::hd_address;
+            use frostdao::storage::FileStorage;
+
+            let state_dir = keygen::get_state_dir(&name);
+            let storage = FileStorage::new(&state_dir)?;
+            let result = hd_address::list_addresses_core(count, &network, &storage)?;
+            println!("{}", result.output);
+        }
+        Commands::DkgGenerateMnemonic { name } => {
+            use frostdao::crypto::mnemonic;
+            use frostdao::storage::FileStorage;
+
+            let state_dir = keygen::get_state_dir(&name);
+            let storage = FileStorage::new(&state_dir)?;
+
+            // Load the secret share
+            let paired_share_bytes = storage.read("paired_secret_share.bin")?;
+            let paired_share: schnorr_fun::frost::PairedSecretShare<secp256kfun::marker::EvenY> =
+                bincode::deserialize(&paired_share_bytes)?;
+
+            // Get share bytes
+            let share_bytes: [u8; 32] = paired_share.secret_share().share.to_bytes();
+
+            // Generate mnemonic from share
+            let mnemonic_result = mnemonic::share_to_mnemonic(&share_bytes)?;
+
+            println!("BIP-39 Mnemonic Backup for Wallet '{}'\n", name);
+            println!(
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            );
+            println!("WARNING: This mnemonic backs up YOUR SECRET SHARE only.");
+            println!("         Recovery still requires threshold shares from other parties.\n");
+            println!("{}\n", mnemonic::format_mnemonic_grid(&mnemonic_result));
+            println!(
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            );
+            println!("\nWrite down these 24 words and store them securely!");
+            println!("Never share them with anyone.");
+        }
+
         Commands::ReshareRound1 {
             source,
             new_threshold,
