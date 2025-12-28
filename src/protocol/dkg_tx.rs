@@ -939,13 +939,53 @@ pub fn frost_sign_all_local(
         anyhow::bail!("No parties selected for signing");
     }
 
+    // Step 0: Load wallet metadata to validate threshold
+    let state_dir = get_state_dir(wallet_name);
+
+    // Load metadata from first party to get threshold info
+    let first_party_idx = selected_parties[0];
+    let first_party_dir = format!("{}/party{}", state_dir, first_party_idx);
+    let first_party_storage = FileStorage::new(&first_party_dir)
+        .with_context(|| format!("Party {} folder not found", first_party_idx))?;
+
+    let wallet_metadata: HtssMetadata = {
+        let metadata_json = String::from_utf8(first_party_storage.read("htss_metadata.json")?)?;
+        serde_json::from_str(&metadata_json)?
+    };
+
+    // Validate threshold requirement
+    if (selected_parties.len() as u32) < wallet_metadata.threshold {
+        anyhow::bail!(
+            "Insufficient parties for signing: selected {} but threshold requires at least {}",
+            selected_parties.len(),
+            wallet_metadata.threshold
+        );
+    }
+
+    // For HTSS mode, validate signer set ranks
+    if wallet_metadata.hierarchical {
+        let ranks: Vec<u32> = selected_parties
+            .iter()
+            .filter_map(|&idx| wallet_metadata.party_ranks.get(&idx).copied())
+            .collect();
+
+        if ranks.len() != selected_parties.len() {
+            anyhow::bail!("Could not determine ranks for all selected parties");
+        }
+
+        crate::crypto::birkhoff::validate_signer_set(&ranks, wallet_metadata.threshold)
+            .context("HTSS signer set validation failed")?;
+    }
+
     out.push_str(&format!("Wallet: {}\n", wallet_name));
     out.push_str(&format!("Signing parties: {:?}\n", selected_parties));
+    out.push_str(&format!(
+        "Threshold: {}-of-{}\n",
+        wallet_metadata.threshold,
+        wallet_metadata.party_ranks.len()
+    ));
     out.push_str(&format!("Destination: {}\n", to_address));
     out.push_str(&format!("Amount: {} sats\n\n", amount_sats));
-
-    // Step 1: Load shared key from main wallet folder
-    let state_dir = get_state_dir(wallet_name);
     let main_storage = FileStorage::new(&state_dir)?;
 
     let shared_key_bytes = main_storage
