@@ -1,5 +1,6 @@
 //! Wallet details screen with action menu
 
+use qrcode::QrCode;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -83,6 +84,12 @@ fn render_delete_confirmation(frame: &mut Frame, wallet_name: &str, area: Rect) 
 
 fn render_wallet_info(frame: &mut Frame, app: &App, wallet_name: &str, area: Rect) {
     let wallet = app.wallets.iter().find(|w| w.name == wallet_name);
+
+    // Split area: info on top, QR code on bottom
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(12), Constraint::Length(15)])
+        .split(area);
 
     let content = if let Some(wallet) = wallet {
         let mut lines = vec![
@@ -193,7 +200,65 @@ fn render_wallet_info(frame: &mut Frame, app: &App, wallet_name: &str, area: Rec
         )
         .wrap(Wrap { trim: false });
 
-    frame.render_widget(details, area);
+    frame.render_widget(details, chunks[0]);
+
+    // Render QR code if address available
+    if let Some(wallet) = wallet {
+        if let Some(addr) = &wallet.address {
+            render_qr_code(frame, addr, chunks[1]);
+        }
+    }
+}
+
+/// Generate ASCII QR code from address
+fn render_qr_code(frame: &mut Frame, address: &str, area: Rect) {
+    let qr_lines = match QrCode::new(address.as_bytes()) {
+        Ok(code) => {
+            let width = code.width();
+            let mut lines: Vec<Line> = Vec::new();
+
+            // Use half-block characters for better resolution
+            // Each character represents 2 vertical modules
+            for y in (0..width).step_by(2) {
+                let mut spans: Vec<Span> = Vec::new();
+                for x in 0..width {
+                    let top = code[(x, y)] == qrcode::Color::Dark;
+                    let bottom = if y + 1 < width {
+                        code[(x, y + 1)] == qrcode::Color::Dark
+                    } else {
+                        false
+                    };
+
+                    let ch = match (top, bottom) {
+                        (true, true) => "█",
+                        (true, false) => "▀",
+                        (false, true) => "▄",
+                        (false, false) => " ",
+                    };
+                    spans.push(Span::styled(ch, Style::default().fg(Color::White)));
+                }
+                lines.push(Line::from(spans));
+            }
+            lines
+        }
+        Err(_) => {
+            vec![Line::from(Span::styled(
+                "QR code generation failed",
+                Style::default().fg(Color::Red),
+            ))]
+        }
+    };
+
+    let qr_widget = Paragraph::new(qr_lines)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" QR Code ")
+                .border_style(Style::default().fg(Color::Green)),
+        )
+        .alignment(ratatui::layout::Alignment::Center);
+
+    frame.render_widget(qr_widget, area);
 }
 
 fn render_action_menu(frame: &mut Frame, state: &WalletDetailsState, area: Rect) {
