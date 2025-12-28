@@ -1211,14 +1211,19 @@ fn render_complete(frame: &mut Frame, txid: &str, area: Rect) {
                 .add_modifier(Modifier::BOLD),
         )]),
         Line::from(""),
-        Line::from("All parties contributed their shares to create this signature."),
+        Line::from("Threshold signers contributed their shares to create this signature."),
         Line::from("In a real transaction, this would be broadcast to the network."),
     ])
     .block(info_block)
     .wrap(Wrap { trim: false });
     frame.render_widget(info, chunks[1]);
 
-    let help = Paragraph::new("Enter/Esc: Return to wallet list")
-        .style(Style::default().fg(Color::DarkGray));
+    let help = Paragraph::new(Line::from(vec![
+        Span::styled("c", Style::default().fg(Color::Yellow)),
+        Span::raw(": Copy TXID | "),
+        Span::styled("Enter/Esc", Style::default().fg(Color::Yellow)),
+        Span::raw(": Return to wallet list"),
+    ]))
+    .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[2]);
 }

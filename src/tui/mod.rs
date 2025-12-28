@@ -1411,10 +1411,13 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 app.send_form.shares_input.handle_key(key);
             }
         },
-        AppState::Send(SendState::Complete { .. }) => match key.code {
+        AppState::Send(SendState::Complete { txid }) => match key.code {
             KeyCode::Esc | KeyCode::Enter => {
                 app.send_form = SendFormData::new();
                 app.state = AppState::Home;
+            }
+            KeyCode::Char('c') => {
+                app.copy_to_clipboard(&txid);
             }
             _ => {}
         },
