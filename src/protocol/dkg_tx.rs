@@ -956,7 +956,7 @@ pub fn frost_sign_all_local(
     // HD Derivation: If path specified, derive child key info
     let hd_derived_info: Option<crate::crypto::hd::DerivedKeyInfo> =
         if let Some((change, index)) = derivation_path {
-            out.push_str(&format!("📍 Using HD path: 0/{}\n", index));
+            out.push_str(&format!("📍 Using HD path: {}/{}\n", change, index));
 
             // Load HD context using the proper function (reads hd_metadata.json)
             let hd_context = crate::btc::hd_address::load_hd_context(&main_storage)
@@ -1167,7 +1167,7 @@ pub fn frost_sign_all_local(
 
     // Aggregate nonces - use first nonce component only (k1, R1)
     // This is simpler than full FROST binonces but secure for our use case
-    let agg_nonce_even: Point<EvenY> = {
+    let (agg_nonce_even, nonce_parity_flip): (Point<EvenY>, bool) = {
         let mut agg_r: Point<Normal, Public, Zero> = Point::zero();
 
         for (_, _, _, nonce) in &party_data {
@@ -1180,7 +1180,8 @@ pub fn frost_sign_all_local(
         let agg_nonzero = agg_r
             .non_zero()
             .ok_or_else(|| anyhow::anyhow!("Aggregated nonce is point at infinity"))?;
-        agg_nonzero.into_point_with_even_y().0
+        // Track if R was negated to get even Y (needed for BIP-340 compliance)
+        agg_nonzero.into_point_with_even_y()
     };
 
     let sig_r_bytes = agg_nonce_even.to_xonly_bytes();
@@ -1212,12 +1213,20 @@ pub fn frost_sign_all_local(
         // SecretNonce is a tuple struct with [Scalar; 2], access with .0[0]
         let k1 = &nonce.secret.0[0];
 
-        // Compute signature share: s_i = k1_i + lambda_i * e * x_i
-        // Handle parity flip for the share (needed for even Y coordinate)
-        let sig_share = if parity_flip {
-            s!(k1 + lambda * challenge * { s!(-share_value) })
+        // Apply nonce parity adjustment if R was negated for even Y
+        // BIP-340: if R has odd Y, we use -R, so we must also use -k
+        let effective_k1 = if nonce_parity_flip {
+            s!(-k1).public()
         } else {
-            s!(k1 + lambda * challenge * share_value)
+            s!(k1).public()
+        };
+
+        // Compute signature share: s_i = k1_i + lambda_i * e * x_i
+        // Handle parity flip for the share (needed for even Y coordinate of public key)
+        let sig_share = if parity_flip {
+            s!(effective_k1 + lambda * challenge * { s!(-share_value) })
+        } else {
+            s!(effective_k1 + lambda * challenge * share_value)
         };
 
         // Add to running sum

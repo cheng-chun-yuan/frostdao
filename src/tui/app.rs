@@ -233,8 +233,14 @@ impl App {
         match arboard::Clipboard::new() {
             Ok(mut clipboard) => match clipboard.set_text(text) {
                 Ok(_) => {
-                    let preview = if text.len() > 20 {
-                        format!("{}...", &text[..20])
+                    // Use char_indices for safe UTF-8 slicing (avoids panic on multi-byte chars)
+                    let preview = if text.chars().count() > 20 {
+                        let end_byte = text
+                            .char_indices()
+                            .nth(20)
+                            .map(|(i, _)| i)
+                            .unwrap_or(text.len());
+                        format!("{}...", &text[..end_byte])
                     } else {
                         text.to_string()
                     };
