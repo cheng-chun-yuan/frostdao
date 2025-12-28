@@ -97,8 +97,11 @@ frostdao/
 ## References
 
 - [FROST Paper](https://eprint.iacr.org/2020/852)
-- [BIP340 - Schnorr](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki)
-- [BIP341 - Taproot](https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki)
+- [BIP-32 - HD Wallets](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki)
+- [BIP-39 - Mnemonic](https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki)
+- [BIP-44 - Multi-Account](https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki)
+- [BIP-340 - Schnorr](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki)
+- [BIP-341 - Taproot](https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki)
 
 ## License
 
