@@ -172,10 +172,7 @@ fn render_wallet_info(frame: &mut Frame, app: &App, wallet_name: &str, area: Rec
         } else {
             lines.push(Line::from(vec![
                 Span::styled("Balance: ", Style::default().fg(Color::Gray)),
-                Span::styled(
-                    "Select 'Fetch Balance' to check",
-                    Style::default().fg(Color::DarkGray),
-                ),
+                Span::styled("Press 'b' to fetch", Style::default().fg(Color::DarkGray)),
             ]));
         }
 
