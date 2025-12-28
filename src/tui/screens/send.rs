@@ -728,6 +728,21 @@ fn render_recent_txs_panel(frame: &mut Frame, form: &SendFormData, area: Rect) {
             } else {
                 (format!("{}", tx.amount), Color::Red)
             };
+            // Format time if available
+            let time_str = tx.time.map(|t| {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                let age_secs = now.saturating_sub(t);
+                if age_secs < 3600 {
+                    format!("{}m", age_secs / 60)
+                } else if age_secs < 86400 {
+                    format!("{}h", age_secs / 3600)
+                } else {
+                    format!("{}d", age_secs / 86400)
+                }
+            });
             lines.push(Line::from(vec![
                 Span::styled(status, Style::default().fg(status_color)),
                 Span::styled(
@@ -736,6 +751,10 @@ fn render_recent_txs_panel(frame: &mut Frame, form: &SendFormData, area: Rect) {
                 ),
                 Span::styled(
                     format!("{}...", &tx.txid[..8]),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                Span::styled(
+                    time_str.map(|t| format!(" {}", t)).unwrap_or_default(),
                     Style::default().fg(Color::DarkGray),
                 ),
             ]));
