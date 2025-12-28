@@ -561,20 +561,93 @@ frostdao dkg-broadcast \
 
 ---
 
+## HD Derivation Commands
+
+### dkg-derive-address
+
+Derive a single HD address.
+
+```bash
+frostdao dkg-derive-address \
+  --name <wallet_name> \
+  --index <n> \
+  --network <testnet|signet|mainnet>
+```
+
+---
+
+### dkg-list-addresses
+
+List derived HD addresses.
+
+```bash
+frostdao dkg-list-addresses \
+  --name <wallet_name> \
+  --count <n> \
+  --network <testnet|signet|mainnet>
+```
+
+---
+
+### dkg-generate-mnemonic
+
+Generate 24-word backup for your share.
+
+```bash
+frostdao dkg-generate-mnemonic --name <wallet_name>
+```
+
+---
+
+## Wallet Management
+
+### dkg-list
+
+List all DKG wallets.
+
+```bash
+frostdao dkg-list
+```
+
+---
+
+### dkg-info
+
+Regenerate group_info.json.
+
+```bash
+frostdao dkg-info --name <wallet_name>
+```
+
+---
+
+### tui
+
+Launch interactive Terminal UI.
+
+```bash
+frostdao tui
+```
+
+---
+
 ## Storage Locations
 
-DKG wallets are stored in named folders under `.frost_state/`:
+DKG wallets stored in `~/.frostdao/wallets/`:
 
 ```
-.frost_state/
-├── <wallet_name>/           # Each DKG wallet has its own folder
-│   ├── group_info.json      # Public info (shareable)
-│   ├── shared_key.bin       # Group public key
-│   ├── paired_secret_share.bin  # Your secret share (keep private!)
-│   ├── htss_metadata.json   # Ranks, threshold
-│   ├── all_commitments.json # Round 1 data
-│   └── round1_state.json    # DKG intermediate state
-└── bitcoin_keypair.json     # Single-signer BIP340 keypair
+~/.frostdao/
+└── wallets/
+    └── <wallet_name>/
+        ├── shared_key.bin           # Group public key
+        ├── hd_metadata.json         # HD derivation info
+        ├── party1/
+        │   ├── paired_secret_share.bin  # Party 1 secret
+        │   └── htss_metadata.json       # Party 1 config
+        ├── party2/
+        │   └── ...
+        └── party3/
+            └── ...
 ```
 
 ### group_info.json
