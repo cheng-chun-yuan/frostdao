@@ -228,7 +228,9 @@ fn render_shortcuts(frame: &mut Frame, has_wallet: bool, area: Rect) {
             Span::styled("h", Style::default().fg(Color::Yellow)),
             Span::raw(" Reshare   "),
             Span::styled("r", Style::default().fg(Color::Yellow)),
-            Span::raw(" Refresh bal"),
+            Span::raw(" Refresh     "),
+            Span::styled("c", Style::default().fg(Color::Yellow)),
+            Span::raw(" Copy addr"),
         ]));
     }
 

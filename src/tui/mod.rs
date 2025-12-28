@@ -207,6 +207,15 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
                 app.set_message("Select a wallet first to backup");
             }
         }
+        KeyCode::Char('c') => {
+            // Copy wallet address
+            let addr = app.selected_wallet().and_then(|w| w.address.clone());
+            if let Some(addr) = addr {
+                app.copy_to_clipboard(&addr);
+            } else {
+                app.set_message("Select a wallet first to copy address");
+            }
+        }
         _ => {}
     }
 }
