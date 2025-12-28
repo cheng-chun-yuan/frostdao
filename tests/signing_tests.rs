@@ -1,5 +1,6 @@
 //! Integration tests for signing functionality
 
+use serial_test::serial;
 use std::fs;
 use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -139,6 +140,7 @@ fn create_2_of_3_wallet(prefix: &str) -> (String, String, String) {
 
 /// Test Bitcoin Schnorr key generation
 #[test]
+#[serial]
 fn test_btc_keygen() {
     let output = Command::new(FROSTDAO)
         .args(["btc-keygen"])
@@ -157,6 +159,7 @@ fn test_btc_keygen() {
 
 /// Test Bitcoin Schnorr signing and verification
 #[test]
+#[serial]
 fn test_btc_sign_and_verify() {
     // First generate a key
     Command::new(FROSTDAO)
@@ -224,6 +227,7 @@ fn test_btc_sign_and_verify() {
 
 /// Test signature verification with wrong message fails
 #[test]
+#[serial]
 fn test_btc_verify_wrong_message() {
     // Generate key
     Command::new(FROSTDAO)
@@ -329,6 +333,7 @@ fn test_dkg_info() {
 
 /// Test address generation for different networks
 #[test]
+#[serial]
 fn test_address_networks() {
     // Generate key first
     Command::new(FROSTDAO)
