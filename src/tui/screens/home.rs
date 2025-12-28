@@ -60,10 +60,10 @@ fn render_wallet_list(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
-    // Wallet details (no longer need Quick Actions - they're in WalletDetails screen)
+    // Split into wallet info (top) and keyboard shortcuts (bottom)
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(10), Constraint::Length(4)])
+        .constraints([Constraint::Min(10), Constraint::Length(12)])
         .split(area);
 
     // Wallet details
@@ -183,15 +183,55 @@ fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
 
     frame.render_widget(details, chunks[0]);
 
-    // Simple hint
-    let hint = Paragraph::new(Line::from(vec![
-        Span::styled("Tip: ", Style::default().fg(Color::Gray)),
-        Span::styled(
-            "Press Enter to see wallet actions",
-            Style::default().fg(Color::DarkGray),
-        ),
-    ]));
-    frame.render_widget(hint, chunks[1]);
+    // Keyboard shortcuts panel
+    render_shortcuts(frame, chunks[1]);
+}
+
+fn render_shortcuts(frame: &mut Frame, area: Rect) {
+    let shortcuts = vec![
+        Line::from(vec![
+            Span::styled("n", Style::default().fg(Color::Yellow)),
+            Span::raw(" Network   "),
+            Span::styled("g", Style::default().fg(Color::Yellow)),
+            Span::raw(" Generate wallet   "),
+            Span::styled("s", Style::default().fg(Color::Yellow)),
+            Span::raw(" Send"),
+        ]),
+        Line::from(vec![
+            Span::styled("a", Style::default().fg(Color::Yellow)),
+            Span::raw(" Addresses "),
+            Span::styled("m", Style::default().fg(Color::Yellow)),
+            Span::raw(" Mnemonic backup   "),
+            Span::styled("h", Style::default().fg(Color::Yellow)),
+            Span::raw(" Reshare"),
+        ]),
+        Line::from(vec![
+            Span::styled("r", Style::default().fg(Color::Yellow)),
+            Span::raw(" Refresh   "),
+            Span::styled("R", Style::default().fg(Color::Yellow)),
+            Span::raw(" Reload wallets    "),
+            Span::styled("q", Style::default().fg(Color::Yellow)),
+            Span::raw(" Quit"),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("Enter", Style::default().fg(Color::Green)),
+            Span::raw(" Open wallet actions  "),
+            Span::styled("↑/↓", Style::default().fg(Color::Green)),
+            Span::raw(" Navigate"),
+        ]),
+    ];
+
+    let shortcuts_widget = Paragraph::new(shortcuts)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Shortcuts ")
+                .border_style(Style::default().fg(Color::DarkGray)),
+        )
+        .style(Style::default().fg(Color::White));
+
+    frame.render_widget(shortcuts_widget, area);
 }
 
 /// Get address for the selected network
