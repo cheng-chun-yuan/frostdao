@@ -107,14 +107,23 @@ fn render_wallet_info(frame: &mut Frame, app: &App, wallet_name: &str, area: Rec
             Line::from(""),
         ];
 
-        // Threshold info
+        // Threshold info with signing requirement for HTSS
         if let (Some(t), Some(n)) = (wallet.threshold, wallet.total_parties) {
+            let threshold_display = if wallet.hierarchical.unwrap_or(false) {
+                if let Some(ref req) = wallet.signing_requirement {
+                    // Show signing requirement like "5-of-8 (1,2,2)"
+                    let req_str: Vec<String> = req.iter().map(|r| r.to_string()).collect();
+                    format!("{}-of-{} ({})", t, n, req_str.join(","))
+                } else {
+                    format!("{}-of-{}", t, n)
+                }
+            } else {
+                format!("{}-of-{}", t, n)
+            };
+
             lines.push(Line::from(vec![
                 Span::styled("Threshold: ", Style::default().fg(Color::Gray)),
-                Span::styled(
-                    format!("{}-of-{}", t, n),
-                    Style::default().fg(Color::Yellow),
-                ),
+                Span::styled(threshold_display, Style::default().fg(Color::Yellow)),
             ]));
         }
 
