@@ -1,11 +1,67 @@
 //! Birkhoff Interpolation for Hierarchical Threshold Secret Sharing (HTSS)
 //!
-//! This module implements Birkhoff interpolation, which extends Lagrange interpolation
-//! by incorporating derivative information (ranks). In HTSS, each share has both an
-//! x-coordinate and a rank (derivative order).
+//! # Overview
 //!
-//! When all ranks are 0, Birkhoff interpolation reduces to Lagrange interpolation,
-//! making HTSS a generalization of classical TSS.
+//! HTSS extends traditional threshold signatures (TSS) with a **hierarchy of authority**.
+//! Each party has a **rank** (0 = highest authority, higher = lower authority).
+//!
+//! # TSS vs HTSS
+//!
+//! ```text
+//! TSS (2-of-3):
+//!   Any 2 of {Alice, Bob, Carol} can sign
+//!   All parties have equal authority
+//!
+//! HTSS (2-of-3 with ranks):
+//!   Party 1 (CEO):     rank 0  ← highest authority
+//!   Party 2 (Manager): rank 1
+//!   Party 3 (Employee): rank 2  ← lowest authority
+//!
+//!   Valid signer combinations:
+//!   ✅ {CEO, Manager}      - ranks [0,1] → sorted [0,1] → 0≤0, 1≤1 ✓
+//!   ✅ {CEO, Employee}     - ranks [0,2] → sorted [0,2] → 0≤0, 2≤1? NO → need 3rd
+//!   ✅ {CEO, Manager, Emp} - ranks [0,1,2] → all valid with t=2
+//!   ❌ {Manager, Employee} - ranks [1,2] → sorted [1,2] → 1>0 at position 0 ✗
+//! ```
+//!
+//! # The HTSS Validity Rule
+//!
+//! For threshold `t`, a signer set with ranks `[r₀, r₁, ..., rₖ]` is valid iff:
+//! **After sorting ranks ascending: `rank[i] ≤ i` for all i < t**
+//!
+//! This means:
+//! - Position 0 must have rank 0 (need at least one highest-authority party)
+//! - Position 1 can have rank 0 or 1
+//! - Position i can have rank 0, 1, ..., or i
+//!
+//! # Mathematical Foundation
+//!
+//! Birkhoff interpolation generalizes Lagrange by using **derivatives**:
+//!
+//! ```text
+//! Lagrange (rank=0 only):
+//!   f(x₁), f(x₂), ..., f(xₜ) → recover f(0) = secret
+//!
+//! Birkhoff (with ranks):
+//!   f^(r₁)(x₁), f^(r₂)(x₂), ..., f^(rₜ)(xₜ) → recover f(0) = secret
+//!   where f^(r) denotes the r-th derivative
+//! ```
+//!
+//! When all ranks = 0, Birkhoff reduces to Lagrange (TSS is a special case of HTSS).
+//!
+//! # Security Model for HTSS Messages
+//!
+//! ```text
+//! | Message Type              | Channel    | Reason                           |
+//! |---------------------------|------------|----------------------------------|
+//! | Round 1: Commitments      | BROADCAST  | Public, includes rank info       |
+//! | Round 2: Secret Shares    | E2E ENCRYPT| Contains derivative evaluations! |
+//! | Signing: Nonces           | BROADCAST  | Ephemeral, includes rank         |
+//! | Signing: Signature Shares | BROADCAST  | Partial sigs with Birkhoff coeff |
+//! ```
+//!
+//! Round 2 shares in HTSS contain `f^(rank)(index)` - the rank-th derivative of the
+//! polynomial evaluated at the party's index. These MUST be encrypted just like TSS.
 
 #![allow(dead_code)] // Birkhoff functions will be used for full HTSS signing integration
 

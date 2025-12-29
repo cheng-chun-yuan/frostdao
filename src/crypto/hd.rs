@@ -1,4 +1,4 @@
-//! BIP-32/BIP-44 HD Key Derivation for FROST Threshold Signatures
+//! BIP-32/BIP-86 HD Key Derivation for FROST Threshold Signatures
 //!
 //! This module implements non-hardened HD key derivation compatible with
 //! threshold signing. Each party derives child keys locally using the
@@ -42,11 +42,11 @@ pub struct HdContext {
     pub master_pubkey_bytes: [u8; 32],
 }
 
-/// BIP-44 derivation path components
+/// BIP-86 derivation path components (Taproot)
 ///
-/// Full path: m/44'/0'/0'/change/address_index
+/// Full path: m/86'/0'/0'/change/address_index
 /// We only support non-hardened derivation for the last two levels.
-/// The hardened portion (m/44'/0'/0') is implicit in the DKG setup.
+/// The hardened portion (m/86'/0'/0') is implicit in the DKG setup.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DerivationPath {
     /// 0 for external (receive), 1 for internal (change)
@@ -72,14 +72,14 @@ impl DerivationPath {
         }
     }
 
-    /// Format as BIP-44 style string (relative to account)
+    /// Format as BIP-86 style string (relative to account)
     pub fn to_string(&self) -> String {
         format!("{}/{}", self.change, self.address_index)
     }
 
-    /// Format as full BIP-44 path (assuming Bitcoin mainnet account 0)
+    /// Format as full BIP-86 path (assuming Bitcoin mainnet account 0)
     pub fn to_full_string(&self) -> String {
-        format!("m/44'/0'/0'/{}/{}", self.change, self.address_index)
+        format!("m/86'/0'/0'/{}/{}", self.change, self.address_index)
     }
 }
 
@@ -173,9 +173,9 @@ pub fn derive_child_pubkey(
     Ok((child_even_y, new_chain_code, tweak, parity_flip))
 }
 
-/// Derive public key at full BIP-44 path: m/44'/0'/0'/change/address_index
+/// Derive public key at full BIP-86 path: m/86'/0'/0'/change/address_index
 ///
-/// NOTE: We assume the account-level key (m/44'/0'/0') is the master key
+/// NOTE: We assume the account-level key (m/86'/0'/0') is the master key
 /// stored after keygen. The hardened levels are implicit in the DKG setup.
 pub fn derive_at_path(context: &HdContext, path: &DerivationPath) -> Result<DerivedKeyInfo> {
     // Reconstruct master pubkey from bytes
@@ -428,10 +428,10 @@ mod tests {
             address_index: 5,
         };
         assert_eq!(path.to_string(), "0/5");
-        assert_eq!(path.to_full_string(), "m/44'/0'/0'/0/5");
+        assert_eq!(path.to_full_string(), "m/86'/0'/0'/0/5");
 
         let change_path = DerivationPath::change(3);
-        assert_eq!(change_path.to_full_string(), "m/44'/0'/0'/1/3");
+        assert_eq!(change_path.to_full_string(), "m/86'/0'/0'/1/3");
     }
 
     #[test]
