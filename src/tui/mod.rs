@@ -1417,24 +1417,28 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 use crate::tui::screens::{ScriptType, TimelockMode};
                 let config = &mut app.send_form.script_config;
 
-                // For TimelockRelative with mode toggle
-                if config.script_type == ScriptType::TimelockRelative && config.focused_field == 0 {
-                    // Toggle mode when Tab pressed on mode field
-                    config.timelock_mode = config.timelock_mode.toggle();
-                } else {
-                    let max_fields = match &config.script_type {
-                        ScriptType::None => 0,
-                        ScriptType::TimelockAbsolute => 1,
-                        ScriptType::TimelockRelative => match config.timelock_mode {
-                            TimelockMode::Blocks => 2, // mode + blocks
-                            TimelockMode::Time => 3,   // mode + days + hours
-                        },
-                        ScriptType::Recovery => 2,
-                        ScriptType::HTLC => 3,
-                    };
-                    if max_fields > 0 {
-                        config.focused_field = (config.focused_field + 1) % max_fields;
-                    }
+                let max_fields = match &config.script_type {
+                    ScriptType::None => 0,
+                    ScriptType::TimelockAbsolute => 1,
+                    ScriptType::TimelockRelative => match config.timelock_mode {
+                        TimelockMode::Blocks => 1, // blocks only
+                        TimelockMode::Time => 2,   // days + hours
+                    },
+                    ScriptType::Recovery => 2,
+                    ScriptType::HTLC => 3,
+                };
+                if max_fields > 0 {
+                    config.focused_field = (config.focused_field + 1) % max_fields;
+                }
+            }
+            KeyCode::Char('m') | KeyCode::Char('M') => {
+                // Toggle timelock mode (blocks vs time)
+                use crate::tui::screens::ScriptType;
+                if app.send_form.script_config.script_type == ScriptType::TimelockRelative {
+                    app.send_form.script_config.timelock_mode =
+                        app.send_form.script_config.timelock_mode.toggle();
+                    // Reset to first input field after mode change
+                    app.send_form.script_config.focused_field = 0;
                 }
             }
             KeyCode::Char(_) | KeyCode::Backspace => {
@@ -1449,15 +1453,15 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     }
                     ScriptType::TimelockRelative => match config.timelock_mode {
                         TimelockMode::Blocks => {
-                            if config.focused_field == 1 {
+                            if config.focused_field == 0 {
                                 config.timelock_blocks.handle_key(key);
                             }
                         }
                         TimelockMode::Time => match config.focused_field {
-                            1 => {
+                            0 => {
                                 config.timelock_days.handle_key(key);
                             }
-                            2 => {
+                            1 => {
                                 config.timelock_hours.handle_key(key);
                             }
                             _ => {}

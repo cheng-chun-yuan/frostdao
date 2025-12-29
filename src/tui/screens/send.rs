@@ -1152,33 +1152,25 @@ fn render_configure_script(frame: &mut Frame, form: &SendFormData, area: Rect) {
         }
         ScriptType::TimelockRelative => {
             let mode = &form.script_config.timelock_mode;
-            let mode_focused = form.script_config.focused_field == 0;
 
             let mut lines = vec![
-                // Mode toggle
+                // Mode indicator
                 Line::from(vec![
-                    Span::styled(
-                        if mode_focused { "▶ " } else { "  " },
-                        Style::default().fg(Color::Yellow),
-                    ),
                     Span::styled("Mode: ", Style::default().fg(Color::Gray)),
                     Span::styled(
                         format!("[{}]", mode.label()),
-                        if mode_focused {
-                            Style::default()
-                                .fg(Color::Yellow)
-                                .add_modifier(Modifier::BOLD)
-                        } else {
-                            Style::default().fg(Color::Cyan)
-                        },
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
                     ),
-                    Span::styled("  (Tab to toggle)", Style::default().fg(Color::DarkGray)),
+                    Span::styled("  (M to toggle)", Style::default().fg(Color::DarkGray)),
                 ]),
+                Line::from(""),
             ];
 
             match mode {
                 TimelockMode::Blocks => {
-                    let blocks_focused = form.script_config.focused_field == 1;
+                    let blocks_focused = form.script_config.focused_field == 0;
                     lines.push(Line::from(vec![
                         Span::styled(
                             if blocks_focused { "▶ " } else { "  " },
@@ -1201,8 +1193,8 @@ fn render_configure_script(frame: &mut Frame, form: &SendFormData, area: Rect) {
                     )]));
                 }
                 TimelockMode::Time => {
-                    let days_focused = form.script_config.focused_field == 1;
-                    let hours_focused = form.script_config.focused_field == 2;
+                    let days_focused = form.script_config.focused_field == 0;
+                    let hours_focused = form.script_config.focused_field == 1;
                     lines.push(Line::from(vec![
                         Span::styled(
                             if days_focused { "▶ " } else { "  " },
@@ -1217,7 +1209,8 @@ fn render_configure_script(frame: &mut Frame, form: &SendFormData, area: Rect) {
                                 Style::default().fg(Color::White)
                             },
                         ),
-                        Span::raw("    "),
+                    ]));
+                    lines.push(Line::from(vec![
                         Span::styled(
                             if hours_focused { "▶ " } else { "  " },
                             Style::default().fg(Color::Yellow),
