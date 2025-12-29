@@ -33,7 +33,19 @@ fn render_wallet_list(frame: &mut Frame, app: &App, area: Rect) {
                 None => "?",
             };
             let threshold = match (wallet.threshold, wallet.total_parties) {
-                (Some(t), Some(n)) => format!("{}-of-{}", t, n),
+                (Some(t), Some(n)) => {
+                    // Show signing requirement for HTSS if available
+                    if wallet.hierarchical.unwrap_or(false) {
+                        if let Some(ref req) = wallet.signing_requirement {
+                            let req_str: Vec<String> = req.iter().map(|r| r.to_string()).collect();
+                            format!("{}-of-{} ({})", t, n, req_str.join(","))
+                        } else {
+                            format!("{}-of-{}", t, n)
+                        }
+                    } else {
+                        format!("{}-of-{}", t, n)
+                    }
+                }
                 _ => "?".to_string(),
             };
 
@@ -81,14 +93,22 @@ fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
             Line::from(""),
         ];
 
-        // Threshold info
+        // Threshold info with signing requirement for HTSS
         if let (Some(t), Some(n)) = (wallet.threshold, wallet.total_parties) {
+            let threshold_display = if wallet.hierarchical.unwrap_or(false) {
+                if let Some(ref req) = wallet.signing_requirement {
+                    let req_str: Vec<String> = req.iter().map(|r| r.to_string()).collect();
+                    format!("{}-of-{} ({})", t, n, req_str.join(","))
+                } else {
+                    format!("{}-of-{}", t, n)
+                }
+            } else {
+                format!("{}-of-{}", t, n)
+            };
+
             lines.push(Line::from(vec![
                 Span::styled("Threshold: ", Style::default().fg(Color::Gray)),
-                Span::styled(
-                    format!("{}-of-{}", t, n),
-                    Style::default().fg(Color::Yellow),
-                ),
+                Span::styled(threshold_display, Style::default().fg(Color::Yellow)),
             ]));
         }
 
@@ -192,18 +212,18 @@ fn render_shortcuts(frame: &mut Frame, has_wallet: bool, area: Rect) {
     // Basic shortcuts always shown
     let mut shortcuts = vec![
         Line::from(vec![
-            Span::styled("n", Style::default().fg(Color::Yellow)),
-            Span::raw(" Network   "),
             Span::styled("g", Style::default().fg(Color::Yellow)),
-            Span::raw(" Generate wallet   "),
-            Span::styled("R", Style::default().fg(Color::Yellow)),
-            Span::raw(" Reload wallets"),
+            Span::raw(" Demo Keygen  "),
+            Span::styled("N", Style::default().fg(Color::Magenta)),
+            Span::raw(" Nostr Room  "),
+            Span::styled("n", Style::default().fg(Color::Yellow)),
+            Span::raw(" Network"),
         ]),
         Line::from(vec![
             Span::styled("↑/↓", Style::default().fg(Color::Green)),
-            Span::raw(" Navigate  "),
+            Span::raw(" Navigate   "),
             Span::styled("Enter", Style::default().fg(Color::Green)),
-            Span::raw(" Open wallet       "),
+            Span::raw(" Open wallet   "),
             Span::styled("q", Style::default().fg(Color::Yellow)),
             Span::raw(" Quit"),
         ]),
@@ -251,10 +271,12 @@ fn get_address_for_network(
     wallet: &frostdao::protocol::keygen::WalletSummary,
     network: NetworkSelection,
 ) -> Option<String> {
-    // For now, return the stored address (testnet)
+    // For now, return the stored address (testnet format)
     // In a full implementation, we'd derive addresses for each network
+    // Testnet3, Testnet4, and Signet all use tb1p... prefix
     match network {
-        NetworkSelection::Testnet => wallet.address.clone(),
+        NetworkSelection::Testnet4 => wallet.address.clone(),
+        NetworkSelection::Testnet3 => wallet.address.clone(),
         NetworkSelection::Signet => wallet.address.clone(), // Same format as testnet (tb1p...)
         NetworkSelection::Mainnet => {
             // Mainnet would use bc1p... prefix - need to regenerate

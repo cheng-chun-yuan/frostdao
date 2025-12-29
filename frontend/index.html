@@ -3,509 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FrostDAO - FROST Threshold Signatures Workshop</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
-            min-height: 100vh;
-            color: #fff;
-            padding: 20px;
-        }
-
-        .container { max-width: 950px; margin: 0 auto; }
-
-        h1 {
-            text-align: center;
-            margin-bottom: 8px;
-            font-size: 2.5em;
-            background: linear-gradient(90deg, #00d4ff, #7b2cbf, #ff6b6b);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .subtitle {
-            text-align: center;
-            color: #888;
-            margin-bottom: 25px;
-            font-size: 14px;
-        }
-
-        /* Main Navigation Tabs */
-        .main-tabs {
-            display: flex;
-            gap: 6px;
-            margin-bottom: 25px;
-            background: rgba(0,0,0,0.3);
-            padding: 8px;
-            border-radius: 14px;
-            flex-wrap: wrap;
-        }
-
-        .main-tab {
-            flex: 1;
-            min-width: 100px;
-            padding: 12px 10px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-            background: transparent;
-            color: #888;
-            font-size: 13px;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-align: center;
-            font-weight: 500;
-        }
-
-        .main-tab:hover { border-color: rgba(255, 255, 255, 0.25); color: #aaa; }
-
-        .main-tab.active {
-            background: linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(123, 44, 191, 0.15));
-            border-color: #00d4ff;
-            color: #fff;
-        }
-
-        .main-tab-content { display: none; }
-        .main-tab-content.active { display: block; }
-
-        .tab-badge {
-            display: inline-block;
-            font-size: 9px;
-            padding: 2px 6px;
-            border-radius: 4px;
-            margin-left: 4px;
-            vertical-align: middle;
-        }
-        .tab-badge.frost { background: #7b2cbf; }
-        .tab-badge.btc { background: #f7931a; }
-        .tab-badge.new { background: #2ecc71; }
-
-        /* Cards */
-        .card {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-
-        .section-title {
-            font-size: 16px;
-            font-weight: 600;
-            color: #00d4ff;
-            margin-bottom: 16px;
-        }
-
-        .section-header {
-            font-size: 18px;
-            margin: 24px 0 16px 0;
-            color: #ddd;
-            padding-bottom: 8px;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-        }
-
-        /* Config Section */
-        .config-section {
-            background: rgba(0,0,0,0.3);
-            border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 20px;
-        }
-
-        .config-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 12px;
-            font-weight: 500;
-        }
-
-        .status-indicator {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #666;
-        }
-
-        .status-indicator.connected { background: #00d4ff; box-shadow: 0 0 8px #00d4ff; }
-
-        .config-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 12px;
-            margin-bottom: 12px;
-        }
-
-        .config-field label {
-            display: block;
-            font-size: 11px;
-            color: #888;
-            margin-bottom: 4px;
-            text-transform: uppercase;
-        }
-
-        .config-field input, .config-field select {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 6px;
-            background: rgba(0,0,0,0.3);
-            color: #fff;
-            font-size: 14px;
-        }
-
-        .config-field input:focus, .config-field select:focus {
-            outline: none;
-            border-color: #00d4ff;
-        }
-
-        /* Buttons */
-        .btn {
-            padding: 10px 20px;
-            border: 1px solid rgba(255,255,255,0.2);
-            border-radius: 8px;
-            background: rgba(255,255,255,0.05);
-            color: #fff;
-            cursor: pointer;
-            font-size: 13px;
-            transition: all 0.2s;
-        }
-
-        .btn:hover { background: rgba(255,255,255,0.1); }
-
-        .btn-primary {
-            background: linear-gradient(135deg, rgba(0, 212, 255, 0.3), rgba(123, 44, 191, 0.3));
-            border-color: #00d4ff;
-        }
-
-        .btn-primary:hover {
-            background: linear-gradient(135deg, rgba(0, 212, 255, 0.4), rgba(123, 44, 191, 0.4));
-        }
-
-        .btn-secondary { border-color: rgba(255,255,255,0.15); }
-
-        .btn-warning {
-            background: rgba(243, 156, 18, 0.2);
-            border-color: #f39c12;
-        }
-
-        .btn-group {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-top: 12px;
-        }
-
-        /* Warning/Info Box */
-        .warning {
-            background: rgba(243, 156, 18, 0.1);
-            border: 1px solid rgba(243, 156, 18, 0.3);
-            border-radius: 8px;
-            padding: 12px 16px;
-            margin-bottom: 20px;
-            color: #f39c12;
-            font-size: 13px;
-        }
-
-        .info-box {
-            background: rgba(0, 212, 255, 0.1);
-            border: 1px solid rgba(0, 212, 255, 0.3);
-            border-radius: 8px;
-            padding: 12px 16px;
-            margin-bottom: 20px;
-            color: #00d4ff;
-            font-size: 13px;
-        }
-
-        /* Phase Section */
-        .phase-section {
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 10px;
-            padding: 16px;
-            margin-bottom: 16px;
-        }
-
-        .phase-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-        }
-
-        .phase-title { font-weight: 500; color: #ddd; }
-
-        .phase-count {
-            font-size: 13px;
-            color: #888;
-            background: rgba(0,0,0,0.3);
-            padding: 4px 10px;
-            border-radius: 12px;
-        }
-
-        /* Post Box */
-        .post-box {
-            background: rgba(0,0,0,0.2);
-            border-radius: 8px;
-            padding: 12px;
-            margin-bottom: 12px;
-        }
-
-        .post-label {
-            font-size: 12px;
-            color: #888;
-            margin-bottom: 8px;
-        }
-
-        .post-label code {
-            background: rgba(0,212,255,0.1);
-            padding: 2px 6px;
-            border-radius: 4px;
-            color: #00d4ff;
-            font-family: 'Monaco', 'Menlo', monospace;
-            font-size: 11px;
-        }
-
-        .post-textarea {
-            width: 100%;
-            height: 80px;
-            padding: 10px;
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 6px;
-            background: rgba(0,0,0,0.3);
-            color: #fff;
-            font-family: 'Monaco', 'Menlo', monospace;
-            font-size: 12px;
-            resize: vertical;
-            margin-bottom: 8px;
-        }
-
-        .post-textarea:focus {
-            outline: none;
-            border-color: #00d4ff;
-        }
-
-        /* Entries */
-        .entries-container {
-            max-height: 200px;
-            overflow-y: auto;
-            margin-bottom: 12px;
-        }
-
-        .empty-state {
-            text-align: center;
-            color: #666;
-            padding: 20px;
-            font-size: 13px;
-        }
-
-        .entry {
-            background: rgba(0,0,0,0.2);
-            border-radius: 6px;
-            padding: 10px;
-            margin-bottom: 8px;
-            font-size: 12px;
-        }
-
-        .entry-header {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 6px;
-        }
-
-        .entry-party {
-            color: #00d4ff;
-            font-weight: 500;
-        }
-
-        .entry-time { color: #666; font-size: 11px; }
-
-        .entry-data {
-            font-family: 'Monaco', 'Menlo', monospace;
-            font-size: 10px;
-            color: #888;
-            white-space: pre-wrap;
-            word-break: break-all;
-            max-height: 60px;
-            overflow: hidden;
-        }
-
-        /* Copy Section */
-        .copy-section {
-            display: none;
-            background: rgba(0, 212, 255, 0.05);
-            border: 1px solid rgba(0, 212, 255, 0.2);
-            border-radius: 8px;
-            padding: 12px;
-        }
-
-        .copy-label {
-            font-size: 11px;
-            color: #00d4ff;
-            margin-bottom: 8px;
-            text-transform: uppercase;
-        }
-
-        .copy-output {
-            font-family: 'Monaco', 'Menlo', monospace;
-            font-size: 11px;
-            color: #aaa;
-            background: rgba(0,0,0,0.3);
-            padding: 10px;
-            border-radius: 4px;
-            word-break: break-all;
-            margin-bottom: 8px;
-            max-height: 80px;
-            overflow-y: auto;
-        }
-
-        /* Form Group */
-        .form-group {
-            margin-bottom: 16px;
-        }
-
-        .form-group label {
-            display: block;
-            font-size: 12px;
-            color: #888;
-            margin-bottom: 6px;
-        }
-
-        .form-group input, .form-group select {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 8px;
-            background: rgba(0,0,0,0.3);
-            color: #fff;
-            font-size: 14px;
-        }
-
-        .form-group input:focus, .form-group select:focus {
-            outline: none;
-            border-color: #00d4ff;
-        }
-
-        /* Result Box */
-        .result-box {
-            background: rgba(46, 204, 113, 0.1);
-            border: 1px solid rgba(46, 204, 113, 0.3);
-            border-radius: 10px;
-            padding: 20px;
-        }
-
-        .result-box h3 {
-            color: #2ecc71;
-            margin-bottom: 12px;
-        }
-
-        .result-box.error {
-            background: rgba(231, 76, 60, 0.1);
-            border-color: rgba(231, 76, 60, 0.3);
-        }
-
-        .result-box.error h3 { color: #e74c3c; }
-
-        pre {
-            background: rgba(0,0,0,0.3);
-            padding: 12px;
-            border-radius: 6px;
-            overflow-x: auto;
-            font-size: 12px;
-            color: #aaa;
-            margin: 8px 0;
-        }
-
-        a { color: #00d4ff; }
-
-        /* Command Display */
-        .command-box {
-            background: rgba(0,0,0,0.4);
-            border: 1px solid rgba(0,212,255,0.2);
-            border-radius: 8px;
-            padding: 16px;
-            margin: 12px 0;
-        }
-
-        .command-box code {
-            display: block;
-            font-family: 'Monaco', 'Menlo', monospace;
-            font-size: 12px;
-            color: #00d4ff;
-            white-space: pre-wrap;
-            word-break: break-all;
-        }
-
-        /* Feature Grid */
-        .feature-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-            margin: 20px 0;
-        }
-
-        .feature-card {
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 10px;
-            padding: 16px;
-            text-align: center;
-        }
-
-        .feature-card h4 {
-            color: #00d4ff;
-            margin-bottom: 8px;
-        }
-
-        .feature-card p {
-            color: #888;
-            font-size: 12px;
-        }
-
-        /* Rank badges */
-        .rank-badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 600;
-        }
-        .rank-0 { background: #e74c3c; color: white; }
-        .rank-1 { background: #f39c12; color: white; }
-        .rank-2 { background: #3498db; color: white; }
-
-        /* Address list */
-        .address-list {
-            max-height: 300px;
-            overflow-y: auto;
-        }
-
-        .address-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px;
-            background: rgba(0,0,0,0.2);
-            border-radius: 6px;
-            margin-bottom: 8px;
-            font-family: 'Monaco', 'Menlo', monospace;
-            font-size: 12px;
-        }
-
-        .address-index {
-            color: #888;
-            min-width: 40px;
-        }
-
-        .address-value {
-            color: #00d4ff;
-            flex: 1;
-            margin: 0 12px;
-            word-break: break-all;
-        }
-    </style>
+    <title>FrostDAO - FROST Threshold Signatures</title>
+    <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
     <div class="container">
@@ -514,54 +13,25 @@
 
         <!-- Main Tabs -->
         <div class="main-tabs">
-            <button class="main-tab active" onclick="switchMainTab('dkg')">
-                DKG <span class="tab-badge frost">FROST</span>
-            </button>
-            <button class="main-tab" onclick="switchMainTab('htss')">
-                HTSS <span class="tab-badge frost">FROST</span>
-            </button>
-            <button class="main-tab" onclick="switchMainTab('sign')">
-                Sign <span class="tab-badge btc">BTC</span>
-            </button>
-            <button class="main-tab" onclick="switchMainTab('hd')">
-                HD Addresses <span class="tab-badge new">BIP44</span>
-            </button>
-            <button class="main-tab" onclick="switchMainTab('reshare')">
-                Reshare
-            </button>
-            <button class="main-tab" onclick="switchMainTab('backup')">
-                Backup
-            </button>
-            <button class="main-tab" onclick="switchMainTab('verify')">
-                Verify
-            </button>
+            <button class="main-tab active" onclick="switchMainTab('dkg')">DKG <span class="tab-badge frost">FROST</span></button>
+            <button class="main-tab" onclick="switchMainTab('htss')">HTSS <span class="tab-badge frost">FROST</span></button>
+            <button class="main-tab" onclick="switchMainTab('sign')">Sign <span class="tab-badge btc">BTC</span></button>
+            <button class="main-tab" onclick="switchMainTab('hd')">HD Addresses <span class="tab-badge new">BIP44</span></button>
+            <button class="main-tab" onclick="switchMainTab('reshare')">Reshare</button>
+            <button class="main-tab" onclick="switchMainTab('backup')">Backup</button>
+            <button class="main-tab" onclick="switchMainTab('verify')">Verify</button>
         </div>
 
-        <!-- ============================================ -->
-        <!-- DKG TAB -->
-        <!-- ============================================ -->
+        <!-- DKG Tab -->
         <div id="dkg-content" class="main-tab-content active">
             <p class="subtitle">Distributed Key Generation - Standard FROST</p>
-
             <div class="card">
                 <div class="section-title">What is DKG?</div>
-                <p style="color: #aaa; line-height: 1.8;">
-                    Distributed Key Generation creates a shared public key where no single party knows the private key.
-                    Each party holds a secret share, and <strong>t-of-n</strong> parties can collaborate to sign.
-                </p>
+                <p style="color: #aaa; line-height: 1.8;">Distributed Key Generation creates a shared public key where no single party knows the private key. Each party holds a secret share, and <strong>t-of-n</strong> parties can collaborate to sign.</p>
                 <div class="feature-grid">
-                    <div class="feature-card">
-                        <h4>2-of-3</h4>
-                        <p>Any 2 of 3 parties can sign</p>
-                    </div>
-                    <div class="feature-card">
-                        <h4>3-of-5</h4>
-                        <p>Any 3 of 5 parties can sign</p>
-                    </div>
-                    <div class="feature-card">
-                        <h4>5-of-7</h4>
-                        <p>Any 5 of 7 parties can sign</p>
-                    </div>
+                    <div class="feature-card"><h4>2-of-3</h4><p>Any 2 of 3 parties can sign</p></div>
+                    <div class="feature-card"><h4>3-of-5</h4><p>Any 3 of 5 parties can sign</p></div>
+                    <div class="feature-card"><h4>5-of-7</h4><p>Any 5 of 7 parties can sign</p></div>
                 </div>
             </div>
 
@@ -572,672 +42,163 @@
                     <span>Coordination Room</span>
                     <span id="dkg-status-text" style="margin-left: auto; font-size: 0.8em; color: #888;">Disconnected</span>
                 </div>
-
                 <div class="config-grid">
-                    <div class="config-field">
-                        <label>Room ID</label>
-                        <input type="text" id="dkg-room-id" placeholder="e.g., my-wallet" value="frostdao-demo">
-                    </div>
-                    <div class="config-field">
-                        <label>Threshold (t)</label>
-                        <input type="number" id="dkg-threshold" value="2" min="1">
-                    </div>
-                    <div class="config-field">
-                        <label>Parties (n)</label>
-                        <input type="number" id="dkg-n-parties" value="3" min="1">
-                    </div>
-                    <div class="config-field">
-                        <label>My Index</label>
-                        <input type="number" id="dkg-my-index" value="1" min="1">
-                    </div>
+                    <div class="config-field"><label>Room ID</label><input type="text" id="dkg-room-id" value="frostdao-demo"></div>
+                    <div class="config-field"><label>Threshold (t)</label><input type="number" id="dkg-threshold" value="2" min="1"></div>
+                    <div class="config-field"><label>Parties (n)</label><input type="number" id="dkg-n-parties" value="3" min="1"></div>
+                    <div class="config-field"><label>My Index</label><input type="number" id="dkg-my-index" value="1" min="1"></div>
                 </div>
-
                 <button class="btn btn-primary" onclick="dkgUpdateConfig()">Subscribe to Room</button>
                 <button class="btn btn-secondary" onclick="dkgClearAll()" style="margin-left: 10px;">Clear</button>
             </div>
 
-            <div class="warning">
-                All parties must use the same Room ID, threshold, and n_parties values!
+            <div class="warning">All parties must use the same Room ID, threshold, and n_parties values!</div>
+
+            <!-- E2E Encryption -->
+            <div class="config-section" style="border: 1px solid rgba(46, 204, 113, 0.3); background: rgba(46, 204, 113, 0.05);">
+                <div class="config-header">
+                    <span class="status-indicator" id="dkg-encryption-indicator"></span>
+                    <span style="color: #2ecc71;">E2E Encryption (NIP-44)</span>
+                    <span id="dkg-encryption-status" style="margin-left: auto; font-size: 0.8em; color: #888;">Not configured</span>
+                </div>
+                <p style="color: #888; font-size: 12px; margin-bottom: 12px;">Enter your secret coefficient (a₀) from Round 1 CLI output.</p>
+                <div class="config-grid">
+                    <div class="config-field" style="grid-column: span 3;">
+                        <label>My Secret Coefficient (a₀) - 64 hex chars</label>
+                        <input type="password" id="dkg-secret-coefficient" placeholder="64 hex characters..." style="font-family: monospace;">
+                    </div>
+                </div>
+                <button class="btn btn-success" onclick="enableDkgEncryption()">Enable E2E Encryption</button>
+                <span id="dkg-encryption-keys-count" style="margin-left: 12px; font-size: 12px; color: #888;"></span>
             </div>
 
             <h2 class="section-header">DKG Protocol</h2>
 
             <!-- Round 1 -->
             <div class="phase-section">
-                <div class="phase-header">
-                    <div class="phase-title">Round 1: Generate Commitments</div>
-                    <div class="phase-count" id="dkg-round1-count">0 / 0</div>
-                </div>
+                <div class="phase-header"><div class="phase-title">Round 1: Generate Commitments</div><div class="phase-count" id="dkg-round1-count">0 / 0</div></div>
                 <div class="post-box">
-                    <div class="post-label">
-                        Run: <code>frostdao dkg-round1 --threshold 2 --n-parties 3 --my-index 1</code>
-                    </div>
-                    <textarea class="post-textarea" id="dkg-round1-input" placeholder='Paste your round1 JSON output...'></textarea>
+                    <div class="post-label">Run: <code>frostdao dkg-round1 --threshold 2 --n-parties 3 --my-index 1</code></div>
+                    <textarea class="post-textarea" id="dkg-round1-input" placeholder='Paste round1 JSON...'></textarea>
                     <button class="btn" onclick="postToNostr('dkg-round1-input', 'keygen_round1', 'dkg')">Broadcast</button>
                 </div>
-                <div class="entries-container" id="dkg-round1-entries">
-                    <div class="empty-state">Waiting for commitments...</div>
-                </div>
-                <div class="copy-section" id="dkg-round1-copy-section">
-                    <div class="copy-label">All Commitments</div>
-                    <div class="copy-output" id="dkg-round1-output">No data</div>
-                    <button class="btn btn-secondary" onclick="copyToClipboard('dkg-round1-output')">Copy</button>
-                </div>
+                <div class="entries-container" id="dkg-round1-entries"><div class="empty-state">Waiting...</div></div>
+                <div class="copy-section" id="dkg-round1-copy-section"><div class="copy-label">All Commitments</div><div class="copy-output" id="dkg-round1-output"></div><button class="btn btn-secondary" onclick="copyToClipboard('dkg-round1-output')">Copy</button></div>
             </div>
 
             <!-- Round 2 -->
             <div class="phase-section">
-                <div class="phase-header">
-                    <div class="phase-title">Round 2: Secret Shares</div>
-                    <div class="phase-count" id="dkg-round2-count">0 / 0</div>
-                </div>
+                <div class="phase-header"><div class="phase-title">Round 2: Secret Shares</div><div class="phase-count" id="dkg-round2-count">0 / 0</div></div>
                 <div class="post-box">
-                    <div class="post-label">
-                        Run: <code>frostdao dkg-round2 --data '&lt;commitments&gt;'</code>
-                    </div>
-                    <textarea class="post-textarea" id="dkg-round2-input" placeholder='Paste your round2 JSON output...'></textarea>
+                    <div class="post-label">Run: <code>frostdao dkg-round2 --data '&lt;commitments&gt;'</code></div>
+                    <textarea class="post-textarea" id="dkg-round2-input" placeholder='Paste round2 JSON...'></textarea>
                     <button class="btn" onclick="postToNostr('dkg-round2-input', 'keygen_round2', 'dkg')">Broadcast</button>
                 </div>
-                <div class="entries-container" id="dkg-round2-entries">
-                    <div class="empty-state">Waiting for shares...</div>
-                </div>
-                <div class="copy-section" id="dkg-round2-copy-section">
-                    <div class="copy-label">All Shares</div>
-                    <div class="copy-output" id="dkg-round2-output">No data</div>
-                    <button class="btn btn-secondary" onclick="copyToClipboard('dkg-round2-output')">Copy</button>
-                </div>
+                <div class="entries-container" id="dkg-round2-entries"><div class="empty-state">Waiting...</div></div>
+                <div class="copy-section" id="dkg-round2-copy-section"><div class="copy-label">All Shares</div><div class="copy-output" id="dkg-round2-output"></div><button class="btn btn-secondary" onclick="copyToClipboard('dkg-round2-output')">Copy</button></div>
             </div>
 
             <!-- Finalize -->
             <div class="phase-section">
-                <div class="phase-header">
-                    <div class="phase-title">Finalize: Generate Keys</div>
-                </div>
+                <div class="phase-header"><div class="phase-title">Finalize: Generate Keys</div></div>
                 <div class="post-box">
-                    <div class="post-label">
-                        Run: <code>frostdao dkg-finalize --data '&lt;all-shares&gt;'</code>
-                    </div>
+                    <div class="post-label">Run: <code>frostdao dkg-finalize --data '&lt;all-shares&gt;'</code></div>
                     <p style="color: #888; font-size: 13px;">This generates your secret share and the group's Bitcoin address!</p>
                 </div>
             </div>
         </div>
 
-        <!-- ============================================ -->
-        <!-- HTSS TAB -->
-        <!-- ============================================ -->
+        <!-- HTSS Tab -->
         <div id="htss-content" class="main-tab-content">
             <p class="subtitle">Hierarchical Threshold Signature Scheme - FROST with Ranks</p>
-
             <div class="card">
                 <div class="section-title">What is HTSS?</div>
-                <p style="color: #aaa; line-height: 1.8;">
-                    HTSS extends FROST with <strong>hierarchical ranks</strong>. Higher-ranked parties (lower rank number)
-                    have more signing authority. Uses Birkhoff interpolation instead of Lagrange.
-                </p>
-
-                <div style="margin-top: 16px;">
-                    <p style="color: #aaa;"><strong style="color: #f39c12;">The Rule:</strong> For sorted ranks [r<sub>0</sub>, r<sub>1</sub>, r<sub>2</sub>], valid iff r<sub>i</sub> ≤ i for all i</p>
-                    <div style="margin-top: 12px;">
-                        <span class="rank-badge rank-0">Rank 0 - CEO</span>
-                        <span class="rank-badge rank-1">Rank 1 - CFO/COO</span>
-                        <span class="rank-badge rank-2">Rank 2 - Director</span>
-                    </div>
-                </div>
-
-                <div class="feature-grid" style="margin-top: 20px;">
-                    <div class="feature-card">
-                        <h4 style="color: #2ecc71;">Valid: [0,1,2]</h4>
-                        <p>CEO + CFO + Director</p>
-                    </div>
-                    <div class="feature-card">
-                        <h4 style="color: #2ecc71;">Valid: [0,1,1]</h4>
-                        <p>CEO + CFO + COO</p>
-                    </div>
-                    <div class="feature-card">
-                        <h4 style="color: #e74c3c;">Invalid: [1,1,2]</h4>
-                        <p>No rank-0 at position 0</p>
-                    </div>
-                </div>
+                <p style="color: #aaa;">HTSS extends FROST with <strong>hierarchical ranks</strong>. Higher-ranked parties have more signing authority.</p>
+                <div style="margin-top: 12px;"><span class="rank-badge rank-0">Rank 0 - CEO</span> <span class="rank-badge rank-1">Rank 1 - CFO</span> <span class="rank-badge rank-2">Rank 2 - Director</span></div>
             </div>
-
             <div class="config-section">
-                <div class="config-header">
-                    <span class="status-indicator" id="htss-status-indicator"></span>
-                    <span>HTSS Configuration</span>
-                    <span id="htss-status-text" style="margin-left: auto; font-size: 0.8em; color: #888;">Disconnected</span>
-                </div>
-
+                <div class="config-header"><span class="status-indicator" id="htss-status-indicator"></span><span>HTSS Config</span><span id="htss-status-text" style="margin-left: auto; color: #888;">Disconnected</span></div>
                 <div class="config-grid">
-                    <div class="config-field">
-                        <label>Room ID</label>
-                        <input type="text" id="htss-room-id" value="htss-demo">
-                    </div>
-                    <div class="config-field">
-                        <label>Threshold</label>
-                        <input type="number" id="htss-threshold" value="3" min="1">
-                    </div>
-                    <div class="config-field">
-                        <label>Parties</label>
-                        <input type="number" id="htss-n-parties" value="5" min="1">
-                    </div>
-                    <div class="config-field">
-                        <label>My Index</label>
-                        <input type="number" id="htss-my-index" value="1" min="1">
-                    </div>
-                    <div class="config-field">
-                        <label>My Rank</label>
-                        <input type="number" id="htss-my-rank" value="0" min="0">
-                    </div>
+                    <div class="config-field"><label>Room ID</label><input type="text" id="htss-room-id" value="htss-demo"></div>
+                    <div class="config-field"><label>Threshold</label><input type="number" id="htss-threshold" value="3"></div>
+                    <div class="config-field"><label>Parties</label><input type="number" id="htss-n-parties" value="5"></div>
+                    <div class="config-field"><label>My Index</label><input type="number" id="htss-my-index" value="1"></div>
+                    <div class="config-field"><label>My Rank</label><input type="number" id="htss-my-rank" value="0"></div>
                 </div>
-
                 <button class="btn btn-primary" onclick="htssUpdateConfig()">Subscribe</button>
             </div>
-
-            <div class="info-box">
-                <strong>Example 3-of-5 Setup:</strong> Party 1 (rank 0), Party 2 (rank 1), Party 3 (rank 1), Party 4 (rank 2), Party 5 (rank 2)
-            </div>
-
-            <h2 class="section-header">HTSS DKG Commands</h2>
-
-            <div class="command-box">
-                <code># Round 1 with rank
-frostdao dkg-round1 --threshold 3 --n-parties 5 --my-index 1 --my-rank 0
-
-# Round 2
-frostdao dkg-round2 --data '&lt;commitments&gt;'
-
-# Finalize
-frostdao dkg-finalize --data '&lt;shares&gt;'</code>
-            </div>
-
-            <!-- HTSS coordination phases similar to DKG -->
             <div class="phase-section">
-                <div class="phase-header">
-                    <div class="phase-title">Round 1: Commitments (with Ranks)</div>
-                    <div class="phase-count" id="htss-round1-count">0 / 0</div>
-                </div>
-                <div class="post-box">
-                    <textarea class="post-textarea" id="htss-round1-input" placeholder='Paste round1 JSON...'></textarea>
-                    <button class="btn" onclick="postToNostr('htss-round1-input', 'keygen_round1', 'htss')">Broadcast</button>
-                </div>
-                <div class="entries-container" id="htss-round1-entries">
-                    <div class="empty-state">Waiting...</div>
-                </div>
-                <div class="copy-section" id="htss-round1-copy-section">
-                    <div class="copy-output" id="htss-round1-output">No data</div>
-                    <button class="btn btn-secondary" onclick="copyToClipboard('htss-round1-output')">Copy</button>
-                </div>
+                <div class="phase-header"><div class="phase-title">Round 1: Commitments</div><div class="phase-count" id="htss-round1-count">0 / 0</div></div>
+                <div class="post-box"><textarea class="post-textarea" id="htss-round1-input" placeholder='Paste round1 JSON...'></textarea><button class="btn" onclick="postToNostr('htss-round1-input', 'keygen_round1', 'htss')">Broadcast</button></div>
+                <div class="entries-container" id="htss-round1-entries"><div class="empty-state">Waiting...</div></div>
+                <div class="copy-section" id="htss-round1-copy-section"><div class="copy-output" id="htss-round1-output"></div><button class="btn btn-secondary" onclick="copyToClipboard('htss-round1-output')">Copy</button></div>
             </div>
         </div>
 
-        <!-- ============================================ -->
-        <!-- SIGN TAB -->
-        <!-- ============================================ -->
+        <!-- Sign Tab -->
         <div id="sign-content" class="main-tab-content">
             <p class="subtitle">Threshold Signing for Bitcoin Transactions</p>
-
-            <div class="card">
-                <div class="section-title">Signing Flow</div>
-                <ol style="color: #aaa; line-height: 2; margin-left: 20px;">
-                    <li>Each signer generates a <strong>nonce</strong> for the signing session</li>
-                    <li>Collect all nonces and create <strong>signature shares</strong></li>
-                    <li>Combine shares into the final <strong>Schnorr signature</strong></li>
-                </ol>
-            </div>
-
-            <h2 class="section-header">Message Signing</h2>
-
+            <h2 class="section-header">Private Signing Room (Nostr)</h2>
             <div class="config-section">
-                <div class="config-header">
-                    <span>Signing Session</span>
-                </div>
+                <div class="config-header"><span>Private Room</span><span id="sign-room-status"><span id="sign-status-indicator" class="status-indicator"></span><span id="sign-status-text" style="margin-left:4px;">Not connected</span></span></div>
                 <div class="config-grid">
-                    <div class="config-field">
-                        <label>Session ID</label>
-                        <input type="text" id="sign-session" value="msg-001">
-                    </div>
-                    <div class="config-field">
-                        <label>Message</label>
-                        <input type="text" id="sign-message" placeholder="Message to sign...">
-                    </div>
+                    <div class="config-field"><label>Room ID</label><input type="text" id="sign-room-id" placeholder="signing-room-001"></div>
+                    <div class="config-field"><label>My Index</label><input type="number" id="sign-my-index" value="1"></div>
+                    <div class="config-field"><label>Group Size</label><input type="number" id="sign-group-size" value="3"></div>
+                    <div class="config-field" style="display:flex;align-items:flex-end;"><button class="btn" onclick="joinSigningRoom()">Join Room</button></div>
                 </div>
             </div>
-
-            <div class="command-box">
-                <code># Step 1: Generate nonce
-frostdao generate-nonce --session "msg-001"
-
-# Step 2: Create signature share (after collecting nonces)
-frostdao sign --session "msg-001" --message "Hello World" --data '&lt;nonces&gt;'
-
-# Step 3: Combine shares
-frostdao combine --data '&lt;signature-shares&gt;'</code>
+            <div class="config-section">
+                <div class="config-header"><span>Group Encryption Keys</span><span id="sign-encryption-status" style="color:#ff6b6b;">Not configured</span></div>
+                <div style="padding:16px;"><textarea id="sign-group-keys" placeholder="1:abc123...&#10;2:def456..." style="width:100%;height:60px;font-family:monospace;font-size:11px;"></textarea>
+                <div style="margin-top:8px;"><label style="color:#888;font-size:12px;">My Secret (a₀)</label><input type="password" id="sign-my-secret" placeholder="64 hex chars" style="width:100%;margin-top:4px;"></div>
+                <button class="btn btn-success" onclick="setupSigningEncryption()" style="margin-top:8px;">Enable Private Mode</button></div>
             </div>
-
-            <h2 class="section-header">Bitcoin Transaction</h2>
-
-            <div class="card">
-                <div class="section-title">Send BTC with Threshold Signature</div>
-                <div class="form-group">
-                    <label>Recipient Address</label>
-                    <input type="text" id="tx-recipient" placeholder="tb1p... or bc1p...">
-                </div>
-                <div class="form-group">
-                    <label>Amount (sats)</label>
-                    <input type="number" id="tx-amount" placeholder="10000">
-                </div>
-                <div class="form-group">
-                    <label>Fee Rate (sat/vB)</label>
-                    <input type="number" id="tx-fee" value="2">
-                </div>
-            </div>
-
-            <div class="command-box">
-                <code># Create unsigned transaction
-frostdao btc-send --to &lt;address&gt; --amount &lt;sats&gt; --fee-rate 2
-
-# Sign with threshold parties (requires DKG wallet)
-# Each party runs generate-nonce, sign, then combine</code>
-            </div>
+            <div class="config-section"><div class="config-header"><span>Broadcast Nonce</span></div><div style="padding:12px;"><textarea id="sign-nonce-input" placeholder="Paste nonce JSON..." style="width:100%;height:50px;font-family:monospace;font-size:11px;"></textarea><button class="btn" onclick="broadcastEncryptedNonce()" style="margin-top:8px;">Broadcast</button></div></div>
+            <div class="config-section"><div class="config-header"><span>Received Nonces</span><span id="sign-nonce-count" style="color:#00d4ff;">0 received</span></div><div style="padding:12px;" id="sign-received-nonces">No nonces yet.</div><button class="btn" onclick="copyCollectedNonces()" style="margin:12px;">Copy All Nonces</button></div>
+            <div class="config-section"><div class="config-header"><span>Broadcast Signature Share</span></div><div style="padding:12px;"><textarea id="sign-share-input" placeholder="Paste share JSON..." style="width:100%;height:50px;font-family:monospace;font-size:11px;"></textarea><button class="btn" onclick="broadcastEncryptedShare()" style="margin-top:8px;">Broadcast</button></div></div>
+            <div class="config-section"><div class="config-header"><span>Received Shares</span><span id="sign-share-count" style="color:#00d4ff;">0 received</span></div><div style="padding:12px;" id="sign-received-shares">No shares yet.</div><button class="btn" onclick="copyCollectedShares()" style="margin:12px;">Copy All Shares</button></div>
         </div>
 
-        <!-- ============================================ -->
-        <!-- HD ADDRESSES TAB -->
-        <!-- ============================================ -->
+        <!-- HD Tab -->
         <div id="hd-content" class="main-tab-content">
             <p class="subtitle">BIP-44 Hierarchical Deterministic Address Derivation</p>
-
-            <div class="card">
-                <div class="section-title">What is HD Derivation?</div>
-                <p style="color: #aaa; line-height: 1.8;">
-                    Generate unlimited Bitcoin addresses from your DKG wallet using BIP-44 paths.
-                    Each party can derive addresses <strong>independently</strong> without coordination.
-                </p>
-                <div class="info-box" style="margin-top: 16px;">
-                    <strong>Path Format:</strong> m/44'/0'/0'/change/index<br>
-                    <span style="font-size: 12px;">change=0 for receive, change=1 for change addresses</span>
-                </div>
-            </div>
-
-            <h2 class="section-header">Derive Addresses</h2>
-
-            <div class="config-section">
-                <div class="config-grid">
-                    <div class="config-field">
-                        <label>Start Index</label>
-                        <input type="number" id="hd-start" value="0" min="0">
-                    </div>
-                    <div class="config-field">
-                        <label>Count</label>
-                        <input type="number" id="hd-count" value="5" min="1" max="20">
-                    </div>
-                    <div class="config-field">
-                        <label>Type</label>
-                        <select id="hd-type">
-                            <option value="receive">Receive (change=0)</option>
-                            <option value="change">Change (change=1)</option>
-                        </select>
-                    </div>
-                    <div class="config-field">
-                        <label>Network</label>
-                        <select id="hd-network">
-                            <option value="testnet">Testnet</option>
-                            <option value="mainnet">Mainnet</option>
-                            <option value="signet">Signet</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-
-            <div class="command-box">
-                <code># List derived addresses
-frostdao dkg-list-addresses --count 10 --network testnet
-
-# Derive specific address
-frostdao dkg-derive-address --index 5 --change 0 --network testnet</code>
-            </div>
-
-            <div class="card">
-                <div class="section-title">Example Addresses</div>
-                <div class="address-list" id="hd-address-list">
-                    <div class="address-item">
-                        <span class="address-index">0</span>
-                        <span class="address-value">tb1p...</span>
-                        <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px;">Copy</button>
-                    </div>
-                </div>
-                <p style="color: #666; font-size: 12px; margin-top: 12px;">
-                    Run the CLI commands above to generate actual addresses from your DKG wallet.
-                </p>
-            </div>
+            <div class="card"><div class="section-title">HD Derivation</div><p style="color:#aaa;">Generate unlimited Bitcoin addresses from your DKG wallet. Each party can derive addresses independently.</p></div>
+            <div class="command-box"><code># List addresses&#10;frostdao dkg-list-addresses --count 10 --network testnet</code></div>
         </div>
 
-        <!-- ============================================ -->
-        <!-- RESHARE TAB -->
-        <!-- ============================================ -->
+        <!-- Reshare Tab -->
         <div id="reshare-content" class="main-tab-content">
             <p class="subtitle">Key Resharing - Change Threshold or Rotate Parties</p>
-
-            <div class="card">
-                <div class="section-title">What is Resharing?</div>
-                <p style="color: #aaa; line-height: 1.8;">
-                    Resharing allows you to create <strong>new shares</strong> for the same public key without exposing the secret.
-                    Use cases include:
-                </p>
-                <ul style="color: #aaa; line-height: 2; margin: 16px 0 0 20px;">
-                    <li>Add new parties to the signing group</li>
-                    <li>Remove compromised or unavailable parties</li>
-                    <li>Change the threshold (e.g., 2-of-3 → 3-of-5)</li>
-                    <li>Proactive security: rotate shares periodically</li>
-                </ul>
-            </div>
-
-            <div class="warning">
-                Resharing requires at least <strong>t</strong> (threshold) existing parties to participate!
-            </div>
-
-            <h2 class="section-header">Reshare Protocol</h2>
-
-            <div class="config-section">
-                <div class="config-grid">
-                    <div class="config-field">
-                        <label>New Threshold</label>
-                        <input type="number" id="reshare-new-t" value="3" min="1">
-                    </div>
-                    <div class="config-field">
-                        <label>New Parties</label>
-                        <input type="number" id="reshare-new-n" value="5" min="1">
-                    </div>
-                    <div class="config-field">
-                        <label>My New Index</label>
-                        <input type="number" id="reshare-new-index" value="1" min="1">
-                    </div>
-                </div>
-            </div>
-
-            <div class="command-box">
-                <code># Old shareholders generate reshare round 1
-frostdao reshare-round1 --new-threshold 3 --new-n-parties 5
-
-# Collect and run round 2
-frostdao reshare-round2 --new-my-index 1 --data '&lt;round1-data&gt;'
-
-# Finalize new shares
-frostdao reshare-finalize --data '&lt;round2-data&gt;'</code>
-            </div>
-
-            <div class="info-box">
-                <strong>Same Bitcoin Address:</strong> After resharing, the group's public key (and Bitcoin address) remains unchanged.
-                Only the secret shares are refreshed.
-            </div>
+            <div class="card"><div class="section-title">What is Resharing?</div><p style="color:#aaa;">Create new shares for the same public key without exposing the secret. Add/remove parties or change threshold.</p></div>
+            <div class="command-box"><code># Reshare round 1&#10;frostdao reshare-round1 --new-threshold 3 --new-n-parties 5</code></div>
         </div>
 
-        <!-- ============================================ -->
-        <!-- BACKUP TAB -->
-        <!-- ============================================ -->
+        <!-- Backup Tab -->
         <div id="backup-content" class="main-tab-content">
             <p class="subtitle">Mnemonic Backup & Recovery</p>
-
-            <div class="card">
-                <div class="section-title">Backup Your Share</div>
-                <p style="color: #aaa; line-height: 1.8;">
-                    Convert your secret share to a <strong>BIP-39 mnemonic</strong> (24 words) for safe offline storage.
-                    This allows recovery if you lose access to your wallet file.
-                </p>
-            </div>
-
-            <h2 class="section-header">Export Mnemonic</h2>
-
-            <div class="command-box">
-                <code># Export share as mnemonic (24 words)
-frostdao export-mnemonic
-
-# Example output:
-# abandon ability able about above absent absorb abstract absurd abuse
-# access accident account accuse achieve acid acoustic acquire across act
-# action actor actress actual adapt</code>
-            </div>
-
-            <div class="warning">
-                <strong>Security Warning:</strong> Never share your mnemonic! Anyone with these words can recreate your secret share.
-                Store in a secure, offline location (e.g., paper backup in a safe).
-            </div>
-
-            <h2 class="section-header">Restore from Mnemonic</h2>
-
-            <div class="command-box">
-                <code># Restore share from mnemonic
-frostdao import-mnemonic --words "abandon ability able about..."
-
-# The wallet metadata (threshold, parties, public key) must match!</code>
-            </div>
-
-            <div class="card">
-                <div class="section-title">Recovery Requirements</div>
-                <ul style="color: #aaa; line-height: 2; margin-left: 20px;">
-                    <li>Your 24-word mnemonic phrase</li>
-                    <li>The group's public key (for verification)</li>
-                    <li>Your party index in the group</li>
-                    <li>Threshold and total parties count</li>
-                </ul>
-            </div>
+            <div class="card"><div class="section-title">Backup Your Share</div><p style="color:#aaa;">Convert your secret share to a BIP-39 mnemonic (24 words) for safe offline storage.</p></div>
+            <div class="command-box"><code># Export as mnemonic&#10;frostdao export-mnemonic</code></div>
+            <div class="warning">Never share your mnemonic! Store in a secure, offline location.</div>
         </div>
 
-        <!-- ============================================ -->
-        <!-- VERIFY TAB -->
-        <!-- ============================================ -->
+        <!-- Verify Tab -->
         <div id="verify-content" class="main-tab-content">
             <p class="subtitle">Verify Schnorr Signatures (BIP-340)</p>
-
             <div class="card">
                 <div class="section-title">Signature Verification</div>
-                <p style="color: #aaa; margin-bottom: 20px;">
-                    Verify any BIP-340 Schnorr signature independently.
-                </p>
-
-                <div class="form-group">
-                    <label>Public Key (hex, 32 bytes)</label>
-                    <input type="text" id="verify-pubkey" placeholder="64 hex characters...">
-                </div>
-
-                <div class="form-group">
-                    <label>Message</label>
-                    <input type="text" id="verify-message" placeholder="Original message...">
-                </div>
-
-                <div class="form-group">
-                    <label>Signature (hex, 64 bytes)</label>
-                    <input type="text" id="verify-signature" placeholder="128 hex characters...">
-                </div>
-
+                <div class="form-group"><label>Public Key (hex, 32 bytes)</label><input type="text" id="verify-pubkey" placeholder="64 hex characters..."></div>
+                <div class="form-group"><label>Message</label><input type="text" id="verify-message" placeholder="Original message..."></div>
+                <div class="form-group"><label>Signature (hex, 64 bytes)</label><input type="text" id="verify-signature" placeholder="128 hex characters..."></div>
                 <button class="btn btn-primary" onclick="verifySignature()">Verify</button>
                 <button class="btn btn-secondary" onclick="clearVerifyForm()">Clear</button>
-
-                <div id="verify-result" style="display: none; margin-top: 20px;"></div>
-            </div>
-
-            <div class="command-box">
-                <code># CLI verification
-frostdao btc-verify --signature &lt;sig&gt; --public-key &lt;pubkey&gt; --message "Hello"</code>
+                <div id="verify-result" style="display:none;margin-top:20px;"></div>
             </div>
         </div>
     </div>
 
-    <!-- Nostr SDK -->
-    <script type="module">
-        import { SimplePool, generateSecretKey, getPublicKey, finalizeEvent } from 'https://esm.sh/nostr-tools@2.7.2';
-
-        const RELAYS = ['wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.nostr.band'];
-
-        let pool = new SimplePool();
-
-        const rooms = {
-            dkg: { sub: null, room: null, connected: false, data: { keygen_round1: new Map(), keygen_round2: new Map() } },
-            htss: { sub: null, room: null, connected: false, data: { keygen_round1: new Map(), keygen_round2: new Map() } }
-        };
-
-        const sk = generateSecretKey();
-        const pk = getPublicKey(sk);
-
-        function subscribeToRoom(prefix, roomId) {
-            const state = rooms[prefix];
-            if (state.sub) state.sub.close();
-
-            state.data.keygen_round1.clear();
-            state.data.keygen_round2.clear();
-            state.room = roomId;
-
-            document.getElementById(`${prefix}-status-text`).textContent = 'Connecting...';
-
-            state.sub = pool.subscribeMany(RELAYS, [{ kinds: [1], '#r': [roomId], since: Math.floor(Date.now() / 1000) - 3600 }], {
-                onevent(event) {
-                    try {
-                        const data = JSON.parse(event.content);
-                        processEvent(prefix, data, event);
-                    } catch (e) {}
-                },
-                oneose() {
-                    state.connected = true;
-                    document.getElementById(`${prefix}-status-indicator`).classList.add('connected');
-                    document.getElementById(`${prefix}-status-text`).textContent = 'Connected';
-                    document.getElementById(`${prefix}-status-text`).style.color = '#00d4ff';
-                }
-            });
-        }
-
-        function processEvent(prefix, data, nostrEvent) {
-            const state = rooms[prefix];
-            const eventType = data.type;
-            const partyIndex = data.party_index;
-            if (!state.data[eventType]) return;
-
-            const existing = state.data[eventType].get(partyIndex);
-            if (existing && existing.created_at <= nostrEvent.created_at) return;
-
-            state.data[eventType].set(partyIndex, { ...data, created_at: nostrEvent.created_at });
-            refreshUI(prefix);
-        }
-
-        function refreshUI(prefix) {
-            const state = rooms[prefix];
-            const nParties = parseInt(document.getElementById(`${prefix}-n-parties`).value);
-
-            ['round1', 'round2'].forEach(round => {
-                const key = round === 'round1' ? 'keygen_round1' : 'keygen_round2';
-                const data = state.data[key];
-                const countEl = document.getElementById(`${prefix}-${round}-count`);
-                const entriesEl = document.getElementById(`${prefix}-${round}-entries`);
-                const outputEl = document.getElementById(`${prefix}-${round}-output`);
-                const copyEl = document.getElementById(`${prefix}-${round}-copy-section`);
-
-                if (countEl) countEl.textContent = `${data.size} / ${nParties}`;
-
-                if (entriesEl) {
-                    if (data.size === 0) {
-                        entriesEl.innerHTML = '<div class="empty-state">Waiting...</div>';
-                    } else {
-                        entriesEl.innerHTML = '';
-                        Array.from(data.values()).sort((a, b) => a.party_index - b.party_index).forEach(entry => {
-                            const div = document.createElement('div');
-                            div.className = 'entry';
-                            div.innerHTML = `<div class="entry-header"><span class="entry-party">Party ${entry.party_index}${entry.rank !== undefined ? ` (r${entry.rank})` : ''}</span></div><div class="entry-data">${JSON.stringify(entry, null, 2).slice(0, 200)}...</div>`;
-                            entriesEl.appendChild(div);
-                        });
-                    }
-                }
-
-                if (copyEl && outputEl && data.size >= nParties) {
-                    copyEl.style.display = 'block';
-                    const jsonObjs = Array.from(data.values()).sort((a,b) => a.party_index - b.party_index).map(e => {
-                        const c = {...e}; delete c.created_at; return JSON.stringify(c);
-                    });
-                    outputEl.textContent = jsonObjs.join(' ');
-                } else if (copyEl) {
-                    copyEl.style.display = 'none';
-                }
-            });
-        }
-
-        window.dkgUpdateConfig = () => subscribeToRoom('dkg', document.getElementById('dkg-room-id').value.trim());
-        window.htssUpdateConfig = () => subscribeToRoom('htss', document.getElementById('htss-room-id').value.trim());
-        window.dkgClearAll = () => { rooms.dkg.data.keygen_round1.clear(); rooms.dkg.data.keygen_round2.clear(); refreshUI('dkg'); };
-
-        window.postToNostr = async function(textareaId, expectedType, prefix) {
-            const textarea = document.getElementById(textareaId);
-            const content = textarea.value.trim();
-            const state = rooms[prefix];
-
-            if (!content) { alert('Paste CLI output first'); return; }
-            if (!state.room) { alert('Subscribe to a room first'); return; }
-
-            let data;
-            try { data = JSON.parse(content); } catch (e) { alert('Invalid JSON'); return; }
-            if (data.type !== expectedType) { alert(`Expected "${expectedType}" but got "${data.type}"`); return; }
-
-            try {
-                const event = finalizeEvent({ kind: 1, created_at: Math.floor(Date.now() / 1000), tags: [['r', state.room]], content }, sk);
-                await Promise.any(pool.publish(RELAYS, event));
-                textarea.value = '';
-            } catch (e) {
-                alert('Failed to publish');
-            }
-        };
-
-        window.copyToClipboard = function(id) {
-            const el = document.getElementById(id);
-            navigator.clipboard.writeText(el.textContent);
-            el.style.background = '#1a3a1a';
-            setTimeout(() => el.style.background = '', 200);
-        };
-    </script>
-
-    <!-- Verification -->
-    <script type="module">
-        import * as secp from 'https://esm.sh/@noble/secp256k1@2.1.0';
-
-        window.verifySignature = async function() {
-            const pubKeyHex = document.getElementById('verify-pubkey').value.trim();
-            const message = document.getElementById('verify-message').value.trim();
-            const sigHex = document.getElementById('verify-signature').value.trim();
-            const resultDiv = document.getElementById('verify-result');
-
-            if (!pubKeyHex || !message || !sigHex) { alert('Fill all fields'); return; }
-
-            try {
-                if (!/^[0-9a-fA-F]{64}$/.test(pubKeyHex)) throw new Error('Public key: 64 hex chars');
-                if (!/^[0-9a-fA-F]{128}$/.test(sigHex)) throw new Error('Signature: 128 hex chars');
-
-                const pubKey = secp.etc.hexToBytes(pubKeyHex);
-                const sig = secp.etc.hexToBytes(sigHex);
-                const msgBytes = new TextEncoder().encode(message);
-                const valid = secp.schnorr.verify(sig, msgBytes, pubKey);
-
-                resultDiv.innerHTML = valid
-                    ? `<div class="result-box"><h3>&#10003; VALID</h3><p style="color:#aaa">Signature verified!</p></div>`
-                    : `<div class="result-box error"><h3>&#10007; INVALID</h3><p style="color:#aaa">Verification failed</p></div>`;
-                resultDiv.style.display = 'block';
-            } catch (e) {
-                resultDiv.innerHTML = `<div class="result-box error"><h3>Error</h3><p>${e.message}</p></div>`;
-                resultDiv.style.display = 'block';
-            }
-        };
-
-        window.clearVerifyForm = function() {
-            ['verify-pubkey', 'verify-message', 'verify-signature'].forEach(id => document.getElementById(id).value = '');
-            document.getElementById('verify-result').style.display = 'none';
-        };
-    </script>
-
-    <script>
-        function switchMainTab(tabName) {
-            document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.main-tab-content').forEach(t => t.classList.remove('active'));
-
-            const tabs = ['dkg', 'htss', 'sign', 'hd', 'reshare', 'backup', 'verify'];
-            const idx = tabs.indexOf(tabName);
-            document.querySelectorAll('.main-tab')[idx].classList.add('active');
-            document.getElementById(`${tabName}-content`).classList.add('active');
-        }
-    </script>
+    <!-- Load modules -->
+    <script type="module" src="js/main.js"></script>
+    <script type="module" src="js/verify.js"></script>
 </body>
 </html>

@@ -133,7 +133,7 @@ fn render_details_panel(
         Line::from(vec![
             Span::styled("  Path: ", Style::default().fg(Color::DarkGray)),
             Span::styled(
-                format!("m/44'/0'/0'/0/{}", index),
+                format!("m/86'/0'/0'/0/{}", index),
                 Style::default().fg(Color::Cyan),
             ),
         ]),

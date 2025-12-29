@@ -917,7 +917,7 @@ pub struct AutoSignResult {
 ///
 /// ## HD Derivation
 /// If `derivation_path` is provided as `Some((change, address_index))`, the signing
-/// will use the HD-derived key at that BIP-44 path. Each party's secret share is
+/// will use the HD-derived key at that BIP-86 path. Each party's secret share is
 /// tweaked locally using the same public derivation info.
 pub fn frost_sign_all_local(
     wallet_name: &str,

@@ -1,6 +1,6 @@
 //! HD-Derived Bitcoin Address Generation
 //!
-//! This module generates Bitcoin Taproot addresses at BIP-44 derivation paths
+//! This module generates Bitcoin Taproot addresses at BIP-86 derivation paths
 //! for threshold wallets. Each party can independently derive addresses using
 //! the shared chain code without coordination.
 //!
@@ -9,7 +9,7 @@
 //! ```ignore
 //! let addresses = list_derived_addresses(&storage, 10, Network::Testnet)?;
 //! for (addr, pubkey, index) in addresses {
-//!     println!("m/44'/0'/0'/0/{}: {}", index, addr);
+//!     println!("m/86'/0'/0'/0/{}: {}", index, addr);
 //! }
 //! ```
 
@@ -26,7 +26,7 @@ use secp256kfun::prelude::*;
 // Address Derivation
 // ============================================================================
 
-/// Derive Taproot address at a specific BIP-44 path
+/// Derive Taproot address at a specific BIP-86 path
 ///
 /// Returns (address, pubkey_hex)
 pub fn derive_taproot_address(
@@ -196,7 +196,7 @@ pub fn list_addresses_core(
 
     let addresses = list_derived_addresses(storage, count, network)?;
 
-    out.push_str("External Addresses (m/44'/0'/0'/0/*):\n");
+    out.push_str("External Addresses (m/86'/0'/0'/0/*):\n");
     out.push_str("─────────────────────────────────────────────────────────────────────────────\n");
 
     for (addr, pubkey, idx) in &addresses {
@@ -277,11 +277,12 @@ pub fn remove_address(storage: &dyn Storage) -> Result<u32> {
 pub fn parse_network(network_str: &str) -> Result<Network> {
     match network_str.to_lowercase().as_str() {
         "mainnet" | "main" | "bitcoin" => Ok(Network::Bitcoin),
+        "testnet4" | "test4" => Ok(Network::Testnet4),
         "testnet" | "test" | "testnet3" => Ok(Network::Testnet),
         "signet" => Ok(Network::Signet),
         "regtest" | "local" => Ok(Network::Regtest),
         _ => anyhow::bail!(
-            "Unknown network '{}'. Use: mainnet, testnet, signet, or regtest",
+            "Unknown network '{}'. Use: mainnet, testnet, testnet4, signet, or regtest",
             network_str
         ),
     }

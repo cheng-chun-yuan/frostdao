@@ -60,16 +60,28 @@ impl ScriptType {
             ScriptType::HTLC => "Requires hash preimage OR timeout for refund",
         }
     }
+}
 
-    /// Convert to the btc taproot_scripts module type
-    pub fn to_script_type_input(&self) -> frostdao::btc::taproot_scripts::ScriptTypeInput {
-        use frostdao::btc::taproot_scripts::ScriptTypeInput;
+/// Timelock input mode
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum TimelockMode {
+    #[default]
+    Blocks,
+    Time,
+}
+
+impl TimelockMode {
+    pub fn toggle(&self) -> Self {
         match self {
-            ScriptType::None => ScriptTypeInput::None,
-            ScriptType::TimelockAbsolute => ScriptTypeInput::TimelockAbsolute,
-            ScriptType::TimelockRelative => ScriptTypeInput::TimelockRelative,
-            ScriptType::Recovery => ScriptTypeInput::Recovery,
-            ScriptType::HTLC => ScriptTypeInput::Htlc,
+            Self::Blocks => Self::Time,
+            Self::Time => Self::Blocks,
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Blocks => "Blocks",
+            Self::Time => "Time",
         }
     }
 }
@@ -83,6 +95,12 @@ pub struct ScriptConfig {
     pub timelock_height: TextInput,
     /// Relative timelock: number of blocks
     pub timelock_blocks: TextInput,
+    /// Timelock input mode (blocks vs time)
+    pub timelock_mode: TimelockMode,
+    /// Relative timelock: hours (for time mode)
+    pub timelock_hours: TextInput,
+    /// Relative timelock: days (for time mode)
+    pub timelock_days: TextInput,
     /// Recovery: timeout in blocks
     pub recovery_timeout: TextInput,
     /// Recovery: pubkey (x-only hex)
@@ -113,6 +131,9 @@ impl ScriptConfig {
                 .with_placeholder("850000")
                 .numeric(),
             timelock_blocks: TextInput::new("Blocks").with_placeholder("144").numeric(),
+            timelock_mode: TimelockMode::default(),
+            timelock_hours: TextInput::new("Hours").with_placeholder("24").numeric(),
+            timelock_days: TextInput::new("Days").with_placeholder("1").numeric(),
             recovery_timeout: TextInput::new("Timeout (blocks)")
                 .with_placeholder("4320")
                 .numeric(),
@@ -129,35 +150,26 @@ impl ScriptConfig {
         }
     }
 
-    pub fn reset(&mut self) {
-        *self = Self::new();
+    /// Convert hours to blocks (1 block ≈ 10 minutes)
+    pub fn hours_to_blocks(hours: u32) -> u32 {
+        hours * 6 // 6 blocks per hour
     }
 
-    /// Convert to ScriptParams for use with taproot_scripts module
-    pub fn to_script_params(&self) -> anyhow::Result<frostdao::btc::taproot_scripts::ScriptParams> {
-        use frostdao::btc::taproot_scripts::ScriptParams;
-
-        // Determine timeout based on script type
-        let timeout = match self.script_type {
-            ScriptType::Recovery => self.recovery_timeout.value(),
-            ScriptType::HTLC => self.htlc_timeout.value(),
-            _ => "",
-        };
-
-        ScriptParams::from_strings(
-            self.script_type.to_script_type_input(),
-            self.timelock_height.value(),
-            self.timelock_blocks.value(),
-            timeout,
-            self.recovery_pubkey.value(),
-            self.htlc_hash.value(),
-            self.htlc_refund_pubkey.value(),
-        )
+    /// Convert days to blocks
+    pub fn days_to_blocks(days: u32) -> u32 {
+        days * 144 // 144 blocks per day
     }
 
-    /// Check if this is a standard key-path spend (no scripts)
-    pub fn is_key_path_only(&self) -> bool {
-        self.script_type == ScriptType::None
+    /// Get effective block count based on mode
+    pub fn get_effective_blocks(&self) -> u32 {
+        match self.timelock_mode {
+            TimelockMode::Blocks => self.timelock_blocks.value().parse().unwrap_or(0),
+            TimelockMode::Time => {
+                let hours: u32 = self.timelock_hours.value().parse().unwrap_or(0);
+                let days: u32 = self.timelock_days.value().parse().unwrap_or(0);
+                Self::hours_to_blocks(hours) + Self::days_to_blocks(days)
+            }
+        }
     }
 }
 
@@ -201,6 +213,10 @@ pub struct SendFormData {
     pub threshold: u32,
     pub selected_parties: Vec<bool>, // Which parties are selected for signing
     pub party_selector_index: usize, // Currently focused party in selector
+    // HTSS info
+    pub hierarchical: bool,
+    pub party_ranks: std::collections::BTreeMap<u32, u32>, // party_index -> rank
+    pub signing_requirement: Option<Vec<u32>>,             // e.g., [1,2,2] for HTSS
     // HD address selection
     pub hd_enabled: bool,
     pub hd_addresses: Vec<(String, String, u32)>, // (address, pubkey_hex, index)
@@ -244,6 +260,10 @@ impl SendFormData {
             threshold: 2,
             selected_parties: vec![true, false, false], // Default: only self selected
             party_selector_index: 0,
+            // HTSS defaults
+            hierarchical: false,
+            party_ranks: std::collections::BTreeMap::new(),
+            signing_requirement: None,
             // HD address selection defaults
             hd_enabled: false,
             hd_addresses: Vec::new(),
@@ -505,6 +525,17 @@ fn render_select_signers(frame: &mut Frame, form: &SendFormData, area: Rect) {
         .split(inner);
 
     // Header with threshold info
+    let my_rank = form.party_ranks.get(&form.my_party_index).copied();
+    let my_label = if form.hierarchical && my_rank.is_some() {
+        format!(
+            "{} (r{})",
+            SendFormData::party_label(form.my_party_index),
+            my_rank.unwrap()
+        )
+    } else {
+        SendFormData::party_label(form.my_party_index)
+    };
+
     let header = Paragraph::new(vec![
         Line::from(vec![Span::styled(
             "📋 Select which parties will participate in signing:",
@@ -516,7 +547,7 @@ fn render_select_signers(frame: &mut Frame, form: &SendFormData, area: Rect) {
         Line::from(vec![
             Span::styled("   You are: ", Style::default().fg(Color::Gray)),
             Span::styled(
-                SendFormData::party_label(form.my_party_index),
+                my_label,
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
@@ -529,7 +560,40 @@ fn render_select_signers(frame: &mut Frame, form: &SendFormData, area: Rect) {
     ]);
     frame.render_widget(header, chunks[0]);
 
-    // Party list with checkboxes
+    // Party list - grouped by rank for HTSS, flat for TSS
+    let party_lines = if form.hierarchical && !form.party_ranks.is_empty() {
+        render_htss_party_list(form)
+    } else {
+        render_tss_party_list(form)
+    };
+
+    let party_list = Paragraph::new(party_lines).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title("Signing Parties"),
+    );
+    frame.render_widget(party_list, chunks[1]);
+
+    // Selection status - show signing requirement for HTSS
+    let status = if form.hierarchical && form.signing_requirement.is_some() {
+        render_htss_status(form)
+    } else {
+        render_tss_status(form)
+    };
+    frame.render_widget(status, chunks[2]);
+
+    if let Some(error) = &form.error_message {
+        let error_para = Paragraph::new(error.as_str()).style(Style::default().fg(Color::Red));
+        frame.render_widget(error_para, chunks[3]);
+    }
+
+    let help = Paragraph::new("↑/↓: Navigate | Space: Toggle | Enter: Continue | Esc: Back")
+        .style(Style::default().fg(Color::DarkGray));
+    frame.render_widget(help, chunks[4]);
+}
+
+/// Render party list for standard TSS (flat list)
+fn render_tss_party_list(form: &SendFormData) -> Vec<Line<'static>> {
     let mut party_lines = vec![];
     for i in 0..form.total_parties {
         let party_idx = i as u32 + 1;
@@ -563,15 +627,110 @@ fn render_select_signers(frame: &mut Frame, form: &SendFormData, area: Rect) {
             Span::styled(me_indicator, Style::default().fg(Color::Cyan)),
         ]));
     }
+    party_lines
+}
 
-    let party_list = Paragraph::new(party_lines).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .title("Signing Parties"),
-    );
-    frame.render_widget(party_list, chunks[1]);
+/// Render party list for HTSS (grouped by rank)
+fn render_htss_party_list(form: &SendFormData) -> Vec<Line<'static>> {
+    let mut party_lines = vec![];
 
-    // Selection status - must be exactly threshold
+    // Group parties by rank
+    let mut ranks: std::collections::BTreeMap<u32, Vec<u32>> = std::collections::BTreeMap::new();
+    for (&party_idx, &rank) in &form.party_ranks {
+        ranks.entry(rank).or_default().push(party_idx);
+    }
+
+    // Sort parties within each rank
+    for parties in ranks.values_mut() {
+        parties.sort();
+    }
+
+    // Render each rank group
+    for (rank, parties) in &ranks {
+        // Rank header
+        let rank_label = match *rank {
+            0 => "🔑 Rank 0 (Highest Authority)",
+            1 => "📋 Rank 1",
+            2 => "📄 Rank 2",
+            _ => "📄 Rank N",
+        };
+
+        // Get requirement for this rank
+        let req = form
+            .signing_requirement
+            .as_ref()
+            .and_then(|r| r.get(*rank as usize))
+            .copied()
+            .unwrap_or(0);
+
+        // Count selected in this rank
+        let selected_in_rank = parties
+            .iter()
+            .filter(|&&idx| {
+                form.selected_parties
+                    .get((idx - 1) as usize)
+                    .copied()
+                    .unwrap_or(false)
+            })
+            .count();
+
+        let req_color = if selected_in_rank >= req as usize {
+            Color::Green
+        } else {
+            Color::Yellow
+        };
+
+        party_lines.push(Line::from(vec![
+            Span::styled(
+                format!("{} ", rank_label),
+                Style::default()
+                    .fg(Color::Magenta)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!("[{}/{}]", selected_in_rank, req),
+                Style::default().fg(req_color),
+            ),
+        ]));
+
+        // Render parties in this rank
+        for &party_idx in parties {
+            let i = (party_idx - 1) as usize;
+            let is_selected = form.selected_parties.get(i).copied().unwrap_or(false);
+            let is_focused = form.party_selector_index == i;
+            let is_me = party_idx == form.my_party_index;
+
+            let checkbox = if is_selected { "[✓]" } else { "[ ]" };
+            let arrow = if is_focused { "▶ " } else { "  " };
+
+            let style = if is_focused {
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
+            } else if is_selected {
+                Style::default().fg(Color::Green)
+            } else {
+                Style::default().fg(Color::White)
+            };
+
+            let me_indicator = if is_me { " (You)" } else { "" };
+
+            // Show rank in party label for HTSS
+            let party_name = format!("{} (r{})", SendFormData::party_label(party_idx), rank);
+
+            party_lines.push(Line::from(vec![
+                Span::styled(format!("  {}", arrow), style),
+                Span::styled(checkbox, style),
+                Span::styled(format!(" {}", party_name), style),
+                Span::styled(me_indicator, Style::default().fg(Color::Cyan)),
+            ]));
+        }
+    }
+    party_lines
+}
+
+/// Render status for standard TSS
+fn render_tss_status(form: &SendFormData) -> Paragraph<'static> {
     let selected_count = form.selected_count();
     let threshold = form.threshold;
     let status_color = if selected_count == threshold as usize {
@@ -594,7 +753,7 @@ fn render_select_signers(frame: &mut Frame, form: &SendFormData, area: Rect) {
         format!("too many, deselect {}", selected_count - threshold as usize)
     };
 
-    let status = Paragraph::new(vec![Line::from(vec![
+    Paragraph::new(vec![Line::from(vec![
         Span::styled("Selected: ", Style::default().fg(Color::Gray)),
         Span::styled(
             format!("{}/{}", selected_count, threshold),
@@ -615,17 +774,112 @@ fn render_select_signers(frame: &mut Frame, form: &SendFormData, area: Rect) {
             ),
             Style::default().fg(Color::Gray),
         ),
-    ])]);
-    frame.render_widget(status, chunks[2]);
+    ])])
+}
 
-    if let Some(error) = &form.error_message {
-        let error_para = Paragraph::new(error.as_str()).style(Style::default().fg(Color::Red));
-        frame.render_widget(error_para, chunks[3]);
+/// Render status for HTSS (show per-rank requirements)
+/// Uses cumulative validation: lower ranks can substitute for higher ranks
+/// Total selected must equal exactly the threshold (sum of requirements)
+fn render_htss_status(form: &SendFormData) -> Paragraph<'static> {
+    let signing_req = form.signing_requirement.as_ref().unwrap();
+
+    // Calculate selected count per rank
+    let mut selected_per_rank: std::collections::BTreeMap<u32, usize> =
+        std::collections::BTreeMap::new();
+    for (&party_idx, &rank) in &form.party_ranks {
+        let i = (party_idx - 1) as usize;
+        if form.selected_parties.get(i).copied().unwrap_or(false) {
+            *selected_per_rank.entry(rank).or_insert(0) += 1;
+        }
     }
 
-    let help = Paragraph::new("↑/↓: Navigate | Space: Toggle | Enter: Continue | Esc: Back")
-        .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(help, chunks[4]);
+    // Total threshold = sum of requirements
+    let threshold: usize = signing_req.iter().map(|&r| r as usize).sum();
+    let total_selected: usize = selected_per_rank.values().sum();
+
+    // HTSS validation with substitution rule:
+    // Lower ranks can substitute for higher ranks
+    // Check cumulative: need at least sum(req[0..=r]) signers with rank <= r
+    let mut cumulative_required = 0usize;
+    let mut cumulative_selected = 0usize;
+    let mut rank_requirements_met = true;
+    let mut req_spans: Vec<Span> = vec![];
+
+    for (rank, &required) in signing_req.iter().enumerate() {
+        cumulative_required += required as usize;
+        cumulative_selected += selected_per_rank.get(&(rank as u32)).copied().unwrap_or(0);
+
+        // Check if cumulative requirement is met (with substitution)
+        let met = cumulative_selected >= cumulative_required;
+        if !met {
+            rank_requirements_met = false;
+        }
+
+        let color = if met { Color::Green } else { Color::Yellow };
+
+        // Show actual selected at this rank vs required
+        let selected_at_rank = selected_per_rank.get(&(rank as u32)).copied().unwrap_or(0);
+        if rank > 0 {
+            req_spans.push(Span::raw(","));
+        }
+        req_spans.push(Span::styled(
+            format!("{}/{}", selected_at_rank, required),
+            Style::default().fg(color),
+        ));
+    }
+
+    // Check total: must be exactly threshold
+    let total_correct = total_selected == threshold;
+    let all_met = rank_requirements_met && total_correct;
+
+    let status_color = if all_met { Color::Green } else { Color::Yellow };
+    let status_msg = if all_met {
+        "✓ ready".to_string()
+    } else if total_selected > threshold {
+        format!("deselect {} (too many)", total_selected - threshold)
+    } else if total_selected < threshold {
+        format!("need {} more", threshold - total_selected)
+    } else {
+        // Total is correct but rank distribution is wrong
+        "wrong rank distribution".to_string()
+    };
+
+    // Build the requirement format string
+    let req_str: Vec<String> = signing_req.iter().map(|r| r.to_string()).collect();
+
+    Paragraph::new(vec![Line::from(
+        vec![
+            Span::styled("Requirement (", Style::default().fg(Color::Gray)),
+            Span::styled(
+                req_str.join(","),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(format!("={}", threshold), Style::default().fg(Color::Gray)),
+            Span::styled("): ", Style::default().fg(Color::Gray)),
+            Span::raw("["),
+        ]
+        .into_iter()
+        .chain(req_spans.into_iter())
+        .chain(vec![
+            Span::styled(
+                format!("]={} ", total_selected),
+                Style::default().fg(if total_correct {
+                    Color::Green
+                } else {
+                    Color::Yellow
+                }),
+            ),
+            Span::styled(
+                status_msg,
+                Style::default()
+                    .fg(status_color)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ])
+        .collect::<Vec<_>>(),
+    )])
 }
 
 fn render_select_address(frame: &mut Frame, form: &SendFormData, area: Rect) {
@@ -659,8 +913,8 @@ fn render_select_address(frame: &mut Frame, form: &SendFormData, area: Rect) {
             )]),
             Line::from(""),
             Line::from(vec![
-                Span::styled("   BIP-44 Path: ", Style::default().fg(Color::Gray)),
-                Span::styled("m/44'/0'/0'/0/", Style::default().fg(Color::Cyan)),
+                Span::styled("   BIP-86 Path: ", Style::default().fg(Color::Gray)),
+                Span::styled("m/86'/0'/0'/0/", Style::default().fg(Color::Cyan)),
                 Span::styled("<index>", Style::default().fg(Color::Yellow)),
             ]),
         ])
@@ -897,33 +1151,104 @@ fn render_configure_script(frame: &mut Frame, form: &SendFormData, area: Rect) {
             ]
         }
         ScriptType::TimelockRelative => {
-            let focused = form.script_config.focused_field == 0;
-            vec![
+            let mode = &form.script_config.timelock_mode;
+
+            let mut lines = vec![
+                // Mode indicator
                 Line::from(vec![
+                    Span::styled("Mode: ", Style::default().fg(Color::Gray)),
                     Span::styled(
-                        if focused { "▶ " } else { "  " },
-                        Style::default().fg(Color::Yellow),
+                        format!("[{}]", mode.label()),
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
                     ),
-                    Span::styled("Blocks: ", Style::default().fg(Color::Gray)),
-                    Span::styled(
-                        form.script_config.timelock_blocks.value(),
-                        if focused {
-                            Style::default().fg(Color::Yellow)
-                        } else {
-                            Style::default().fg(Color::White)
-                        },
-                    ),
+                    Span::styled("  (M to toggle)", Style::default().fg(Color::DarkGray)),
                 ]),
                 Line::from(""),
-                Line::from(vec![Span::styled(
-                    "   Cannot spend until N blocks after confirmation.",
-                    Style::default().fg(Color::DarkGray),
-                )]),
-                Line::from(vec![Span::styled(
-                    "   144 blocks ≈ 1 day, 1008 ≈ 1 week",
-                    Style::default().fg(Color::DarkGray),
-                )]),
-            ]
+            ];
+
+            match mode {
+                TimelockMode::Blocks => {
+                    let blocks_focused = form.script_config.focused_field == 0;
+                    lines.push(Line::from(vec![
+                        Span::styled(
+                            if blocks_focused { "▶ " } else { "  " },
+                            Style::default().fg(Color::Yellow),
+                        ),
+                        Span::styled("Blocks: ", Style::default().fg(Color::Gray)),
+                        Span::styled(
+                            form.script_config.timelock_blocks.value(),
+                            if blocks_focused {
+                                Style::default().fg(Color::Yellow)
+                            } else {
+                                Style::default().fg(Color::White)
+                            },
+                        ),
+                    ]));
+                    lines.push(Line::from(""));
+                    lines.push(Line::from(vec![Span::styled(
+                        "   144 blocks ≈ 1 day, 1008 ≈ 1 week",
+                        Style::default().fg(Color::DarkGray),
+                    )]));
+                }
+                TimelockMode::Time => {
+                    let days_focused = form.script_config.focused_field == 0;
+                    let hours_focused = form.script_config.focused_field == 1;
+                    lines.push(Line::from(vec![
+                        Span::styled(
+                            if days_focused { "▶ " } else { "  " },
+                            Style::default().fg(Color::Yellow),
+                        ),
+                        Span::styled("Days: ", Style::default().fg(Color::Gray)),
+                        Span::styled(
+                            form.script_config.timelock_days.value(),
+                            if days_focused {
+                                Style::default().fg(Color::Yellow)
+                            } else {
+                                Style::default().fg(Color::White)
+                            },
+                        ),
+                    ]));
+                    lines.push(Line::from(vec![
+                        Span::styled(
+                            if hours_focused { "▶ " } else { "  " },
+                            Style::default().fg(Color::Yellow),
+                        ),
+                        Span::styled("Hours: ", Style::default().fg(Color::Gray)),
+                        Span::styled(
+                            form.script_config.timelock_hours.value(),
+                            if hours_focused {
+                                Style::default().fg(Color::Yellow)
+                            } else {
+                                Style::default().fg(Color::White)
+                            },
+                        ),
+                    ]));
+                    // Show calculated blocks
+                    let total_blocks = form.script_config.get_effective_blocks();
+                    lines.push(Line::from(""));
+                    lines.push(Line::from(vec![
+                        Span::styled("   = ", Style::default().fg(Color::Gray)),
+                        Span::styled(
+                            format!("{} blocks", total_blocks),
+                            Style::default().fg(Color::Green),
+                        ),
+                        Span::styled(
+                            format!(" (≈{:.1} hours)", total_blocks as f64 / 6.0),
+                            Style::default().fg(Color::DarkGray),
+                        ),
+                    ]));
+                }
+            }
+
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![Span::styled(
+                "   Cannot spend until N blocks after confirmation.",
+                Style::default().fg(Color::DarkGray),
+            )]));
+
+            lines
         }
         ScriptType::Recovery => {
             let timeout_focused = form.script_config.focused_field == 0;

@@ -32,8 +32,8 @@ use std::io;
 
 use app::App;
 use state::{
-    AddressListState, AppState, KeygenState, MnemonicState, ReshareState, SendState, WalletAction,
-    WalletDetailsState,
+    AddressListState, AppState, KeygenState, MnemonicState, NostrKeygenState, NostrRoomField,
+    NostrRoomPhase, NostrSignState, ReshareState, SendState, WalletAction, WalletDetailsState,
 };
 
 use frostdao::protocol::{keygen, reshare, signing};
@@ -88,6 +88,9 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut A
                     AppState::Send(_) => handle_send_keys(app, key),
                     AppState::AddressList(_) => handle_address_list_keys(app, key.code),
                     AppState::MnemonicBackup(_) => handle_mnemonic_keys(app, key.code),
+                    AppState::NostrRoom => handle_nostr_room_keys(app, key),
+                    AppState::NostrKeygen => handle_nostr_keygen_keys(app, key.code),
+                    AppState::NostrSign => handle_nostr_sign_keys(app, key.code),
                 }
             }
         }
@@ -115,9 +118,10 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
         KeyCode::Char('R') => app.reload_wallets(),
         KeyCode::Char('n') => {
             app.chain_selector_index = match app.network {
-                state::NetworkSelection::Testnet => 0,
-                state::NetworkSelection::Signet => 1,
-                state::NetworkSelection::Mainnet => 2,
+                state::NetworkSelection::Testnet4 => 0,
+                state::NetworkSelection::Testnet3 => 1,
+                state::NetworkSelection::Signet => 2,
+                state::NetworkSelection::Mainnet => 3,
             };
             app.state = AppState::ChainSelect;
         }
@@ -163,6 +167,8 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
             // Mnemonic backup
             if let Some(wallet) = app.selected_wallet() {
                 let wallet_name = wallet.name.clone();
+                let hierarchical = wallet.hierarchical.unwrap_or(false);
+                let party_ranks = wallet.party_ranks.clone().unwrap_or_default();
                 let state_dir = keygen::get_state_dir(&wallet_name);
 
                 // Scan for available party folders
@@ -192,6 +198,8 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
                         error: None,
                         party_selected: false,
                         revealed: false,
+                        hierarchical: false,
+                        party_ranks: std::collections::BTreeMap::new(),
                     });
                 } else {
                     app.state = AppState::MnemonicBackup(MnemonicState {
@@ -202,6 +210,8 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
                         error: None,
                         party_selected: false,
                         revealed: false,
+                        hierarchical,
+                        party_ranks,
                     });
                 }
             } else {
@@ -216,6 +226,10 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
             } else {
                 app.set_message("Select a wallet first to copy address");
             }
+        }
+        KeyCode::Char('N') => {
+            // Nostr room for distributed DKG/signing
+            app.state = AppState::NostrRoom;
         }
         _ => {}
     }
@@ -321,6 +335,11 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
                             app.send_form.total_parties = wallet.total_parties.unwrap_or(3);
                             app.send_form.selected_parties =
                                 vec![true; wallet.total_parties.unwrap_or(3) as usize];
+                            // Load HTSS info
+                            app.send_form.hierarchical = wallet.hierarchical.unwrap_or(false);
+                            app.send_form.signing_requirement = wallet.signing_requirement.clone();
+                            app.send_form.party_ranks =
+                                wallet.party_ranks.clone().unwrap_or_default();
                         }
                     }
                     app.state = AppState::Send(SendState::SelectSigners { wallet_name });
@@ -338,6 +357,20 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
                 }
                 WalletAction::BackupMnemonic => {
                     let state_dir = keygen::get_state_dir(&wallet_name);
+
+                    // Get HTSS info from wallet
+                    let hierarchical = app
+                        .wallets
+                        .iter()
+                        .find(|w| w.name == wallet_name)
+                        .and_then(|w| w.hierarchical)
+                        .unwrap_or(false);
+                    let party_ranks = app
+                        .wallets
+                        .iter()
+                        .find(|w| w.name == wallet_name)
+                        .and_then(|w| w.party_ranks.clone())
+                        .unwrap_or_default();
 
                     // Scan for available party folders
                     let mut available_parties = Vec::new();
@@ -365,6 +398,8 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
                             error: None,
                             party_selected: false,
                             revealed: false,
+                            hierarchical: false,
+                            party_ranks: std::collections::BTreeMap::new(),
                         });
                     } else {
                         app.state = AppState::MnemonicBackup(MnemonicState {
@@ -375,6 +410,8 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
                             error: None,
                             party_selected: false,
                             revealed: false,
+                            hierarchical,
+                            party_ranks,
                         });
                     }
                 }
@@ -428,10 +465,16 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
             (KeygenFormField::Name, false) => KeygenFormField::Threshold,
             (KeygenFormField::Threshold, false) => KeygenFormField::NParties,
             (KeygenFormField::NParties, false) => KeygenFormField::Name,
-            // HTSS mode: Name -> NParties -> Name (skip Threshold)
-            (KeygenFormField::Name, true) => KeygenFormField::NParties,
+            (KeygenFormField::MyRank, false) => KeygenFormField::Name,
+            (KeygenFormField::RankDistribution, false) => KeygenFormField::Name,
+            (KeygenFormField::SigningRequirement, false) => KeygenFormField::Name,
+            // HTSS mode: Name -> RankDistribution -> SigningRequirement -> Name
+            (KeygenFormField::Name, true) => KeygenFormField::RankDistribution,
+            (KeygenFormField::RankDistribution, true) => KeygenFormField::SigningRequirement,
+            (KeygenFormField::SigningRequirement, true) => KeygenFormField::Name,
+            (KeygenFormField::Threshold, true) => KeygenFormField::Name,
             (KeygenFormField::NParties, true) => KeygenFormField::Name,
-            (KeygenFormField::Threshold, true) => KeygenFormField::NParties,
+            (KeygenFormField::MyRank, true) => KeygenFormField::Name,
         }
     }
 
@@ -441,10 +484,16 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
             (KeygenFormField::Name, false) => KeygenFormField::NParties,
             (KeygenFormField::Threshold, false) => KeygenFormField::Name,
             (KeygenFormField::NParties, false) => KeygenFormField::Threshold,
-            // HTSS mode
-            (KeygenFormField::Name, true) => KeygenFormField::NParties,
-            (KeygenFormField::NParties, true) => KeygenFormField::Name,
+            (KeygenFormField::MyRank, false) => KeygenFormField::NParties,
+            (KeygenFormField::RankDistribution, false) => KeygenFormField::NParties,
+            (KeygenFormField::SigningRequirement, false) => KeygenFormField::NParties,
+            // HTSS mode: Name <- RankDistribution <- SigningRequirement <- Name
+            (KeygenFormField::Name, true) => KeygenFormField::SigningRequirement,
+            (KeygenFormField::RankDistribution, true) => KeygenFormField::Name,
+            (KeygenFormField::SigningRequirement, true) => KeygenFormField::RankDistribution,
             (KeygenFormField::Threshold, true) => KeygenFormField::Name,
+            (KeygenFormField::NParties, true) => KeygenFormField::Name,
+            (KeygenFormField::MyRank, true) => KeygenFormField::RankDistribution,
         }
     }
 
@@ -486,42 +535,54 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
                     prev_field(app.keygen_form.focused_field, app.keygen_form.hierarchical);
             }
             KeyCode::Enter => {
-                // Validate and run keygen round 1
+                // Validate and run keygen
                 let name = app.keygen_form.name.value().to_string();
-                let n_parties: u32 = app.keygen_form.n_parties.value().parse().unwrap_or(0);
                 let hierarchical = app.keygen_form.hierarchical;
-
-                // For HTSS, threshold is based on ranks; for TSS, use user input
-                let threshold: u32 = if hierarchical {
-                    n_parties // HTSS: threshold = n_parties
-                } else {
-                    app.keygen_form.threshold.value().parse().unwrap_or(0)
-                };
 
                 if name.is_empty() {
                     app.keygen_form.error_message = Some("Wallet name is required".to_string());
                     return;
                 }
-                if n_parties < 2 {
-                    app.keygen_form.error_message = Some("Need at least 2 parties".to_string());
-                    return;
-                }
-                if !hierarchical && (threshold == 0 || threshold > n_parties) {
-                    app.keygen_form.error_message =
-                        Some("Invalid threshold (must be 1 ≤ t ≤ n)".to_string());
-                    return;
-                }
 
-                // Generate all parties at once
-                let ranks = if hierarchical {
-                    // Default ranks: 0, 1, 2, ...
-                    Some((0..n_parties).collect())
+                let (n_parties, threshold, ranks, signing_req) = if hierarchical {
+                    // HTSS: Validate configuration and get threshold
+                    match app.keygen_form.validate_htss_config() {
+                        Ok(t) => {
+                            let parsed_ranks = app.keygen_form.parse_rank_distribution().unwrap();
+                            let signing_requirement = app.keygen_form.parse_signing_requirement();
+                            let n = parsed_ranks.len() as u32;
+                            (n, t, Some(parsed_ranks), signing_requirement)
+                        }
+                        Err(e) => {
+                            app.keygen_form.error_message = Some(e);
+                            return;
+                        }
+                    }
                 } else {
-                    None
+                    // TSS: Use threshold and n_parties inputs
+                    let n: u32 = app.keygen_form.n_parties.value().parse().unwrap_or(0);
+                    let t: u32 = app.keygen_form.threshold.value().parse().unwrap_or(0);
+
+                    if n < 2 {
+                        app.keygen_form.error_message = Some("Need at least 2 parties".to_string());
+                        return;
+                    }
+                    if t == 0 || t > n {
+                        app.keygen_form.error_message =
+                            Some("Invalid threshold (must be 1 ≤ t ≤ n)".to_string());
+                        return;
+                    }
+                    (n, t, None, None)
                 };
 
-                match keygen::generate_all_parties(&name, threshold, n_parties, hierarchical, ranks)
-                {
+                match keygen::generate_all_parties(
+                    &name,
+                    threshold,
+                    n_parties,
+                    hierarchical,
+                    ranks,
+                    signing_req,
+                ) {
                     Ok(_result) => {
                         app.keygen_form.error_message = None;
                         app.reload_wallets();
@@ -539,12 +600,26 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
                         app.keygen_form.name.handle_key(key);
                     }
                     KeygenFormField::Threshold => {
-                        if !app.keygen_form.hierarchical {
-                            app.keygen_form.threshold.handle_key(key);
-                        }
+                        // Threshold is used in both TSS and HTSS modes
+                        app.keygen_form.threshold.handle_key(key);
                     }
                     KeygenFormField::NParties => {
                         app.keygen_form.n_parties.handle_key(key);
+                    }
+                    KeygenFormField::MyRank => {
+                        if app.keygen_form.hierarchical {
+                            app.keygen_form.my_rank.handle_key(key);
+                        }
+                    }
+                    KeygenFormField::RankDistribution => {
+                        if app.keygen_form.hierarchical {
+                            app.keygen_form.rank_distribution.handle_key(key);
+                        }
+                    }
+                    KeygenFormField::SigningRequirement => {
+                        if app.keygen_form.hierarchical {
+                            app.keygen_form.signing_requirement.handle_key(key);
+                        }
                     }
                 }
             }
@@ -577,7 +652,7 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
 
                 let state_dir = keygen::get_state_dir(&name);
                 match FileStorage::new(&state_dir) {
-                    Ok(storage) => match keygen::round2_core(&data, &storage) {
+                    Ok(storage) => match keygen::round2_core(&data, &storage, false) {
                         Ok(result) => {
                             app.keygen_form.round2_output = result.result;
                             app.keygen_form.error_message = None;
@@ -662,10 +737,141 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
 
 fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
     use screens::ReshareFormData;
-    use state::{ReshareFinalizeField, ReshareFormField};
+    use state::{ReshareFinalizeField, ReshareFormField, ReshareLocalField, ReshareMode};
 
     let state = app.state.clone();
     match state {
+        AppState::Reshare(ReshareState::ModeSelect) => match key.code {
+            KeyCode::Esc => {
+                app.reshare_form = ReshareFormData::new();
+                app.state = AppState::Home;
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if app.reshare_form.mode_selected_index > 0 {
+                    app.reshare_form.mode_selected_index -= 1;
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                let modes = ReshareMode::all();
+                if app.reshare_form.mode_selected_index < modes.len() - 1 {
+                    app.reshare_form.mode_selected_index += 1;
+                }
+            }
+            KeyCode::Enter => {
+                let modes = ReshareMode::all();
+                app.reshare_form.mode = modes[app.reshare_form.mode_selected_index];
+                match app.reshare_form.mode {
+                    ReshareMode::Local => {
+                        app.state = AppState::Reshare(ReshareState::LocalSetup);
+                    }
+                    ReshareMode::Distributed => {
+                        app.state = AppState::Reshare(ReshareState::Round1Setup);
+                    }
+                }
+            }
+            _ => {}
+        },
+        AppState::Reshare(ReshareState::LocalSetup) => match key.code {
+            KeyCode::Esc => {
+                app.reshare_form.error_message = None;
+                app.state = AppState::Reshare(ReshareState::ModeSelect);
+            }
+            KeyCode::Tab => {
+                app.reshare_form.local_field = app.reshare_form.local_field.next();
+            }
+            KeyCode::BackTab => {
+                app.reshare_form.local_field = app.reshare_form.local_field.prev();
+            }
+            KeyCode::Up if app.reshare_form.local_field == ReshareLocalField::SourceWallet => {
+                if app.reshare_form.source_wallet_index > 0 {
+                    app.reshare_form.source_wallet_index -= 1;
+                } else if !app.wallets.is_empty() {
+                    app.reshare_form.source_wallet_index = app.wallets.len() - 1;
+                }
+            }
+            KeyCode::Down if app.reshare_form.local_field == ReshareLocalField::SourceWallet => {
+                if !app.wallets.is_empty() {
+                    app.reshare_form.source_wallet_index =
+                        (app.reshare_form.source_wallet_index + 1) % app.wallets.len();
+                }
+            }
+            KeyCode::Enter => {
+                // Run local reshare
+                if app.wallets.is_empty() {
+                    app.reshare_form.error_message = Some("No wallets available".to_string());
+                    return;
+                }
+
+                let source_wallet = app.wallets[app.reshare_form.source_wallet_index]
+                    .name
+                    .clone();
+                let target_wallet = app.reshare_form.local_target_name.value().to_string();
+
+                if target_wallet.is_empty() {
+                    app.reshare_form.error_message =
+                        Some("Target wallet name required".to_string());
+                    return;
+                }
+
+                // Parse optional threshold/n_parties
+                let new_threshold: Option<u32> = {
+                    let val = app.reshare_form.local_new_threshold.value();
+                    if val.is_empty() {
+                        None
+                    } else {
+                        val.parse().ok()
+                    }
+                };
+                let new_n_parties: Option<u32> = {
+                    let val = app.reshare_form.local_new_n_parties.value();
+                    if val.is_empty() {
+                        None
+                    } else {
+                        val.parse().ok()
+                    }
+                };
+
+                // Run local reshare
+                match reshare::reshare_local(
+                    &source_wallet,
+                    &target_wallet,
+                    new_threshold,
+                    new_n_parties,
+                    false, // hierarchical
+                ) {
+                    Ok(_) => {
+                        app.reshare_form.error_message = None;
+                        // Reload wallets
+                        app.reload_wallets();
+                        app.state = AppState::Reshare(ReshareState::LocalComplete {
+                            wallet_name: target_wallet,
+                        });
+                    }
+                    Err(e) => {
+                        app.reshare_form.error_message = Some(format!("Error: {}", e));
+                    }
+                }
+            }
+            _ => match app.reshare_form.local_field {
+                ReshareLocalField::TargetName => {
+                    app.reshare_form.local_target_name.handle_key(key);
+                }
+                ReshareLocalField::NewThreshold => {
+                    app.reshare_form.local_new_threshold.handle_key(key);
+                }
+                ReshareLocalField::NewNParties => {
+                    app.reshare_form.local_new_n_parties.handle_key(key);
+                }
+                _ => {}
+            },
+        },
+        AppState::Reshare(ReshareState::LocalComplete { .. }) => match key.code {
+            KeyCode::Esc | KeyCode::Enter => {
+                app.reshare_form = ReshareFormData::new();
+                app.state = AppState::Home;
+            }
+            _ => {}
+        },
         AppState::Reshare(ReshareState::Round1Setup) => match key.code {
             KeyCode::Esc => {
                 app.reshare_form = ReshareFormData::new();
@@ -1006,6 +1212,11 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 }
                 app.send_form.party_selector_index = 0;
 
+                // Load HTSS info from wallet
+                app.send_form.hierarchical = wallet.hierarchical.unwrap_or(false);
+                app.send_form.signing_requirement = wallet.signing_requirement.clone();
+                app.send_form.party_ranks = wallet.party_ranks.clone().unwrap_or_default();
+
                 app.state = AppState::Send(SendState::SelectSigners { wallet_name });
             }
             _ => {}
@@ -1203,21 +1414,36 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
             }
             KeyCode::Tab => {
                 // Cycle through config fields based on script type
-                use crate::tui::screens::ScriptType;
-                let max_fields = match app.send_form.script_config.script_type {
+                use crate::tui::screens::{ScriptType, TimelockMode};
+                let config = &mut app.send_form.script_config;
+
+                let max_fields = match &config.script_type {
                     ScriptType::None => 0,
-                    ScriptType::TimelockAbsolute | ScriptType::TimelockRelative => 1,
+                    ScriptType::TimelockAbsolute => 1,
+                    ScriptType::TimelockRelative => match config.timelock_mode {
+                        TimelockMode::Blocks => 1, // blocks only
+                        TimelockMode::Time => 2,   // days + hours
+                    },
                     ScriptType::Recovery => 2,
                     ScriptType::HTLC => 3,
                 };
                 if max_fields > 0 {
-                    app.send_form.script_config.focused_field =
-                        (app.send_form.script_config.focused_field + 1) % max_fields;
+                    config.focused_field = (config.focused_field + 1) % max_fields;
+                }
+            }
+            KeyCode::Char('m') | KeyCode::Char('M') => {
+                // Toggle timelock mode (blocks vs time)
+                use crate::tui::screens::ScriptType;
+                if app.send_form.script_config.script_type == ScriptType::TimelockRelative {
+                    app.send_form.script_config.timelock_mode =
+                        app.send_form.script_config.timelock_mode.toggle();
+                    // Reset to first input field after mode change
+                    app.send_form.script_config.focused_field = 0;
                 }
             }
             KeyCode::Char(_) | KeyCode::Backspace => {
                 // Input to focused field
-                use crate::tui::screens::ScriptType;
+                use crate::tui::screens::{ScriptType, TimelockMode};
                 let config = &mut app.send_form.script_config;
                 match &config.script_type {
                     ScriptType::TimelockAbsolute => {
@@ -1225,11 +1451,22 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                             config.timelock_height.handle_key(key);
                         }
                     }
-                    ScriptType::TimelockRelative => {
-                        if config.focused_field == 0 {
-                            config.timelock_blocks.handle_key(key);
+                    ScriptType::TimelockRelative => match config.timelock_mode {
+                        TimelockMode::Blocks => {
+                            if config.focused_field == 0 {
+                                config.timelock_blocks.handle_key(key);
+                            }
                         }
-                    }
+                        TimelockMode::Time => match config.focused_field {
+                            0 => {
+                                config.timelock_days.handle_key(key);
+                            }
+                            1 => {
+                                config.timelock_hours.handle_key(key);
+                            }
+                            _ => {}
+                        },
+                    },
                     ScriptType::Recovery => match config.focused_field {
                         0 => {
                             config.recovery_timeout.handle_key(key);
@@ -1761,6 +1998,432 @@ fn handle_mnemonic_keys(app: &mut App, code: KeyCode) {
     }
 }
 
+fn handle_nostr_room_keys(app: &mut App, key: KeyEvent) {
+    match app.nostr_room_phase {
+        NostrRoomPhase::Configure => handle_nostr_room_configure(app, key),
+        NostrRoomPhase::WaitingForParticipants => handle_nostr_room_waiting(app, key),
+        NostrRoomPhase::Ready => handle_nostr_room_ready(app, key),
+    }
+}
+
+fn handle_nostr_room_configure(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Esc => {
+            app.state = AppState::Home;
+        }
+        KeyCode::Tab => {
+            app.nostr_room_focus = match app.nostr_room_focus {
+                NostrRoomField::RoomId => NostrRoomField::MyIndex,
+                NostrRoomField::MyIndex => NostrRoomField::Threshold,
+                NostrRoomField::Threshold => NostrRoomField::NParties,
+                NostrRoomField::NParties => NostrRoomField::RoomId,
+            };
+        }
+        KeyCode::BackTab => {
+            app.nostr_room_focus = match app.nostr_room_focus {
+                NostrRoomField::RoomId => NostrRoomField::NParties,
+                NostrRoomField::MyIndex => NostrRoomField::RoomId,
+                NostrRoomField::Threshold => NostrRoomField::MyIndex,
+                NostrRoomField::NParties => NostrRoomField::Threshold,
+            };
+        }
+        KeyCode::Enter => {
+            // Validate and join room
+            if app.nostr_room_id.is_empty() {
+                app.set_message("Enter a room ID first");
+                return;
+            }
+            if app.nostr_my_index == 0 || app.nostr_my_index > app.nostr_n_parties {
+                app.set_message("My Index must be between 1 and N");
+                return;
+            }
+            if app.nostr_threshold == 0 || app.nostr_threshold > app.nostr_n_parties {
+                app.set_message("Invalid threshold");
+                return;
+            }
+
+            // Connect and join room
+            app.nostr_connected = true;
+            app.nostr_participants.clear();
+            // Add self as participant
+            app.nostr_participants
+                .insert(app.nostr_my_index, format!("self-{}", app.nostr_my_index));
+            app.nostr_room_phase = NostrRoomPhase::WaitingForParticipants;
+            app.set_message(&format!(
+                "Joined room '{}' as Party {}",
+                app.nostr_room_id, app.nostr_my_index
+            ));
+
+            // Check if already have all participants (demo: simulate others joining)
+            check_participants_ready(app);
+        }
+        KeyCode::Char(c) => match app.nostr_room_focus {
+            NostrRoomField::RoomId => {
+                app.nostr_room_id.push(c);
+            }
+            NostrRoomField::MyIndex => {
+                if c.is_ascii_digit() {
+                    let new_val = format!("{}{}", app.nostr_my_index, c);
+                    if let Ok(n) = new_val.parse::<u32>() {
+                        if n <= 99 {
+                            app.nostr_my_index = n;
+                        }
+                    }
+                }
+            }
+            NostrRoomField::Threshold => {
+                if c.is_ascii_digit() {
+                    let new_val = format!("{}{}", app.nostr_threshold, c);
+                    if let Ok(n) = new_val.parse::<u32>() {
+                        if n <= 99 {
+                            app.nostr_threshold = n;
+                        }
+                    }
+                }
+            }
+            NostrRoomField::NParties => {
+                if c.is_ascii_digit() {
+                    let new_val = format!("{}{}", app.nostr_n_parties, c);
+                    if let Ok(n) = new_val.parse::<u32>() {
+                        if n <= 99 {
+                            app.nostr_n_parties = n;
+                        }
+                    }
+                }
+            }
+        },
+        KeyCode::Backspace => match app.nostr_room_focus {
+            NostrRoomField::RoomId => {
+                app.nostr_room_id.pop();
+            }
+            NostrRoomField::MyIndex => {
+                let s = app.nostr_my_index.to_string();
+                app.nostr_my_index = if s.len() > 1 {
+                    s[..s.len() - 1].parse().unwrap_or(1)
+                } else {
+                    1
+                };
+            }
+            NostrRoomField::Threshold => {
+                let s = app.nostr_threshold.to_string();
+                app.nostr_threshold = if s.len() > 1 {
+                    s[..s.len() - 1].parse().unwrap_or(2)
+                } else {
+                    2
+                };
+            }
+            NostrRoomField::NParties => {
+                let s = app.nostr_n_parties.to_string();
+                app.nostr_n_parties = if s.len() > 1 {
+                    s[..s.len() - 1].parse().unwrap_or(3)
+                } else {
+                    3
+                };
+            }
+        },
+        _ => {}
+    }
+}
+
+fn handle_nostr_room_waiting(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Esc => {
+            // Leave room, go back to configure
+            app.nostr_room_phase = NostrRoomPhase::Configure;
+            app.nostr_participants.clear();
+            app.nostr_connected = false;
+            app.set_message("Left room");
+        }
+        KeyCode::Char(' ') => {
+            // Demo: simulate another participant joining
+            simulate_participant_join(app);
+        }
+        _ => {}
+    }
+}
+
+fn handle_nostr_room_ready(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Esc => {
+            // Leave room
+            app.nostr_room_phase = NostrRoomPhase::Configure;
+            app.nostr_participants.clear();
+            app.nostr_connected = false;
+            app.set_message("Left room");
+        }
+        KeyCode::Char('k') | KeyCode::Char('K') => {
+            // Start Nostr keygen
+            app.nostr_keygen_state = NostrKeygenState::ModeSelect;
+            app.state = AppState::NostrKeygen;
+        }
+        KeyCode::Char('s') | KeyCode::Char('S') => {
+            // Start Nostr signing
+            app.nostr_sign_state = NostrSignState::SelectWallet;
+            app.state = AppState::NostrSign;
+        }
+        _ => {}
+    }
+}
+
+/// Check if all participants have joined, transition to Ready if so
+fn check_participants_ready(app: &mut App) {
+    if app.nostr_participants.len() >= app.nostr_n_parties as usize {
+        app.nostr_room_phase = NostrRoomPhase::Ready;
+        app.set_message("All participants ready!");
+    }
+}
+
+/// Demo: simulate a participant joining
+fn simulate_participant_join(app: &mut App) {
+    // Find next missing participant
+    for i in 1..=app.nostr_n_parties {
+        if !app.nostr_participants.contains_key(&i) {
+            app.nostr_participants.insert(i, format!("npub-demo-{}", i));
+            app.set_message(&format!("Party {} joined!", i));
+            check_participants_ready(app);
+            return;
+        }
+    }
+}
+
+fn handle_nostr_keygen_keys(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Esc => {
+            // Go back to room
+            app.nostr_keygen_state = NostrKeygenState::ModeSelect;
+            app.state = AppState::NostrRoom;
+        }
+        KeyCode::Enter => {
+            match &app.nostr_keygen_state {
+                NostrKeygenState::ModeSelect => {
+                    // Start DKG round 1
+                    app.nostr_keygen_state = NostrKeygenState::WaitingForParties {
+                        received_round1: std::collections::HashMap::new(),
+                    };
+                    app.set_message("Broadcasting Round 1...");
+                }
+                NostrKeygenState::WaitingForParties { received_round1 } => {
+                    // Check if we have enough round 1 messages
+                    if received_round1.len() >= app.nostr_n_parties as usize {
+                        app.nostr_keygen_state = NostrKeygenState::Round2 {
+                            received_round2: std::collections::HashMap::new(),
+                        };
+                        app.set_message("Processing Round 2...");
+                    }
+                }
+                NostrKeygenState::Round2 { received_round2 } => {
+                    // Check if we have enough round 2 messages
+                    if received_round2.len() >= app.nostr_n_parties as usize {
+                        app.nostr_keygen_state = NostrKeygenState::Finalizing;
+                    }
+                }
+                NostrKeygenState::Finalizing => {
+                    // Done, return to room
+                    app.nostr_keygen_state = NostrKeygenState::ModeSelect;
+                    app.state = AppState::NostrRoom;
+                    app.set_message("DKG complete!");
+                }
+            }
+        }
+        KeyCode::Char('r') | KeyCode::Char('R') => {
+            // Retry - reset to mode select
+            app.nostr_keygen_state = NostrKeygenState::ModeSelect;
+        }
+        _ => {}
+    }
+}
+
+fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Esc => {
+            // Go back based on current state
+            match &app.nostr_sign_state {
+                NostrSignState::SelectRole { .. } => {
+                    app.nostr_sign_state = NostrSignState::SelectWallet;
+                }
+                NostrSignState::ConfigureTx { .. } | NostrSignState::ViewProposals { .. } => {
+                    if let Some(wallet) = app.selected_wallet() {
+                        app.nostr_sign_state = NostrSignState::SelectRole {
+                            wallet_name: wallet.name.clone(),
+                        };
+                    } else {
+                        app.nostr_sign_state = NostrSignState::SelectWallet;
+                    }
+                }
+                NostrSignState::ReviewProposal { wallet_name, .. } => {
+                    app.nostr_sign_state = NostrSignState::ViewProposals {
+                        wallet_name: wallet_name.clone(),
+                    };
+                }
+                NostrSignState::Complete { .. } => {
+                    app.nostr_sign_state = NostrSignState::SelectWallet;
+                    app.state = AppState::NostrRoom;
+                }
+                _ => {
+                    // For other states, go back to room
+                    app.nostr_sign_state = NostrSignState::SelectWallet;
+                    app.state = AppState::NostrRoom;
+                }
+            }
+        }
+        KeyCode::Enter => {
+            match &app.nostr_sign_state {
+                NostrSignState::SelectWallet => {
+                    // Select wallet and go to role selection
+                    if let Some(wallet) = app.selected_wallet() {
+                        let wallet_name = wallet.name.clone();
+                        app.nostr_sign_state = NostrSignState::SelectRole { wallet_name };
+                    } else {
+                        app.set_message("Select a wallet first");
+                    }
+                }
+                NostrSignState::SelectRole { wallet_name } => {
+                    // For now, default to Propose flow (index 0)
+                    // TODO: Track selected role index
+                    app.nostr_sign_state = NostrSignState::ConfigureTx {
+                        wallet_name: wallet_name.clone(),
+                    };
+                }
+                NostrSignState::ConfigureTx { wallet_name } => {
+                    // Create proposal and start waiting for consents
+                    let timestamp = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+                    let session_id = format!("session-{}", timestamp);
+                    let proposal = crate::tui::state::TxProposal {
+                        session_id: session_id.clone(),
+                        proposer_index: app.nostr_my_index,
+                        to_address: app.nostr_to_address.clone(),
+                        amount_sats: app.nostr_amount_sats,
+                        fee_rate: 10, // Default fee rate
+                        sighash: "placeholder-sighash".to_string(),
+                        description: format!("Send {} sats", app.nostr_amount_sats),
+                        timestamp,
+                    };
+                    app.nostr_sign_state = NostrSignState::WaitingForConsent {
+                        wallet_name: wallet_name.clone(),
+                        session_id,
+                        proposal,
+                        consents: std::collections::HashMap::new(),
+                    };
+                    app.set_message("Proposal broadcast! Waiting for consents...");
+                }
+                NostrSignState::WaitingForConsent {
+                    wallet_name,
+                    session_id,
+                    consents,
+                    ..
+                } => {
+                    // Check if we have enough consents (including proposer)
+                    if consents.len() + 1 >= app.nostr_threshold as usize {
+                        app.nostr_sign_state = NostrSignState::CollectingShares {
+                            wallet_name: wallet_name.clone(),
+                            session_id: session_id.clone(),
+                            received_shares: std::collections::HashMap::new(),
+                        };
+                        app.set_message("Threshold reached! Collecting signature shares...");
+                    } else {
+                        app.set_message("Waiting for more consents...");
+                    }
+                }
+                NostrSignState::ViewProposals { wallet_name } => {
+                    // TODO: Select from list of proposals
+                    // For now, create a placeholder proposal
+                    let proposal = crate::tui::state::TxProposal::default();
+                    app.nostr_sign_state = NostrSignState::ReviewProposal {
+                        wallet_name: wallet_name.clone(),
+                        proposal,
+                    };
+                }
+                NostrSignState::ReviewProposal {
+                    wallet_name,
+                    proposal,
+                } => {
+                    // Consent to the proposal
+                    app.nostr_sign_state = NostrSignState::WaitingForExecution {
+                        wallet_name: wallet_name.clone(),
+                        session_id: proposal.session_id.clone(),
+                    };
+                    app.set_message("Consent sent! Waiting for execution...");
+                }
+                NostrSignState::WaitingForExecution {
+                    wallet_name,
+                    session_id,
+                } => {
+                    // Transition to collecting shares when proposer initiates
+                    app.nostr_sign_state = NostrSignState::CollectingShares {
+                        wallet_name: wallet_name.clone(),
+                        session_id: session_id.clone(),
+                        received_shares: std::collections::HashMap::new(),
+                    };
+                }
+                NostrSignState::CollectingShares {
+                    received_shares, ..
+                } => {
+                    if received_shares.len() >= app.nostr_threshold as usize {
+                        app.nostr_sign_state = NostrSignState::Combining;
+                        app.set_message("Combining signature shares...");
+                    } else {
+                        app.set_message("Waiting for more shares...");
+                    }
+                }
+                NostrSignState::Combining => {
+                    // Simulate completion
+                    let fake_txid =
+                        "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456";
+                    app.nostr_sign_state = NostrSignState::Complete {
+                        txid: fake_txid.to_string(),
+                    };
+                    app.set_message("Transaction broadcast!");
+                }
+                NostrSignState::Complete { .. } => {
+                    // Done, go back to room
+                    app.nostr_sign_state = NostrSignState::SelectWallet;
+                    app.state = AppState::NostrRoom;
+                }
+            }
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if matches!(app.nostr_sign_state, NostrSignState::SelectWallet) {
+                app.prev_wallet();
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if matches!(app.nostr_sign_state, NostrSignState::SelectWallet) {
+                app.next_wallet();
+            }
+        }
+        KeyCode::Char('p') | KeyCode::Char('P') => {
+            // Select Propose role
+            if let NostrSignState::SelectRole { wallet_name } = &app.nostr_sign_state {
+                app.nostr_sign_state = NostrSignState::ConfigureTx {
+                    wallet_name: wallet_name.clone(),
+                };
+            }
+        }
+        KeyCode::Char('c') | KeyCode::Char('C') => {
+            // Select Consent role or copy TXID
+            match &app.nostr_sign_state {
+                NostrSignState::SelectRole { wallet_name } => {
+                    app.nostr_sign_state = NostrSignState::ViewProposals {
+                        wallet_name: wallet_name.clone(),
+                    };
+                }
+                NostrSignState::Complete { txid } => {
+                    // Copy TXID to clipboard
+                    if let Ok(mut ctx) = arboard::Clipboard::new() {
+                        let _ = ctx.set_text(txid.clone());
+                        app.set_message("TXID copied to clipboard!");
+                    }
+                }
+                _ => {}
+            }
+        }
+        _ => {}
+    }
+}
+
 fn ui(frame: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -1789,6 +2452,9 @@ fn ui(frame: &mut Frame, app: &App) {
         AppState::Send(_) => screens::render_send(frame, app, &app.send_form, chunks[1]),
         AppState::AddressList(state) => screens::render_address_list(frame, state, chunks[1]),
         AppState::MnemonicBackup(state) => screens::render_mnemonic(frame, state, chunks[1]),
+        AppState::NostrRoom => screens::render_nostr_room(frame, app, chunks[1]),
+        AppState::NostrKeygen => screens::render_nostr_keygen(frame, app, chunks[1]),
+        AppState::NostrSign => screens::render_nostr_sign(frame, app, chunks[1]),
     }
 
     // Help bar
@@ -1797,7 +2463,8 @@ fn ui(frame: &mut Frame, app: &App) {
 
 fn render_title(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     let network_color = match app.network {
-        state::NetworkSelection::Testnet => Color::Yellow,
+        state::NetworkSelection::Testnet4 => Color::Yellow,
+        state::NetworkSelection::Testnet3 => Color::LightYellow,
         state::NetworkSelection::Signet => Color::Magenta,
         state::NetworkSelection::Mainnet => Color::Red,
     };
@@ -1829,7 +2496,7 @@ fn render_help_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     } else {
         match &app.state {
             AppState::Home => {
-                "↑/↓:Navigate | Enter:Select Wallet | n:Network | g:New Wallet | q:Quit".to_string()
+                "↑/↓:Navigate | Enter:Select | n:Network | g:New | N:Nostr | q:Quit".to_string()
             }
             AppState::WalletDetails(_) => {
                 "↑/↓:Navigate | Enter:Select | b:Balance | c:Copy | Esc:Back".to_string()
@@ -1846,6 +2513,15 @@ fn render_help_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
                     "Enter:Reveal | Esc:Cancel".to_string()
                 }
             }
+            AppState::NostrRoom => match app.nostr_room_phase {
+                NostrRoomPhase::Configure => "Tab:Next | Enter:Join | Esc:Back".to_string(),
+                NostrRoomPhase::WaitingForParticipants => {
+                    "Space:Simulate join | Esc:Leave".to_string()
+                }
+                NostrRoomPhase::Ready => "K:Keygen | S:Sign | Esc:Leave".to_string(),
+            },
+            AppState::NostrKeygen => "Enter:Continue | R:Retry | Esc:Cancel".to_string(),
+            AppState::NostrSign => "Enter:Continue | ↑/↓:Navigate | Esc:Cancel".to_string(),
         }
     };
 
