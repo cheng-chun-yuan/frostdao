@@ -189,6 +189,23 @@ fn render_status_info(frame: &mut Frame, app: &App, area: Rect) {
                         Style::default().fg(Color::DarkGray),
                     ),
                 ]),
+                Line::from(vec![
+                    Span::styled("Desc: ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        if proposal.description.is_empty() {
+                            "No description"
+                        } else {
+                            &proposal.description
+                        },
+                        Style::default().fg(Color::White),
+                    ),
+                    Span::raw("  "),
+                    Span::styled("Time: ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        format_timestamp(proposal.timestamp),
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                ]),
             ]
         }
         NostrSignState::CollectingShares {
@@ -453,4 +470,27 @@ fn render_help(frame: &mut Frame, app: &App, area: Rect) {
     );
 
     frame.render_widget(help, area);
+}
+
+/// Format unix timestamp as relative time or short date
+fn format_timestamp(timestamp: u64) -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    if timestamp == 0 {
+        return "unknown".to_string();
+    }
+
+    let diff = now.saturating_sub(timestamp);
+    if diff < 60 {
+        "just now".to_string()
+    } else if diff < 3600 {
+        format!("{}m ago", diff / 60)
+    } else if diff < 86400 {
+        format!("{}h ago", diff / 3600)
+    } else {
+        format!("{}d ago", diff / 86400)
+    }
 }
