@@ -21,5 +21,7 @@ pub use nostr_keygen::render_nostr_keygen;
 pub use nostr_room::render_nostr_room;
 pub use nostr_sign::render_nostr_sign;
 pub use reshare::{render_reshare, ReshareFormData};
-pub use send::{render_send, ScriptConfig, ScriptType, SendFormData, TxDisplay, UtxoDisplay};
+pub use send::{
+    render_send, ScriptConfig, ScriptType, SendFormData, TimelockMode, TxDisplay, UtxoDisplay,
+};
 pub use wallet_details::render_wallet_details;

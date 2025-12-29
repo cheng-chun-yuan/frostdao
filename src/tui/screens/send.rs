@@ -62,6 +62,30 @@ impl ScriptType {
     }
 }
 
+/// Timelock input mode
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum TimelockMode {
+    #[default]
+    Blocks,
+    Time,
+}
+
+impl TimelockMode {
+    pub fn toggle(&self) -> Self {
+        match self {
+            Self::Blocks => Self::Time,
+            Self::Time => Self::Blocks,
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Blocks => "Blocks",
+            Self::Time => "Time",
+        }
+    }
+}
+
 /// Script configuration for advanced spending conditions
 #[derive(Clone)]
 pub struct ScriptConfig {
@@ -71,6 +95,12 @@ pub struct ScriptConfig {
     pub timelock_height: TextInput,
     /// Relative timelock: number of blocks
     pub timelock_blocks: TextInput,
+    /// Timelock input mode (blocks vs time)
+    pub timelock_mode: TimelockMode,
+    /// Relative timelock: hours (for time mode)
+    pub timelock_hours: TextInput,
+    /// Relative timelock: days (for time mode)
+    pub timelock_days: TextInput,
     /// Recovery: timeout in blocks
     pub recovery_timeout: TextInput,
     /// Recovery: pubkey (x-only hex)
@@ -101,6 +131,9 @@ impl ScriptConfig {
                 .with_placeholder("850000")
                 .numeric(),
             timelock_blocks: TextInput::new("Blocks").with_placeholder("144").numeric(),
+            timelock_mode: TimelockMode::default(),
+            timelock_hours: TextInput::new("Hours").with_placeholder("24").numeric(),
+            timelock_days: TextInput::new("Days").with_placeholder("1").numeric(),
             recovery_timeout: TextInput::new("Timeout (blocks)")
                 .with_placeholder("4320")
                 .numeric(),
@@ -114,6 +147,28 @@ impl ScriptConfig {
                 .with_placeholder("x-only hex (64 chars)"),
             selected_index: 0,
             focused_field: 0,
+        }
+    }
+
+    /// Convert hours to blocks (1 block ≈ 10 minutes)
+    pub fn hours_to_blocks(hours: u32) -> u32 {
+        hours * 6 // 6 blocks per hour
+    }
+
+    /// Convert days to blocks
+    pub fn days_to_blocks(days: u32) -> u32 {
+        days * 144 // 144 blocks per day
+    }
+
+    /// Get effective block count based on mode
+    pub fn get_effective_blocks(&self) -> u32 {
+        match self.timelock_mode {
+            TimelockMode::Blocks => self.timelock_blocks.value().parse().unwrap_or(0),
+            TimelockMode::Time => {
+                let hours: u32 = self.timelock_hours.value().parse().unwrap_or(0);
+                let days: u32 = self.timelock_days.value().parse().unwrap_or(0);
+                Self::hours_to_blocks(hours) + Self::days_to_blocks(days)
+            }
         }
     }
 }
@@ -1096,33 +1151,111 @@ fn render_configure_script(frame: &mut Frame, form: &SendFormData, area: Rect) {
             ]
         }
         ScriptType::TimelockRelative => {
-            let focused = form.script_config.focused_field == 0;
-            vec![
+            let mode = &form.script_config.timelock_mode;
+            let mode_focused = form.script_config.focused_field == 0;
+
+            let mut lines = vec![
+                // Mode toggle
                 Line::from(vec![
                     Span::styled(
-                        if focused { "▶ " } else { "  " },
+                        if mode_focused { "▶ " } else { "  " },
                         Style::default().fg(Color::Yellow),
                     ),
-                    Span::styled("Blocks: ", Style::default().fg(Color::Gray)),
+                    Span::styled("Mode: ", Style::default().fg(Color::Gray)),
                     Span::styled(
-                        form.script_config.timelock_blocks.value(),
-                        if focused {
-                            Style::default().fg(Color::Yellow)
+                        format!("[{}]", mode.label()),
+                        if mode_focused {
+                            Style::default()
+                                .fg(Color::Yellow)
+                                .add_modifier(Modifier::BOLD)
                         } else {
-                            Style::default().fg(Color::White)
+                            Style::default().fg(Color::Cyan)
                         },
                     ),
+                    Span::styled("  (Tab to toggle)", Style::default().fg(Color::DarkGray)),
                 ]),
-                Line::from(""),
-                Line::from(vec![Span::styled(
-                    "   Cannot spend until N blocks after confirmation.",
-                    Style::default().fg(Color::DarkGray),
-                )]),
-                Line::from(vec![Span::styled(
-                    "   144 blocks ≈ 1 day, 1008 ≈ 1 week",
-                    Style::default().fg(Color::DarkGray),
-                )]),
-            ]
+            ];
+
+            match mode {
+                TimelockMode::Blocks => {
+                    let blocks_focused = form.script_config.focused_field == 1;
+                    lines.push(Line::from(vec![
+                        Span::styled(
+                            if blocks_focused { "▶ " } else { "  " },
+                            Style::default().fg(Color::Yellow),
+                        ),
+                        Span::styled("Blocks: ", Style::default().fg(Color::Gray)),
+                        Span::styled(
+                            form.script_config.timelock_blocks.value(),
+                            if blocks_focused {
+                                Style::default().fg(Color::Yellow)
+                            } else {
+                                Style::default().fg(Color::White)
+                            },
+                        ),
+                    ]));
+                    lines.push(Line::from(""));
+                    lines.push(Line::from(vec![Span::styled(
+                        "   144 blocks ≈ 1 day, 1008 ≈ 1 week",
+                        Style::default().fg(Color::DarkGray),
+                    )]));
+                }
+                TimelockMode::Time => {
+                    let days_focused = form.script_config.focused_field == 1;
+                    let hours_focused = form.script_config.focused_field == 2;
+                    lines.push(Line::from(vec![
+                        Span::styled(
+                            if days_focused { "▶ " } else { "  " },
+                            Style::default().fg(Color::Yellow),
+                        ),
+                        Span::styled("Days: ", Style::default().fg(Color::Gray)),
+                        Span::styled(
+                            form.script_config.timelock_days.value(),
+                            if days_focused {
+                                Style::default().fg(Color::Yellow)
+                            } else {
+                                Style::default().fg(Color::White)
+                            },
+                        ),
+                        Span::raw("    "),
+                        Span::styled(
+                            if hours_focused { "▶ " } else { "  " },
+                            Style::default().fg(Color::Yellow),
+                        ),
+                        Span::styled("Hours: ", Style::default().fg(Color::Gray)),
+                        Span::styled(
+                            form.script_config.timelock_hours.value(),
+                            if hours_focused {
+                                Style::default().fg(Color::Yellow)
+                            } else {
+                                Style::default().fg(Color::White)
+                            },
+                        ),
+                    ]));
+                    // Show calculated blocks
+                    let total_blocks = form.script_config.get_effective_blocks();
+                    lines.push(Line::from(""));
+                    lines.push(Line::from(vec![
+                        Span::styled("   = ", Style::default().fg(Color::Gray)),
+                        Span::styled(
+                            format!("{} blocks", total_blocks),
+                            Style::default().fg(Color::Green),
+                        ),
+                        Span::styled(
+                            format!(" (≈{:.1} hours)", total_blocks as f64 / 6.0),
+                            Style::default().fg(Color::DarkGray),
+                        ),
+                    ]));
+                }
+            }
+
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![Span::styled(
+                "   Cannot spend until N blocks after confirmation.",
+                Style::default().fg(Color::DarkGray),
+            )]));
+
+            lines
         }
         ScriptType::Recovery => {
             let timeout_focused = form.script_config.focused_field == 0;
