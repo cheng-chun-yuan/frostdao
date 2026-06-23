@@ -16,4 +16,7 @@ pub mod reshare;
 pub mod signing;
 pub mod signing_coordinator;
 
-pub use signing_coordinator::{SigningAttemptCollector, SigningNonceInput, SigningShareInput};
+pub use signing_coordinator::{
+    SigningAttemptCollector, SigningAttemptConfig, SigningCoordinator, SigningCoordinatorProgress,
+    SigningCoordinatorStatus, SigningNonceInput, SigningSchemePolicy, SigningShareInput,
+};

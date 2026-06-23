@@ -772,6 +772,13 @@ impl App {
                     ) {
                         continue;
                     }
+                    if !self
+                        .nostr_received_nonces
+                        .get(&session_id)
+                        .is_some_and(|nonces| nonces.contains_key(&payload.party_index))
+                    {
+                        continue;
+                    }
                     self.nostr_received_shares
                         .entry(session_id.clone())
                         .or_default()
@@ -2563,6 +2570,35 @@ mod tests {
         };
         app.poll_nostr_room_runtime().unwrap();
         assert!(app.nostr_received_nonces.is_empty());
+        assert!(app.nostr_received_shares.is_empty());
+        if let NostrSignState::CollectingShares {
+            received_shares, ..
+        } = &app.nostr_sign_state
+        {
+            assert!(received_shares.is_empty());
+        } else {
+            panic!("expected CollectingShares");
+        }
+
+        let early_share = frostdao::nostr::SigningShareEvent::new(2, 1, "early-share".to_string());
+        let early_share_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::SigningShareEncrypted,
+            2,
+            &early_share,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-ciphertext")
+        .with_tss()
+        .to_party(1)
+        .unwrap();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(early_share_message)
+            .unwrap();
+        app.poll_nostr_room_runtime().unwrap();
         assert!(app.nostr_received_shares.is_empty());
         if let NostrSignState::CollectingShares {
             received_shares, ..

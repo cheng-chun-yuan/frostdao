@@ -51,7 +51,7 @@ Implement a testnet/signet-only coordinator for single-input Taproot key-path sp
 
 Do not claim ROAST robustness until bad-share identification and signer exclusion are implemented and tested. A simple coordinator state machine is still useful before full ROAST because it prevents mixing nonces or shares between signing attempts.
 
-Current pre-ROAST boundary: NIP-44 signing plaintext helpers encrypt typed nonce/share payloads and validate decrypted payloads against the accepted Nostr envelope. `protocol::SigningAttemptCollector` state in `src/protocol/signing_coordinator.rs` then tracks one wallet, session, attempt ID, signer set, threshold, and sighash fingerprint. It accepts signing nonce/share inputs only when they match that active attempt and requires a nonce before a share from the same signer. This gives the future coordinator a small tested core without adding dependencies.
+Current pre-ROAST boundary: NIP-44 signing plaintext helpers encrypt typed nonce/share payloads and validate decrypted payloads against the accepted Nostr envelope. `protocol::SigningCoordinator` state in `src/protocol/signing_coordinator.rs` then validates TSS or HTSS signer policy, derives an attempt ID, tracks one wallet, session, signer set, threshold, and sighash fingerprint, accepts signing nonce/share inputs only when they match that active attempt, requires nonce threshold before share collection, and reports when the attempt is ready to combine. This gives the future ROAST coordinator a small tested core without adding dependencies.
 
 ## Nostr Message Changes
 
