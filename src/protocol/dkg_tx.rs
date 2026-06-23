@@ -28,7 +28,9 @@
 //! ```
 
 use crate::audit::{self, AuditEvent};
-use crate::btc::transaction::{broadcast_transaction, fetch_fee_estimates, fetch_utxos};
+use crate::btc::transaction::{
+    broadcast_transaction, fetch_fee_estimates, fetch_utxos, mempool_explorer_tx_url,
+};
 use crate::protocol::keygen::{get_state_dir, HtssMetadata};
 use crate::protocol::signing::NonceOutput;
 use crate::storage::{FileStorage, Storage};
@@ -916,12 +918,7 @@ pub fn dkg_broadcast_core(
     // Broadcast
     let broadcast_result = broadcast_transaction(&raw_tx, network);
 
-    let explorer_url = match network {
-        Network::Testnet => format!("https://mempool.space/testnet/tx/{}", txid),
-        Network::Signet => format!("https://mempool.space/signet/tx/{}", txid),
-        Network::Bitcoin => format!("https://mempool.space/tx/{}", txid),
-        _ => format!("https://mempool.space/testnet/tx/{}", txid),
-    };
+    let explorer_url = mempool_explorer_tx_url(network, txid);
 
     let broadcast_status = if broadcast_result.is_ok() {
         "broadcast"
@@ -1419,12 +1416,7 @@ pub fn frost_sign_all_local(
     out.push_str("📡 Broadcasting transaction...\n");
 
     // Broadcast
-    let explorer_url = match network {
-        Network::Testnet => format!("https://mempool.space/testnet/tx/{}", txid),
-        Network::Signet => format!("https://mempool.space/signet/tx/{}", txid),
-        Network::Bitcoin => format!("https://mempool.space/tx/{}", txid),
-        _ => format!("https://mempool.space/testnet/tx/{}", txid),
-    };
+    let explorer_url = mempool_explorer_tx_url(network, txid);
 
     let broadcast_result = broadcast_transaction(&raw_tx, network);
     let broadcast_status = if broadcast_result.is_ok() {

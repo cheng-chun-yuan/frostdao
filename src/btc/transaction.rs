@@ -125,6 +125,16 @@ fn network_name(network: Network) -> &'static str {
     }
 }
 
+pub(crate) fn mempool_explorer_tx_url(network: Network, txid: impl std::fmt::Display) -> String {
+    match network {
+        Network::Bitcoin => format!("https://mempool.space/tx/{txid}"),
+        Network::Testnet => format!("https://mempool.space/testnet/tx/{txid}"),
+        Network::Signet => format!("https://mempool.space/signet/tx/{txid}"),
+        Network::Regtest => format!("regtest:{txid}"),
+        _ => format!("unsupported-network:{txid}"),
+    }
+}
+
 // Use shared tagged_hash from crypto helpers
 use crate::crypto::helpers::tagged_hash;
 
@@ -718,12 +728,7 @@ pub fn send_transaction_core(
             out.push_str("\nTransaction broadcast successfully!\n");
             out.push_str(&format!("TxID: {}\n", broadcast_txid));
 
-            let explorer_url = match network {
-                Network::Testnet => format!("https://mempool.space/testnet/tx/{}", broadcast_txid),
-                Network::Signet => format!("https://mempool.space/signet/tx/{}", broadcast_txid),
-                Network::Bitcoin => format!("https://mempool.space/tx/{}", broadcast_txid),
-                _ => format!("https://mempool.space/testnet/tx/{}", broadcast_txid),
-            };
+            let explorer_url = mempool_explorer_tx_url(network, &broadcast_txid);
             out.push_str(&format!("Explorer: {}\n", explorer_url));
         }
         Err(e) => {
@@ -778,4 +783,31 @@ pub fn send_signet(to_address: &str, amount_sats: u64, fee_rate: Option<u64>) ->
     println!("Copy this JSON:");
     println!("{}\n", cmd_result.result);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mempool_explorer_url_matches_network() {
+        let txid = "txid-test";
+
+        assert_eq!(
+            mempool_explorer_tx_url(Network::Bitcoin, txid),
+            "https://mempool.space/tx/txid-test"
+        );
+        assert_eq!(
+            mempool_explorer_tx_url(Network::Testnet, txid),
+            "https://mempool.space/testnet/tx/txid-test"
+        );
+        assert_eq!(
+            mempool_explorer_tx_url(Network::Signet, txid),
+            "https://mempool.space/signet/tx/txid-test"
+        );
+        assert_eq!(
+            mempool_explorer_tx_url(Network::Regtest, txid),
+            "regtest:txid-test"
+        );
+    }
 }

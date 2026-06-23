@@ -362,6 +362,7 @@ def check_replay_cache_persistence():
 
 def check_transaction_review():
     protocol = read(Path("src/protocol/dkg_tx.rs"))
+    transaction = read(Path("src/btc/transaction.rs"))
     tui_state = read(Path("src/tui/state.rs"))
     tui_keys = read(Path("src/tui/mod.rs"))
     main_rs = read(Path("src/main.rs"))
@@ -370,6 +371,9 @@ def check_transaction_review():
         ("src/protocol/dkg_tx.rs", protocol, "pub struct TransactionReview"),
         ("src/protocol/dkg_tx.rs", protocol, "sighash_fingerprint"),
         ("src/protocol/dkg_tx.rs", protocol, "fee_rate_sats_vb"),
+        ("src/protocol/dkg_tx.rs", protocol, "mempool_explorer_tx_url(network, txid)"),
+        ("src/btc/transaction.rs", transaction, "pub(crate) fn mempool_explorer_tx_url"),
+        ("src/btc/transaction.rs", transaction, "mempool_explorer_url_matches_network"),
         ("src/tui/state.rs", tui_state, "ReviewTransaction"),
         ("src/tui/mod.rs", tui_keys, "KeyCode::Char('y')"),
         ("src/main.rs", main_rs, "parse_dkg_network"),
