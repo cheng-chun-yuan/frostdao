@@ -151,7 +151,7 @@ For sorted signer ranks `[r0, r1, ..., r(t-1)]`, the signer set is valid when `r
 4. Each party sends `keygen_round2_encrypted` with `to` set to the recipient party.
 5. Each recipient finalizes locally after receiving enough valid shares.
 
-For `room_join`, the payload `party_index` must match the envelope `from` party. The current TUI room runtime also requires the join payload threshold, party count, scheme, and rank shape to match the active room before adding a participant.
+For `room_join`, the payload `party_index` must match the envelope `from` party. `keygen_round1.party_index` and `keygen_round2_encrypted.party_index` must also match envelope `from`, and `keygen_round2_encrypted.to_index` must match the direct envelope `to`. The current TUI room runtime also requires the join payload threshold, party count, scheme, and rank shape to match the active room before adding a participant.
 
 ## Signing Flow
 

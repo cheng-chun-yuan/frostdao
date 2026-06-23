@@ -562,11 +562,15 @@ pub fn parse_protocol_message(content: &str) -> Result<NostrProtocolMessage> {
 pub fn parse_dkg_event(content: &str) -> Option<NostrDkgEvent> {
     if let Ok(message) = parse_protocol_message(content) {
         return match message.kind {
-            NostrMessageKind::KeygenRound1 => message.payload_as().ok().map(NostrDkgEvent::Round1),
-            NostrMessageKind::KeygenRound2Encrypted => message
-                .payload_as()
-                .ok()
-                .map(NostrDkgEvent::Round2Encrypted),
+            NostrMessageKind::KeygenRound1 => {
+                let event: DkgRound1Event = message.payload_as().ok()?;
+                (event.party_index == message.from).then_some(NostrDkgEvent::Round1(event))
+            }
+            NostrMessageKind::KeygenRound2Encrypted => {
+                let event: DkgRound2EncryptedEvent = message.payload_as().ok()?;
+                encrypted_dkg_round2_matches_envelope(&message, &event)
+                    .then_some(NostrDkgEvent::Round2Encrypted(event))
+            }
             _ => None,
         };
     }
@@ -585,6 +589,13 @@ pub fn parse_dkg_event(content: &str) -> Option<NostrDkgEvent> {
         }
         _ => None,
     }
+}
+
+fn encrypted_dkg_round2_matches_envelope(
+    message: &NostrProtocolMessage,
+    event: &DkgRound2EncryptedEvent,
+) -> bool {
+    event.party_index == message.from && message.to == Some(event.to_index)
 }
 
 pub fn parse_signing_event(content: &str) -> Option<NostrSigningEvent> {
@@ -767,6 +778,76 @@ mod tests {
             parse_signing_event(&encoded),
             Some(NostrSigningEvent::Share(_))
         ));
+    }
+
+    #[test]
+    fn parses_dkg_events_with_bound_envelope_identity() {
+        let round1 = DkgRound1Event::new(1, "keygen-input".to_string(), "pubkey".to_string());
+        let round1_message =
+            NostrProtocolMessage::new("room-a", NostrMessageKind::KeygenRound1, 1, &round1)
+                .unwrap();
+        let encoded_round1 = serde_json::to_string(&round1_message).unwrap();
+        assert!(matches!(
+            parse_dkg_event(&encoded_round1),
+            Some(NostrDkgEvent::Round1(_))
+        ));
+
+        let round2 = DkgRound2EncryptedEvent::new(1, 2, "ciphertext".to_string());
+        let round2_message = NostrProtocolMessage::new(
+            "room-a",
+            NostrMessageKind::KeygenRound2Encrypted,
+            1,
+            &round2,
+        )
+        .unwrap()
+        .to_party(2)
+        .unwrap();
+        let encoded_round2 = serde_json::to_string(&round2_message).unwrap();
+        assert!(matches!(
+            parse_dkg_event(&encoded_round2),
+            Some(NostrDkgEvent::Round2Encrypted(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_dkg_events_with_mismatched_envelope_identity() {
+        let mismatched_round1 =
+            DkgRound1Event::new(2, "keygen-input".to_string(), "pubkey".to_string());
+        let mismatched_round1_message = NostrProtocolMessage::new(
+            "room-a",
+            NostrMessageKind::KeygenRound1,
+            1,
+            &mismatched_round1,
+        )
+        .unwrap();
+        let encoded_mismatched_round1 = serde_json::to_string(&mismatched_round1_message).unwrap();
+        assert!(parse_dkg_event(&encoded_mismatched_round1).is_none());
+
+        let mismatched_round2 = DkgRound2EncryptedEvent::new(3, 2, "ciphertext".to_string());
+        let mismatched_round2_message = NostrProtocolMessage::new(
+            "room-a",
+            NostrMessageKind::KeygenRound2Encrypted,
+            1,
+            &mismatched_round2,
+        )
+        .unwrap()
+        .to_party(2)
+        .unwrap();
+        let encoded_mismatched_round2 = serde_json::to_string(&mismatched_round2_message).unwrap();
+        assert!(parse_dkg_event(&encoded_mismatched_round2).is_none());
+
+        let wrong_recipient_round2 = DkgRound2EncryptedEvent::new(1, 3, "ciphertext".to_string());
+        let wrong_recipient_message = NostrProtocolMessage::new(
+            "room-a",
+            NostrMessageKind::KeygenRound2Encrypted,
+            1,
+            &wrong_recipient_round2,
+        )
+        .unwrap()
+        .to_party(2)
+        .unwrap();
+        let encoded_wrong_recipient = serde_json::to_string(&wrong_recipient_message).unwrap();
+        assert!(parse_dkg_event(&encoded_wrong_recipient).is_none());
     }
 
     #[test]
