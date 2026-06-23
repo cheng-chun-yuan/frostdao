@@ -2591,13 +2591,20 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                         description: format!("Send {} sats", amount_sats),
                         timestamp,
                     };
+                    let wallet_name = wallet_name.clone();
+                    if let Err(e) = app.publish_nostr_tx_proposal(&wallet_name, &proposal) {
+                        app.message = Some(format!("Nostr proposal publish error: {}", e));
+                        return;
+                    }
                     app.nostr_sign_state = NostrSignState::WaitingForConsent {
-                        wallet_name: wallet_name.clone(),
+                        wallet_name,
                         session_id,
                         proposal,
                         consents: std::collections::HashMap::new(),
                     };
-                    app.set_message("Proposal broadcast! Waiting for consents...");
+                    app.set_message(
+                        "Proposal published through room runtime; waiting for consents...",
+                    );
                 }
                 NostrSignState::WaitingForConsent {
                     wallet_name,
@@ -2718,8 +2725,13 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
             } = &app.nostr_sign_state
             {
                 let wallet_name = wallet_name.clone();
+                let proposal = proposal.clone();
                 let session_id = proposal.session_id.clone();
                 let fingerprint = proposal.review.sighash_fingerprint.clone();
+                if let Err(e) = app.publish_nostr_tx_consent(&wallet_name, &proposal, true, None) {
+                    app.message = Some(format!("Nostr consent publish error: {}", e));
+                    return;
+                }
                 app.nostr_sign_state = NostrSignState::WaitingForExecution {
                     wallet_name,
                     session_id,

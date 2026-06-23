@@ -11,6 +11,7 @@ use crate::tui::screens::PolicyPreviewFormData;
 use crate::tui::screens::{KeygenFormData, ReshareFormData, SendFormData};
 use crate::tui::state::{
     AppState, NetworkSelection, NostrKeygenState, NostrRoomField, NostrRoomPhase, NostrSignState,
+    TxProposal,
 };
 use frostdao::nostr::RoomMessageTransport;
 use frostdao::protocol::keygen::{list_wallets, WalletSummary};
@@ -447,6 +448,70 @@ impl App {
         Ok(count)
     }
 
+    /// Publish a reviewed transaction proposal through the active room runtime.
+    pub fn publish_nostr_tx_proposal(
+        &mut self,
+        wallet_name: &str,
+        proposal: &TxProposal,
+    ) -> Result<()> {
+        let Some(runtime) = self.nostr_runtime.as_mut() else {
+            anyhow::bail!("join a Nostr room before publishing a transaction proposal");
+        };
+
+        let payload = frostdao::nostr::TxProposalEvent {
+            proposer_index: proposal.proposer_index,
+            to_address: proposal.to_address.clone(),
+            amount_sats: proposal.amount_sats,
+            fee_rate: proposal.fee_rate,
+            sighash: proposal.sighash.clone(),
+            review: proposal.review.clone(),
+            description: proposal.description.clone(),
+            timestamp: proposal.timestamp,
+        };
+        let message = frostdao::nostr::NostrProtocolMessage::new(
+            self.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxProposal,
+            self.nostr_my_index,
+            &payload,
+        )?
+        .with_wallet(wallet_name)
+        .with_session(proposal.session_id.clone())
+        .with_tss();
+
+        runtime.publish(message)
+    }
+
+    /// Publish reviewed consent through the active room runtime.
+    pub fn publish_nostr_tx_consent(
+        &mut self,
+        wallet_name: &str,
+        proposal: &TxProposal,
+        consent: bool,
+        reason: Option<String>,
+    ) -> Result<()> {
+        let Some(runtime) = self.nostr_runtime.as_mut() else {
+            anyhow::bail!("join a Nostr room before publishing transaction consent");
+        };
+
+        let payload = frostdao::nostr::TxConsentEvent {
+            proposal_session: proposal.session_id.clone(),
+            consent,
+            reviewed_sighash_fingerprint: proposal.review.sighash_fingerprint.clone(),
+            reason,
+        };
+        let message = frostdao::nostr::NostrProtocolMessage::new(
+            self.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxConsent,
+            self.nostr_my_index,
+            &payload,
+        )?
+        .with_wallet(wallet_name)
+        .with_session(proposal.session_id.clone())
+        .with_tss();
+
+        runtime.publish(message)
+    }
+
     /// Publish a demo participant join into the active room transport.
     pub fn simulate_nostr_participant_join(&mut self, party_index: u32) -> Result<()> {
         let Some(runtime) = self.nostr_runtime.as_mut() else {
@@ -685,6 +750,62 @@ mod tests {
         assert!(!app.nostr_connected);
         assert!(app.nostr_runtime.is_none());
         assert!(app.nostr_participants.is_empty());
+
+        let _ = std::fs::remove_file(&cache_path);
+    }
+
+    #[test]
+    fn tui_nostr_signing_publishes_runtime_messages() {
+        let mut app = App::new().unwrap();
+        app.nostr_room_id = format!("tui-signing-runtime-test-{}", std::process::id());
+        app.nostr_my_index = 1;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 2;
+        let cache_path = app.nostr_replay_cache_path();
+        let _ = std::fs::remove_file(&cache_path);
+
+        app.join_nostr_room_runtime().unwrap();
+        let proposal = crate::tui::state::TxProposal {
+            session_id: "session-test".to_string(),
+            proposer_index: 1,
+            to_address: "tb1qrecipient".to_string(),
+            amount_sats: 50_000,
+            fee_rate: 10,
+            sighash: "abc123".to_string(),
+            review: frostdao::nostr::TxReviewPayload {
+                network: "testnet".to_string(),
+                source_path: "m/86'/1'/0'/0/0".to_string(),
+                from_address: "tb1qfrom".to_string(),
+                to_address: "tb1qrecipient".to_string(),
+                amount_sats: 50_000,
+                fee_rate_sats_vb: 10,
+                sighash_fingerprint: "abc12345".to_string(),
+            },
+            description: "test proposal".to_string(),
+            timestamp: 1_700_000_000,
+        };
+
+        app.publish_nostr_tx_proposal("wallet-test", &proposal)
+            .unwrap();
+        assert_eq!(
+            app.nostr_runtime
+                .as_ref()
+                .unwrap()
+                .transport()
+                .room_len(&app.nostr_room_id),
+            2
+        );
+
+        app.publish_nostr_tx_consent("wallet-test", &proposal, true, None)
+            .unwrap();
+        assert_eq!(
+            app.nostr_runtime
+                .as_ref()
+                .unwrap()
+                .transport()
+                .room_len(&app.nostr_room_id),
+            3
+        );
 
         let _ = std::fs::remove_file(&cache_path);
     }

@@ -348,16 +348,23 @@ def check_audit_logging():
 
 def check_nostr_transaction_review():
     events = read(Path("src/nostr/events.rs"))
+    app = read(Path("src/tui/app.rs"))
     tui = read(Path("src/tui/mod.rs"))
     screen = read(Path("src/tui/screens/nostr_sign.rs"))
+    run_guide = read(Path("docs/RUN_GUIDE.md"))
     docs = read(Path("docs/NOSTR_PROTOCOL.md"))
     keymap = read(Path("docs/TUI_KEYMAP.md"))
     required = [
         ("src/nostr/events.rs", events, "pub struct TxReviewPayload"),
         ("src/nostr/events.rs", events, "reviewed_sighash_fingerprint"),
         ("src/nostr/events.rs", events, "tx_consent_carries_reviewed_fingerprint"),
+        ("src/tui/app.rs", app, "publish_nostr_tx_proposal"),
+        ("src/tui/app.rs", app, "publish_nostr_tx_consent"),
+        ("src/tui/app.rs", app, "tui_nostr_signing_publishes_runtime_messages"),
         ("src/tui/mod.rs", tui, "press y to consent"),
+        ("src/tui/mod.rs", tui, "Proposal published through room runtime"),
         ("src/tui/screens/nostr_sign.rs", screen, "Sighash fingerprint: "),
+        ("docs/RUN_GUIDE.md", run_guide, "publish versioned `tx_proposal` and `tx_consent` messages"),
         ("docs/NOSTR_PROTOCOL.md", docs, "`tx_proposal` must include a `review` object"),
         ("docs/TUI_KEYMAP.md", keymap, "Consent after reviewing proposal fingerprint"),
     ]
