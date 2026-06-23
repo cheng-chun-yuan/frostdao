@@ -451,6 +451,52 @@ impl SigningNonceEvent {
     }
 }
 
+/// Plaintext schema expected inside a decrypted `signing_nonce_encrypted` payload.
+///
+/// This struct is intentionally not embedded in the relay envelope directly. It
+/// defines the stable object that must be serialized before NIP-44 encryption and
+/// validated after decryption.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SigningNoncePlaintext {
+    pub wallet: String,
+    pub session: String,
+    pub attempt_id: String,
+    pub signer_set: Vec<u32>,
+    pub party_index: u32,
+    pub to_index: u32,
+    pub sighash_fingerprint: String,
+    pub public_nonce: String,
+}
+
+impl SigningNoncePlaintext {
+    pub fn validate_for_envelope(
+        &self,
+        message: &NostrProtocolMessage,
+        event: &SigningNonceEvent,
+    ) -> Result<()> {
+        validate_signing_plaintext_common(
+            SigningPlaintextContext {
+                wallet: &self.wallet,
+                session: &self.session,
+                attempt_id: &self.attempt_id,
+                signer_set: &self.signer_set,
+                party_index: self.party_index,
+                to_index: self.to_index,
+                sighash_fingerprint: &self.sighash_fingerprint,
+            },
+            SigningEnvelopeContext {
+                message,
+                event_party_index: event.party_index,
+                event_to_index: event.to_index,
+            },
+        )?;
+        if self.public_nonce.trim().is_empty() {
+            bail!("signing nonce plaintext missing public_nonce");
+        }
+        Ok(())
+    }
+}
+
 /// Signing share event (encrypted per-recipient)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SigningShareEvent {
@@ -470,6 +516,119 @@ impl SigningShareEvent {
             ciphertext,
         }
     }
+}
+
+/// Plaintext schema expected inside a decrypted `signing_share_encrypted` payload.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SigningSharePlaintext {
+    pub wallet: String,
+    pub session: String,
+    pub attempt_id: String,
+    pub signer_set: Vec<u32>,
+    pub party_index: u32,
+    pub to_index: u32,
+    pub sighash_fingerprint: String,
+    pub signature_share: String,
+}
+
+impl SigningSharePlaintext {
+    pub fn validate_for_envelope(
+        &self,
+        message: &NostrProtocolMessage,
+        event: &SigningShareEvent,
+    ) -> Result<()> {
+        validate_signing_plaintext_common(
+            SigningPlaintextContext {
+                wallet: &self.wallet,
+                session: &self.session,
+                attempt_id: &self.attempt_id,
+                signer_set: &self.signer_set,
+                party_index: self.party_index,
+                to_index: self.to_index,
+                sighash_fingerprint: &self.sighash_fingerprint,
+            },
+            SigningEnvelopeContext {
+                message,
+                event_party_index: event.party_index,
+                event_to_index: event.to_index,
+            },
+        )?;
+        if self.signature_share.trim().is_empty() {
+            bail!("signing share plaintext missing signature_share");
+        }
+        Ok(())
+    }
+}
+
+struct SigningPlaintextContext<'a> {
+    wallet: &'a str,
+    session: &'a str,
+    attempt_id: &'a str,
+    signer_set: &'a [u32],
+    party_index: u32,
+    to_index: u32,
+    sighash_fingerprint: &'a str,
+}
+
+struct SigningEnvelopeContext<'a> {
+    message: &'a NostrProtocolMessage,
+    event_party_index: u32,
+    event_to_index: u32,
+}
+
+fn validate_signing_plaintext_common(
+    plaintext: SigningPlaintextContext<'_>,
+    envelope: SigningEnvelopeContext<'_>,
+) -> Result<()> {
+    let message = envelope.message;
+    let Some(message_wallet) = message
+        .wallet
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    else {
+        bail!("envelope missing wallet");
+    };
+    let Some(message_session) = message
+        .session
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    else {
+        bail!("envelope missing session");
+    };
+
+    if plaintext.wallet != message_wallet {
+        bail!("plaintext wallet does not match envelope wallet");
+    }
+    if plaintext.session != message_session {
+        bail!("plaintext session does not match envelope session");
+    }
+    if plaintext.attempt_id.trim().is_empty() {
+        bail!("plaintext attempt_id cannot be empty");
+    }
+    if plaintext.party_index == 0 || plaintext.to_index == 0 {
+        bail!("plaintext party indexes must be nonzero");
+    }
+    if plaintext.party_index != message.from || plaintext.party_index != envelope.event_party_index
+    {
+        bail!("plaintext party_index does not match envelope sender");
+    }
+    if message.to != Some(plaintext.to_index) || plaintext.to_index != envelope.event_to_index {
+        bail!("plaintext to_index does not match envelope recipient");
+    }
+    if plaintext.signer_set.is_empty() {
+        bail!("plaintext signer_set cannot be empty");
+    }
+    if plaintext.signer_set.contains(&0) {
+        bail!("plaintext signer_set contains party index 0");
+    }
+    if !plaintext.signer_set.contains(&plaintext.party_index) {
+        bail!("plaintext signer_set does not include sender");
+    }
+    if plaintext.sighash_fingerprint.trim().is_empty() {
+        bail!("plaintext missing sighash_fingerprint");
+    }
+
+    Ok(())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -823,6 +982,125 @@ mod tests {
             parse_signing_event(&encoded_share),
             Some(NostrSigningEvent::Share(_))
         ));
+    }
+
+    #[test]
+    fn signing_plaintexts_validate_against_envelope() {
+        let nonce_event = SigningNonceEvent::new(1, 2, "nonce-ciphertext".to_string());
+        let nonce_message = NostrProtocolMessage::new(
+            "room-a",
+            NostrMessageKind::SigningNonceEncrypted,
+            1,
+            &nonce_event,
+        )
+        .unwrap()
+        .with_wallet("treasury")
+        .with_session("session-a")
+        .to_party(2)
+        .unwrap();
+        let nonce_plaintext = SigningNoncePlaintext {
+            wallet: "treasury".to_string(),
+            session: "session-a".to_string(),
+            attempt_id: "attempt-1".to_string(),
+            signer_set: vec![1, 2, 3],
+            party_index: 1,
+            to_index: 2,
+            sighash_fingerprint: "001122334455...aabbccddeeff".to_string(),
+            public_nonce: "public-nonce-hex".to_string(),
+        };
+
+        nonce_plaintext
+            .validate_for_envelope(&nonce_message, &nonce_event)
+            .unwrap();
+
+        let share_event = SigningShareEvent::new(1, 2, "share-ciphertext".to_string());
+        let share_message = NostrProtocolMessage::new(
+            "room-a",
+            NostrMessageKind::SigningShareEncrypted,
+            1,
+            &share_event,
+        )
+        .unwrap()
+        .with_wallet("treasury")
+        .with_session("session-a")
+        .to_party(2)
+        .unwrap();
+        let share_plaintext = SigningSharePlaintext {
+            wallet: "treasury".to_string(),
+            session: "session-a".to_string(),
+            attempt_id: "attempt-1".to_string(),
+            signer_set: vec![1, 2, 3],
+            party_index: 1,
+            to_index: 2,
+            sighash_fingerprint: "001122334455...aabbccddeeff".to_string(),
+            signature_share: "signature-share-hex".to_string(),
+        };
+
+        share_plaintext
+            .validate_for_envelope(&share_message, &share_event)
+            .unwrap();
+    }
+
+    #[test]
+    fn signing_plaintexts_reject_mismatched_envelope_context() {
+        let nonce_event = SigningNonceEvent::new(1, 2, "nonce-ciphertext".to_string());
+        let nonce_message = NostrProtocolMessage::new(
+            "room-a",
+            NostrMessageKind::SigningNonceEncrypted,
+            1,
+            &nonce_event,
+        )
+        .unwrap()
+        .with_wallet("treasury")
+        .with_session("session-a")
+        .to_party(2)
+        .unwrap();
+        let valid = SigningNoncePlaintext {
+            wallet: "treasury".to_string(),
+            session: "session-a".to_string(),
+            attempt_id: "attempt-1".to_string(),
+            signer_set: vec![1, 2, 3],
+            party_index: 1,
+            to_index: 2,
+            sighash_fingerprint: "001122334455...aabbccddeeff".to_string(),
+            public_nonce: "public-nonce-hex".to_string(),
+        };
+
+        let mut wrong_wallet = valid.clone();
+        wrong_wallet.wallet = "other".to_string();
+        assert!(wrong_wallet
+            .validate_for_envelope(&nonce_message, &nonce_event)
+            .is_err());
+
+        let mut wrong_session = valid.clone();
+        wrong_session.session = "other-session".to_string();
+        assert!(wrong_session
+            .validate_for_envelope(&nonce_message, &nonce_event)
+            .is_err());
+
+        let mut wrong_sender = valid.clone();
+        wrong_sender.party_index = 3;
+        assert!(wrong_sender
+            .validate_for_envelope(&nonce_message, &nonce_event)
+            .is_err());
+
+        let mut wrong_recipient = valid.clone();
+        wrong_recipient.to_index = 3;
+        assert!(wrong_recipient
+            .validate_for_envelope(&nonce_message, &nonce_event)
+            .is_err());
+
+        let mut missing_attempt = valid.clone();
+        missing_attempt.attempt_id.clear();
+        assert!(missing_attempt
+            .validate_for_envelope(&nonce_message, &nonce_event)
+            .is_err());
+
+        let mut missing_sender_from_set = valid.clone();
+        missing_sender_from_set.signer_set = vec![2, 3];
+        assert!(missing_sender_from_set
+            .validate_for_envelope(&nonce_message, &nonce_event)
+            .is_err());
     }
 
     #[test]

@@ -53,7 +53,7 @@ Do not claim ROAST robustness until bad-share identification and signer exclusio
 
 ## Nostr Message Changes
 
-Existing `signing_nonce_encrypted` and `signing_share_encrypted` messages should keep carrying ciphertext, but the encrypted plaintext should have a stable schema:
+Existing `signing_nonce_encrypted` and `signing_share_encrypted` messages should keep carrying ciphertext, but the encrypted plaintext uses stable schemas in `src/nostr/events.rs`:
 
 - wallet
 - session
