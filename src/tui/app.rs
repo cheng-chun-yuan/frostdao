@@ -651,12 +651,17 @@ impl App {
                         if let NostrSignState::WaitingForConsent {
                             wallet_name,
                             session_id,
+                            proposal,
                             consents,
-                            ..
                         } = &mut self.nostr_sign_state
                         {
                             if *wallet_name == message_wallet
                                 && *session_id == payload.proposal_session
+                                && message.from > 0
+                                && message.from <= self.nostr_n_parties
+                                && message.from != self.nostr_my_index
+                                && payload.reviewed_sighash_fingerprint
+                                    == proposal.review.sighash_fingerprint
                             {
                                 consents.insert(
                                     message.from,
@@ -1760,7 +1765,7 @@ mod tests {
         let consent_event = frostdao::nostr::TxConsentEvent {
             proposal_session: proposal.session_id.clone(),
             consent: true,
-            reviewed_sighash_fingerprint: "remote123".to_string(),
+            reviewed_sighash_fingerprint: proposal.review.sighash_fingerprint.clone(),
             reason: None,
         };
         let sessionless_consent = frostdao::nostr::NostrProtocolMessage::new(
@@ -1807,6 +1812,42 @@ mod tests {
             .as_mut()
             .unwrap()
             .publish_demo_message(wrong_wallet_consent)
+            .unwrap();
+        let wrong_fingerprint_consent_event = frostdao::nostr::TxConsentEvent {
+            proposal_session: proposal.session_id.clone(),
+            consent: true,
+            reviewed_sighash_fingerprint: "wrong-fingerprint".to_string(),
+            reason: None,
+        };
+        let wrong_fingerprint_consent = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxConsent,
+            2,
+            &wrong_fingerprint_consent_event,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-expected")
+        .with_tss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(wrong_fingerprint_consent)
+            .unwrap();
+        let out_of_room_consent = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxConsent,
+            4,
+            &consent_event,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-expected")
+        .with_tss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(out_of_room_consent)
             .unwrap();
         app.poll_nostr_room_runtime().unwrap();
         if let NostrSignState::WaitingForConsent { consents, .. } = &app.nostr_sign_state {
@@ -2235,7 +2276,7 @@ mod tests {
         let consent_event = frostdao::nostr::TxConsentEvent {
             proposal_session: "session-remote".to_string(),
             consent: true,
-            reviewed_sighash_fingerprint: "remote123".to_string(),
+            reviewed_sighash_fingerprint: pending.review.sighash_fingerprint.clone(),
             reason: None,
         };
         let consent_message = frostdao::nostr::NostrProtocolMessage::new(
@@ -2256,7 +2297,10 @@ mod tests {
 
         app.poll_nostr_room_runtime().unwrap();
         if let NostrSignState::WaitingForConsent { consents, .. } = &app.nostr_sign_state {
-            assert_eq!(consents.get(&2).unwrap(), "remote123");
+            assert_eq!(
+                consents.get(&2).unwrap(),
+                &frostdao::protocol::dkg_tx::sighash_fingerprint("remote-sighash")
+            );
         } else {
             panic!("expected WaitingForConsent");
         }
