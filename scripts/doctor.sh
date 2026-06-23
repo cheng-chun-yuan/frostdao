@@ -36,6 +36,14 @@ KNOWN_STALE_PATTERNS = [
     "N:Nostr",
     "Simulate completion",
     "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
+    "frontend/",
+    "wasm-build",
+    "serve-frontend",
+    "--with-wasm",
+    "wasm-pack",
+    "LocalStorageImpl",
+    "test_wasm",
+    "wasm_bindgen",
 ]
 
 
