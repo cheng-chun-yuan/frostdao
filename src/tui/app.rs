@@ -15,7 +15,7 @@ use crate::tui::state::{
     TxProposal,
 };
 use frostdao::nostr::RoomMessageTransport;
-use frostdao::protocol::keygen::{list_wallets, WalletSummary};
+use frostdao::protocol::keygen::{get_state_dir, list_wallets, WalletSummary};
 use frostdao::storage::{FileStorage, Storage};
 
 const TUI_NOSTR_RELAYS_ENV: &str = "FROSTDAO_TUI_NOSTR_RELAYS";
@@ -228,38 +228,55 @@ impl App {
             .iter()
             .find(|wallet| wallet.name == wallet_name)
             .ok_or_else(|| anyhow::anyhow!("wallet '{wallet_name}' is not loaded"))?;
-        let from_address = wallet
+        wallet
             .address
             .as_deref()
             .map(str::trim)
             .filter(|address| !address.is_empty())
-            .ok_or_else(|| anyhow::anyhow!("wallet '{wallet_name}' has no known source address"))?
-            .to_string();
+            .ok_or_else(|| anyhow::anyhow!("wallet '{wallet_name}' has no known source address"))?;
 
-        let session_id = format!("session-{timestamp}");
-        let fee_rate = 10;
-        let sighash = format!("{timestamp:064x}");
+        let state_dir = get_state_dir(wallet_name);
+        let storage = FileStorage::new(&state_dir)?;
+        let build = frostdao::protocol::dkg_tx::build_unsigned_tx_core(
+            wallet_name,
+            &to_address,
+            self.nostr_amount_sats,
+            Some(10),
+            self.network.to_bitcoin_network(),
+            &storage,
+        )?;
+        let build_output: frostdao::protocol::dkg_tx::BuildTxOutput =
+            serde_json::from_str(&build.result)?;
 
-        Ok(TxProposal {
-            session_id,
+        Ok(self.nostr_tx_proposal_from_build_output(wallet_name, timestamp, build_output))
+    }
+
+    fn nostr_tx_proposal_from_build_output(
+        &self,
+        wallet_name: &str,
+        timestamp: u64,
+        build: frostdao::protocol::dkg_tx::BuildTxOutput,
+    ) -> TxProposal {
+        TxProposal {
+            session_id: build.session_id,
             wallet_name: wallet_name.to_string(),
             proposer_index: self.nostr_my_index,
-            to_address: to_address.clone(),
-            amount_sats: self.nostr_amount_sats,
-            fee_rate,
-            sighash: sighash.clone(),
+            to_address: build.to_address.clone(),
+            amount_sats: build.amount_sats,
+            fee_rate: build.review.fee_rate_sats_vb,
+            sighash: build.sighash,
             review: frostdao::nostr::TxReviewPayload {
                 network: self.network.display_name().to_string(),
-                source_path: "root key-path".to_string(),
-                from_address,
-                to_address,
-                amount_sats: self.nostr_amount_sats,
-                fee_rate_sats_vb: fee_rate,
-                sighash_fingerprint: frostdao::protocol::dkg_tx::sighash_fingerprint(&sighash),
+                source_path: build.review.source_path,
+                from_address: build.from_address,
+                to_address: build.to_address,
+                amount_sats: build.amount_sats,
+                fee_rate_sats_vb: build.review.fee_rate_sats_vb,
+                sighash_fingerprint: build.review.sighash_fingerprint,
             },
-            description: format!("Send {} sats", self.nostr_amount_sats),
+            description: format!("Send {} sats", build.amount_sats),
             timestamp,
-        })
+        }
     }
 
     /// Navigate to next wallet
@@ -1609,25 +1626,49 @@ mod tests {
     }
 
     #[test]
-    fn tui_nostr_tx_proposal_builder_validates_and_populates_review() {
+    fn tui_nostr_tx_proposal_conversion_populates_review() {
         let app = app_with_wallet(Some(test_address(Network::Testnet)));
+        let sighash = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+        let build = frostdao::protocol::dkg_tx::BuildTxOutput {
+            session_id: "real-session".to_string(),
+            sighash: sighash.to_string(),
+            unsigned_tx: "02000000000100".to_string(),
+            from_address: test_address(Network::Testnet),
+            to_address: app.nostr_to_address.clone(),
+            amount_sats: 50_000,
+            fee_sats: 1_000,
+            network: "testnet".to_string(),
+            review: frostdao::protocol::dkg_tx::TransactionReview {
+                network: "testnet".to_string(),
+                source_path: "root key-path".to_string(),
+                from_address: test_address(Network::Testnet),
+                to_address: app.nostr_to_address.clone(),
+                amount_sats: 50_000,
+                fee_sats: 1_000,
+                fee_rate_sats_vb: 10,
+                sighash_fingerprint: frostdao::protocol::dkg_tx::sighash_fingerprint(sighash),
+            },
+            event_type: "dkg_build_tx".to_string(),
+        };
 
-        let proposal = app
-            .build_nostr_tx_proposal("wallet-test", 1_700_000_000)
-            .unwrap();
+        let proposal = app.nostr_tx_proposal_from_build_output("wallet-test", 1_700_000_000, build);
 
-        assert_eq!(proposal.session_id, "session-1700000000");
+        assert_eq!(proposal.session_id, "real-session");
         assert_eq!(proposal.wallet_name, "wallet-test");
         assert_eq!(proposal.proposer_index, 2);
         assert_eq!(proposal.to_address, app.nostr_to_address);
         assert_eq!(proposal.amount_sats, 50_000);
         assert_eq!(proposal.fee_rate, 10);
+        assert_eq!(proposal.sighash, sighash);
         assert_eq!(proposal.review.network, "Testnet3");
         assert_eq!(proposal.review.from_address, test_address(Network::Testnet));
         assert_eq!(proposal.review.to_address, app.nostr_to_address);
         assert_eq!(proposal.review.amount_sats, 50_000);
         assert_eq!(proposal.review.fee_rate_sats_vb, 10);
-        assert!(!proposal.review.sighash_fingerprint.is_empty());
+        assert_eq!(
+            proposal.review.sighash_fingerprint,
+            "001122334455...aabbccddeeff"
+        );
     }
 
     #[test]

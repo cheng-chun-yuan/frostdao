@@ -484,7 +484,7 @@ def check_nostr_transaction_review():
         ("src/tui/mod.rs", tui, "No pending proposals received"),
         ("src/tui/screens/nostr_sign.rs", screen, "Sighash fingerprint: "),
         ("src/tui/screens/nostr_sign.rs", screen, "nostr_pending_proposals"),
-        ("docs/RUN_GUIDE.md", run_guide, "publish versioned `tx_proposal` and `tx_consent` messages"),
+        ("docs/RUN_GUIDE.md", run_guide, "proposal carries a real unsigned transaction session"),
         ("docs/RUN_GUIDE.md", run_guide, "Runtime polling also ingests incoming `tx_proposal` messages"),
         ("docs/RUN_GUIDE.md", run_guide, "Session-scoped signing messages without an explicit envelope `session` are ignored"),
         ("docs/RUN_GUIDE.md", run_guide, "pending proposals are filtered by their envelope `wallet` before display"),

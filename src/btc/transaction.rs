@@ -110,12 +110,9 @@ fn get_api_base(network: Network) -> Result<&'static str> {
     match network {
         Network::Bitcoin => Ok(MEMPOOL_MAINNET_API),
         Network::Testnet => Ok(MEMPOOL_TESTNET_API),
+        Network::Testnet4 => Ok("https://mempool.space/testnet4/api"),
         Network::Signet => Ok(MEMPOOL_SIGNET_API),
         Network::Regtest => anyhow::bail!("regtest does not have a mempool.space API endpoint"),
-        other => anyhow::bail!(
-            "unsupported Bitcoin network '{}' for mempool.space API",
-            network_name(other)
-        ),
     }
 }
 
@@ -123,9 +120,9 @@ fn network_name(network: Network) -> &'static str {
     match network {
         Network::Bitcoin => "mainnet",
         Network::Testnet => "testnet",
+        Network::Testnet4 => "testnet4",
         Network::Signet => "signet",
         Network::Regtest => "regtest",
-        _ => "unknown",
     }
 }
 

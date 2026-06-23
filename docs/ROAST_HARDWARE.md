@@ -49,7 +49,7 @@ Implement a testnet/signet-only coordinator for single-input Taproot key-path sp
 6. Combine and broadcast only after threshold-valid shares are present.
 7. Record metadata-only audit events.
 
-Do not claim ROAST robustness until bad-share identification and signer exclusion are implemented and tested. A simple coordinator state machine is still useful before full ROAST because it removes fake TUI proposal data and prevents mixing nonces or shares between attempts.
+Do not claim ROAST robustness until bad-share identification and signer exclusion are implemented and tested. A simple coordinator state machine is still useful before full ROAST because it prevents mixing nonces or shares between signing attempts.
 
 ## Nostr Message Changes
 
