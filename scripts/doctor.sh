@@ -156,7 +156,7 @@ def check_old_docs_not_referenced():
 
 def check_stale_patterns():
     offenders = []
-    for path in [*DOCS, *Path("src").rglob("*.rs"), *Path("scripts").glob("*.sh")]:
+    for path in [Path("agent.md"), *DOCS, *Path("src").rglob("*.rs"), *Path("scripts").glob("*.sh")]:
         if path == Path("scripts/doctor.sh"):
             continue
         text = read(path)

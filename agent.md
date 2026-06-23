@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-FrostDAO is a Rust implementation of FROST threshold signatures with hierarchical TSS for Bitcoin Taproot. The repository contains a CLI, terminal UI, WebAssembly exports, a small static frontend, and integration tests for DKG, signing, resharing, and NIP-44 encryption.
+FrostDAO is a Rust implementation of FROST threshold signatures with hierarchical TSS for Bitcoin Taproot. The repository contains a CLI, terminal UI, Nostr relay protocol layer, Bitcoin transaction tooling, and integration tests for DKG, signing, resharing, recovery, backups, Miniscript policy preview, and NIP-44 encryption.
 
 ## Working Rules
 
@@ -14,9 +14,9 @@ FrostDAO is a Rust implementation of FROST threshold signatures with hierarchica
   - `src/protocol/` for DKG, signing, reshare, and recovery flows.
   - `src/crypto/` for Birkhoff, HD derivation, helpers, and encryption primitives.
   - `src/btc/` for Bitcoin address, script, Schnorr, and transaction logic.
-- `src/tui/` for terminal UI state, screens, and components.
-- `frontend/` for browser-facing static assets and wasm consumers.
-- `src/nostr/` for relay transport and versioned message envelopes; keep cryptography outside this layer.
+  - `src/tui/` for terminal UI state, screens, and components.
+  - `src/nostr/` for relay transport and versioned message envelopes; keep cryptography outside this layer.
+- Keep the project testnet/signet-first. Mainnet transaction and relay actions require explicit environment opt-ins documented in `docs/RUN_GUIDE.md`.
 
 ## Quality Commands
 
@@ -53,7 +53,6 @@ Build commands:
 ```bash
 cargo build
 ./scripts/build.sh
-./scripts/wasm-build.sh
 ```
 
 ## Style
@@ -61,7 +60,6 @@ cargo build
 - Keep error handling explicit with `Result` and contextual messages where failures cross user-facing boundaries.
 - Avoid `unwrap` and `expect` outside tests unless the invariant is local and obvious.
 - Prefer typed structs and serde over ad hoc string parsing for protocol payloads.
-- Keep frontend JavaScript small and direct; do not introduce a framework without a clear need.
 - Add tests for behavioral changes, especially in protocol, Bitcoin, storage, and serialization code.
 
 ## Review Focus
@@ -71,5 +69,5 @@ When reviewing or improving code quality, prioritize:
 1. Security-sensitive correctness issues.
 2. Serialization and compatibility regressions.
 3. Error handling that can hide failed protocol state.
-4. Panics in CLI, TUI, wasm, or network-facing paths.
+4. Panics in CLI, TUI, or network-facing paths.
 5. Duplicated logic that can diverge across protocol flows.
