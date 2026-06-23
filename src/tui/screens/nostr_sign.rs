@@ -39,7 +39,7 @@ pub fn render_nostr_sign(frame: &mut Frame, app: &App, area: Rect) {
         NostrSignState::ReviewProposal { .. } => "Review Proposal",
         NostrSignState::WaitingForExecution { .. } => "Waiting",
         NostrSignState::CollectingShares { .. } => "Collecting Shares",
-        NostrSignState::Combining => "Combining",
+        NostrSignState::Combining { .. } => "Combining",
         NostrSignState::Complete { .. } => "Complete",
     };
 
@@ -96,7 +96,9 @@ fn get_progress(state: &NostrSignState, app: &App) -> (u16, String) {
             let pct = 60 + (count * 30 / total.max(1)) as u16;
             (pct, format!("Shares: {}/{} received", count, total))
         }
-        NostrSignState::Combining => (95, "Combining signatures...".to_string()),
+        NostrSignState::Combining { .. } => {
+            (95, "Waiting for transaction broadcast...".to_string())
+        }
         NostrSignState::Complete { txid } => (100, format!("✓ Broadcast: {}...", &txid[..8])),
     }
 }
@@ -266,6 +268,25 @@ fn render_status_info(frame: &mut Frame, app: &App, area: Rect) {
                 Line::from(Span::styled(
                     "Threshold reached! Collecting signature shares...",
                     Style::default().fg(Color::Green),
+                )),
+            ]
+        }
+        NostrSignState::Combining {
+            wallet_name,
+            session_id,
+        } => {
+            vec![
+                Line::from(vec![
+                    Span::styled("Wallet: ", Style::default().fg(Color::Gray)),
+                    Span::styled(wallet_name, Style::default().fg(Color::White)),
+                    Span::raw("  "),
+                    Span::styled("Session: ", Style::default().fg(Color::Gray)),
+                    Span::styled(&session_id[..8], Style::default().fg(Color::Cyan)),
+                ]),
+                Line::from(""),
+                Line::from(Span::styled(
+                    "Waiting for real transaction broadcast confirmation...",
+                    Style::default().fg(Color::Yellow),
                 )),
             ]
         }

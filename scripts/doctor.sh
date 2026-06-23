@@ -34,6 +34,8 @@ KNOWN_STALE_PATTERNS = [
     "Press F5",
     "F5:",
     "N:Nostr",
+    "Simulate completion",
+    "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
 ]
 
 

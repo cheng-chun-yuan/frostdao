@@ -642,6 +642,9 @@ impl App {
                         } | NostrSignState::CollectingShares {
                             session_id: active_session,
                             ..
+                        } | NostrSignState::Combining {
+                            session_id: active_session,
+                            ..
                         } if *active_session == session_id
                     ) {
                         self.nostr_sign_state = NostrSignState::Complete { txid: payload.txid };
@@ -1424,6 +1427,10 @@ mod tests {
             panic!("expected CollectingShares");
         }
 
+        app.nostr_sign_state = NostrSignState::Combining {
+            wallet_name: "wallet-test".to_string(),
+            session_id: "session-remote".to_string(),
+        };
         let broadcast_event = frostdao::nostr::TxBroadcastEvent {
             txid: "txid-remote".to_string(),
             raw_tx: "raw-remote-transaction".to_string(),

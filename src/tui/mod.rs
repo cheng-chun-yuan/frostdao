@@ -2544,6 +2544,7 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                     | NostrSignState::ViewProposals { .. }
                     | NostrSignState::WaitingForExecution { .. }
                     | NostrSignState::CollectingShares { .. }
+                    | NostrSignState::Combining { .. }
             ) {
                 if let Err(e) = app.poll_nostr_room_runtime() {
                     app.message = Some(format!("Nostr poll error: {}", e));
@@ -2672,23 +2673,26 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                     };
                 }
                 NostrSignState::CollectingShares {
-                    received_shares, ..
+                    wallet_name,
+                    session_id,
+                    received_shares,
                 } => {
                     if received_shares.len() >= app.nostr_threshold as usize {
-                        app.nostr_sign_state = NostrSignState::Combining;
-                        app.set_message("Combining signature shares...");
+                        app.nostr_sign_state = NostrSignState::Combining {
+                            wallet_name: wallet_name.clone(),
+                            session_id: session_id.clone(),
+                        };
+                        app.set_message(
+                            "Threshold reached; waiting for real transaction broadcast...",
+                        );
                     } else {
                         app.set_message("Waiting for more shares...");
                     }
                 }
-                NostrSignState::Combining => {
-                    // Simulate completion
-                    let fake_txid =
-                        "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456";
-                    app.nostr_sign_state = NostrSignState::Complete {
-                        txid: fake_txid.to_string(),
-                    };
-                    app.set_message("Transaction broadcast!");
+                NostrSignState::Combining { .. } => {
+                    app.set_message(
+                        "Waiting for real tx_broadcast; use CLI broadcast until TUI signing is wired",
+                    );
                 }
                 NostrSignState::Complete { .. } => {
                     // Done, go back to room

@@ -509,8 +509,11 @@ pub enum NostrSignState {
         session_id: String,
         received_shares: std::collections::HashMap<u32, String>,
     },
-    /// Combining and broadcasting
-    Combining,
+    /// Combining and waiting for real broadcast confirmation
+    Combining {
+        wallet_name: String,
+        session_id: String,
+    },
     /// Transaction broadcast
     Complete { txid: String },
 }
