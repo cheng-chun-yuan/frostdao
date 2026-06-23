@@ -620,6 +620,25 @@ impl App {
                     if !self.accept_nostr_tx_proposal(&message, &payload) {
                         continue;
                     }
+                    self.append_nostr_audit_event(
+                        frostdao::audit::AuditEvent::new(
+                            "nostr_tx_proposal_received",
+                            &wallet_name,
+                            "accepted",
+                        )
+                        .with_field("room", self.nostr_room_id.clone())
+                        .with_field("transport", self.nostr_transport_label())
+                        .with_field("session_id", session_id.clone())
+                        .with_field("party_index", message.from)
+                        .with_field("network", payload.review.network.clone())
+                        .with_field("to_address", payload.to_address.clone())
+                        .with_field("amount_sats", payload.amount_sats)
+                        .with_field("fee_rate_sats_vb", payload.fee_rate)
+                        .with_field(
+                            "sighash_fingerprint",
+                            payload.review.sighash_fingerprint.clone(),
+                        ),
+                    );
                     self.nostr_pending_proposals.insert(
                         session_id.clone(),
                         TxProposal {
@@ -648,6 +667,7 @@ impl App {
                         continue;
                     }
                     if payload.consent {
+                        let mut accepted_fingerprint = None;
                         if let NostrSignState::WaitingForConsent {
                             wallet_name,
                             session_id,
@@ -663,17 +683,36 @@ impl App {
                                 && payload.reviewed_sighash_fingerprint
                                     == proposal.review.sighash_fingerprint
                             {
+                                accepted_fingerprint =
+                                    Some(payload.reviewed_sighash_fingerprint.clone());
                                 consents.insert(
                                     message.from,
                                     payload.reviewed_sighash_fingerprint.clone(),
                                 );
                             }
                         }
+                        if let Some(fingerprint) = accepted_fingerprint {
+                            self.append_nostr_audit_event(
+                                frostdao::audit::AuditEvent::new(
+                                    "nostr_tx_consent_received",
+                                    &message_wallet,
+                                    "accepted",
+                                )
+                                .with_field("room", self.nostr_room_id.clone())
+                                .with_field("transport", self.nostr_transport_label())
+                                .with_field("session_id", session_id)
+                                .with_field("party_index", message.from)
+                                .with_field("sighash_fingerprint", fingerprint),
+                            );
+                        }
                     }
                 }
                 frostdao::nostr::NostrMessageKind::SigningNonceEncrypted => {
                     let payload: frostdao::nostr::SigningNonceEvent = message.payload_as()?;
                     let Some(session_id) = nonempty_message_session(&message) else {
+                        continue;
+                    };
+                    let Some(message_wallet) = nonempty_message_wallet(&message) else {
                         continue;
                     };
                     if !self.accept_nostr_party_ciphertext(
@@ -683,14 +722,30 @@ impl App {
                     ) {
                         continue;
                     }
+                    let audit_session_id = session_id.clone();
                     self.nostr_received_nonces
                         .entry(session_id)
                         .or_default()
                         .insert(payload.party_index, payload.ciphertext);
+                    self.append_nostr_audit_event(
+                        frostdao::audit::AuditEvent::new(
+                            "nostr_signing_nonce_received",
+                            &message_wallet,
+                            "accepted",
+                        )
+                        .with_field("room", self.nostr_room_id.clone())
+                        .with_field("transport", self.nostr_transport_label())
+                        .with_field("session_id", audit_session_id)
+                        .with_field("party_index", payload.party_index)
+                        .with_field("to_index", payload.to_index),
+                    );
                 }
                 frostdao::nostr::NostrMessageKind::SigningShareEncrypted => {
                     let payload: frostdao::nostr::SigningShareEvent = message.payload_as()?;
                     let Some(session_id) = nonempty_message_session(&message) else {
+                        continue;
+                    };
+                    let Some(message_wallet) = nonempty_message_wallet(&message) else {
                         continue;
                     };
                     if !self.accept_nostr_party_ciphertext(
@@ -704,6 +759,18 @@ impl App {
                         .entry(session_id.clone())
                         .or_default()
                         .insert(payload.party_index, payload.ciphertext.clone());
+                    self.append_nostr_audit_event(
+                        frostdao::audit::AuditEvent::new(
+                            "nostr_signing_share_received",
+                            &message_wallet,
+                            "accepted",
+                        )
+                        .with_field("room", self.nostr_room_id.clone())
+                        .with_field("transport", self.nostr_transport_label())
+                        .with_field("session_id", session_id.clone())
+                        .with_field("party_index", payload.party_index)
+                        .with_field("to_index", payload.to_index),
+                    );
                     if let NostrSignState::CollectingShares {
                         session_id: active_session,
                         received_shares,
@@ -733,6 +800,19 @@ impl App {
                     }
                     self.nostr_broadcasts
                         .insert(session_id.clone(), payload.clone());
+                    self.append_nostr_audit_event(
+                        frostdao::audit::AuditEvent::new(
+                            "nostr_tx_broadcast_received",
+                            &message_wallet,
+                            "accepted",
+                        )
+                        .with_field("room", self.nostr_room_id.clone())
+                        .with_field("transport", self.nostr_transport_label())
+                        .with_field("session_id", session_id.clone())
+                        .with_field("party_index", message.from)
+                        .with_field("network", payload.network.clone())
+                        .with_field("txid", payload.txid.clone()),
+                    );
                     if matches!(
                         &self.nostr_sign_state,
                         NostrSignState::WaitingForExecution {
@@ -2568,6 +2648,26 @@ mod tests {
             &app.nostr_sign_state,
             NostrSignState::Complete { txid } if txid == &broadcast_event.txid
         ));
+        let audit_event_names = app
+            .audit_events
+            .iter()
+            .map(|event| event.event.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            audit_event_names,
+            vec![
+                "nostr_tx_proposal_received",
+                "nostr_tx_consent_received",
+                "nostr_signing_nonce_received",
+                "nostr_signing_share_received",
+                "nostr_tx_broadcast_received",
+            ]
+        );
+        for event in &app.audit_events {
+            assert!(event.fields.get("ciphertext").is_none());
+            assert!(event.fields.get("raw_tx").is_none());
+            assert!(event.fields.get("sighash").is_none());
+        }
 
         let _ = std::fs::remove_file(&cache_path);
     }
