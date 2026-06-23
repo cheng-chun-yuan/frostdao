@@ -272,6 +272,13 @@ FROSTDAO_TUI_NOSTR_RELAYS=wss://relay.damus.io cargo run
 
 Mainnet relay rooms are blocked unless `FROSTDAO_ENABLE_MAINNET_NOSTR=1` is also set. Keep mainnet disabled until the relay integration tests and remaining live ceremony gates in [Production Readiness](PRODUCTION_READINESS.md) are complete.
 
+Run the opt-in relay smoke test before a relay-backed release candidate:
+
+```bash
+./scripts/nostr-relay-smoke.sh ws://127.0.0.1:8080
+./scripts/nostr-relay-smoke.sh wss://relay.damus.io
+```
+
 Sensitive payloads must be NIP-44 encrypted before relay publishing. The relay should only see public status messages and ciphertext.
 
 ## 12. Useful Commands

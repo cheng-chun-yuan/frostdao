@@ -17,6 +17,13 @@ Run when touching browser or WASM behavior:
 ./scripts/quality.sh --with-wasm
 ```
 
+Run before any relay-backed release candidate, once against an operator-controlled local relay and once against an independent public relay:
+
+```bash
+./scripts/nostr-relay-smoke.sh ws://127.0.0.1:8080
+./scripts/nostr-relay-smoke.sh wss://relay.damus.io
+```
+
 The doctor check verifies documentation links, stale command/keymap strings, CLI/docs command drift, script executable bits, and agent-payment draft semantics. The full gate runs doctor first, then checks formatting, strict Clippy, all tests, debug build, and rustdoc warnings.
 
 ## Security Invariants
@@ -47,7 +54,7 @@ The doctor check verifies documentation links, stale command/keymap strings, CLI
 ## Required Before Mainnet
 
 - Wire the guarded TUI room runtime into live relay keygen, signing, reshare, and recovery ceremonies.
-- Add relay integration tests against at least one local relay and one public relay.
+- Run the opt-in relay smoke test against at least one local relay and one public relay for every release candidate.
 - Complete public relay-backed TUI room transport testing for non-demo rooms.
 - Replace demo/runtime-published TUI proposal and consent messages with public relay-backed proposal, consent, and broadcast paths for non-demo rooms.
 - Extend structured audit logs that exclude secret material to every live relay ceremony path.

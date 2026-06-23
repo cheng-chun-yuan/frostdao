@@ -270,8 +270,11 @@ def check_replay_cache_persistence():
     source = read(Path("src/nostr/transport.rs"))
     module = read(Path("src/nostr/mod.rs"))
     app = read(Path("src/tui/app.rs"))
+    smoke_test = read(Path("tests/nostr_relay_smoke.rs"))
+    smoke_script = read(Path("scripts/nostr-relay-smoke.sh"))
     docs = read(Path("docs/NOSTR_PROTOCOL.md"))
     run_guide = read(Path("docs/RUN_GUIDE.md"))
+    production = read(Path("docs/PRODUCTION_READINESS.md"))
     required = [
         "pub struct FileReplayCache",
         "pub struct NostrRoomRuntime",
@@ -290,6 +293,17 @@ def check_replay_cache_persistence():
     missing.extend([f"src/nostr/client.rs: {item}" for item in client_required if item not in client])
     if "RelayRoomTransport" not in module:
         missing.append("src/nostr/mod.rs: RelayRoomTransport export")
+    smoke_required = [
+        "relay_room_transport_round_trips_public_room_join",
+        "#[ignore = \"requires reachable Nostr relay URLs in FROSTDAO_TEST_NOSTR_RELAYS\"]",
+        "FROSTDAO_TEST_NOSTR_RELAYS",
+    ]
+    missing.extend([f"tests/nostr_relay_smoke.rs: {item}" for item in smoke_required if item not in smoke_test])
+    script_required = [
+        "FROSTDAO_TEST_NOSTR_RELAYS",
+        "cargo test --all-features --test nostr_relay_smoke -- --ignored --nocapture",
+    ]
+    missing.extend([f"scripts/nostr-relay-smoke.sh: {item}" for item in script_required if item not in smoke_script])
     app_required = [
         "pub nostr_runtime",
         "pub enum TuiNostrRuntime",
@@ -313,6 +327,10 @@ def check_replay_cache_persistence():
         missing.append("RUN_GUIDE relay opt-in env documentation")
     if "FROSTDAO_ENABLE_MAINNET_NOSTR=1" not in run_guide:
         missing.append("RUN_GUIDE mainnet relay guard documentation")
+    if "./scripts/nostr-relay-smoke.sh ws://127.0.0.1:8080" not in production:
+        missing.append("PRODUCTION_READINESS local relay smoke command")
+    if "./scripts/nostr-relay-smoke.sh wss://relay.damus.io" not in production:
+        missing.append("PRODUCTION_READINESS public relay smoke command")
 
     if missing:
         doctor.fail(f"persisted replay cache markers missing: {', '.join(missing)}")
