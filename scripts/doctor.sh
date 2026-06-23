@@ -322,6 +322,8 @@ def check_replay_cache_persistence():
         "FROSTDAO_TUI_NOSTR_RELAYS",
         "FROSTDAO_ENABLE_MAINNET_NOSTR",
         "tui_nostr_relay_mode_is_guarded_on_mainnet",
+        "accept_nostr_room_join",
+        "tui_nostr_room_rejects_malformed_join_payloads",
         "nostr_replay_cache_path",
         "tui_nostr_room_uses_runtime_and_replay_cache",
     ]
@@ -331,6 +333,10 @@ def check_replay_cache_persistence():
             missing.append(f"NOSTR_PROTOCOL {marker} documentation")
     if "TUI room screen creates a `NostrRoomRuntime`" not in run_guide:
         missing.append("RUN_GUIDE TUI NostrRoomRuntime documentation")
+    if "Room joins are accepted only when the payload party, threshold, party count, scheme, and rank shape match the active room" not in run_guide:
+        missing.append("RUN_GUIDE validated room join documentation")
+    if "payload `party_index` must match the envelope `from` party" not in docs:
+        missing.append("NOSTR_PROTOCOL room join party binding documentation")
     if "relay transport adapter" not in run_guide:
         missing.append("RUN_GUIDE relay transport adapter documentation")
     if "FROSTDAO_TUI_NOSTR_RELAYS" not in run_guide:

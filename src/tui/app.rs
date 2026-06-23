@@ -551,8 +551,10 @@ impl App {
             match message.kind {
                 frostdao::nostr::NostrMessageKind::RoomJoin => {
                     let payload: frostdao::nostr::RoomJoinPayload = message.payload_as()?;
-                    self.nostr_participants
-                        .insert(payload.party_index, payload.nostr_pubkey);
+                    if self.accept_nostr_room_join(&message, &payload) {
+                        self.nostr_participants
+                            .insert(payload.party_index, payload.nostr_pubkey);
+                    }
                 }
                 frostdao::nostr::NostrMessageKind::TxProposal
                     if message.from != self.nostr_my_index =>
@@ -1100,6 +1102,20 @@ impl App {
             let _ = frostdao::audit::append(&event);
         }
     }
+
+    fn accept_nostr_room_join(
+        &self,
+        message: &frostdao::nostr::NostrProtocolMessage,
+        payload: &frostdao::nostr::RoomJoinPayload,
+    ) -> bool {
+        payload.party_index == message.from
+            && payload.party_index > 0
+            && payload.party_index <= self.nostr_n_parties
+            && payload.threshold == self.nostr_threshold
+            && payload.n_parties == self.nostr_n_parties
+            && payload.scheme == frostdao::nostr::ThresholdScheme::Tss
+            && payload.rank.is_none()
+    }
 }
 
 fn unix_timestamp_secs() -> u64 {
@@ -1175,6 +1191,97 @@ mod tests {
         assert!(!app.nostr_connected);
         assert!(app.nostr_runtime.is_none());
         assert!(app.nostr_participants.is_empty());
+
+        let _ = std::fs::remove_file(&cache_path);
+    }
+
+    #[test]
+    fn tui_nostr_room_rejects_malformed_join_payloads() {
+        let mut app = App::new().unwrap();
+        app.nostr_room_id = format!("tui-join-validation-test-{}", std::process::id());
+        app.nostr_my_index = 1;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 3;
+        let cache_path = app.nostr_replay_cache_path();
+        let _ = std::fs::remove_file(&cache_path);
+
+        app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
+
+        let mismatched_party = frostdao::nostr::RoomJoinPayload {
+            party_index: 3,
+            nostr_pubkey: "npub-claimed-party-3".to_string(),
+            threshold: 2,
+            n_parties: 3,
+            scheme: frostdao::nostr::ThresholdScheme::Tss,
+            rank: None,
+        };
+        let mismatched_message = frostdao::nostr::NostrProtocolMessage::new_at(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::RoomJoin,
+            2,
+            &mismatched_party,
+            1_700_001_000,
+        )
+        .unwrap()
+        .with_tss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(mismatched_message)
+            .unwrap();
+
+        let wrong_threshold = frostdao::nostr::RoomJoinPayload {
+            party_index: 2,
+            nostr_pubkey: "npub-wrong-threshold".to_string(),
+            threshold: 1,
+            n_parties: 3,
+            scheme: frostdao::nostr::ThresholdScheme::Tss,
+            rank: None,
+        };
+        let wrong_threshold_message = frostdao::nostr::NostrProtocolMessage::new_at(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::RoomJoin,
+            2,
+            &wrong_threshold,
+            1_700_001_001,
+        )
+        .unwrap()
+        .with_tss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(wrong_threshold_message)
+            .unwrap();
+
+        let htss_join = frostdao::nostr::RoomJoinPayload {
+            party_index: 2,
+            nostr_pubkey: "npub-htss".to_string(),
+            threshold: 2,
+            n_parties: 3,
+            scheme: frostdao::nostr::ThresholdScheme::Htss,
+            rank: Some(0),
+        };
+        let htss_message = frostdao::nostr::NostrProtocolMessage::new_at(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::RoomJoin,
+            2,
+            &htss_join,
+            1_700_001_002,
+        )
+        .unwrap()
+        .with_htss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(htss_message)
+            .unwrap();
+
+        app.poll_nostr_room_runtime().unwrap();
+        assert!(!app.nostr_participants.contains_key(&2));
+        assert!(!app.nostr_participants.contains_key(&3));
+
+        app.simulate_nostr_participant_join(2).unwrap();
+        assert_eq!(app.nostr_participants.get(&2).unwrap(), "npub-demo-2");
 
         let _ = std::fs::remove_file(&cache_path);
     }
