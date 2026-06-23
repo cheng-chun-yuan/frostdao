@@ -12,6 +12,7 @@ pub fn extract_json(output: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+#[allow(dead_code)]
 pub fn cleanup_state_prefix(prefix: &str) {
     let state_dir = ".frost_state";
     if let Ok(entries) = fs::read_dir(state_dir) {
