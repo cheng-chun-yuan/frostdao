@@ -22,7 +22,7 @@ This page is a guided map of the project for demos, reviews, and technical walkt
 | Production Readiness | Release gates, runbooks, and mainnet criteria | [Production Readiness](PRODUCTION_READINESS.md) |
 | Protocols | TSS, HTSS, DKG, signing, derivation, reshare, and recovery overview | [Protocols](PROTOCOLS.md) |
 | Nostr | Relay-based message protocol for DKG, signing, and resharing | [Nostr Protocol](NOSTR_PROTOCOL.md) |
-| Miniscript | Optional Taproot policy preview for fallback script paths | [Miniscript](MINISCRIPT.md) |
+| Miniscript | Optional Taproot policy templates and agent payment drafts | [Miniscript](MINISCRIPT.md) |
 | Security | Security invariants, threat model, and mainnet cautions | [Security Model](SECURITY_MODEL.md) |
 
 ## Demo Commands

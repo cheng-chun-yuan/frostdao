@@ -27,7 +27,7 @@ Avoid function keys for required actions. Use lowercase shortcuts in help text. 
 | `g` | Create demo/local wallet |
 | `n` | Select network |
 | `o` | Open Nostr room |
-| `p` | Open Miniscript policy preview, only with `miniscript-policy` feature |
+| `p` | Open Miniscript agent payment policy, only with `miniscript-policy` feature |
 | `h` | Reshare selected wallet |
 | `s` | Send from selected wallet |
 | `a` | View derived addresses |
@@ -170,9 +170,9 @@ The TUI does not provide a mnemonic copy shortcut. This keeps backup words delib
 | Send signature share | `c` copies JSON |
 | Send complete | `c` copies TXID |
 | Address list | `c` copies selected address |
-| Miniscript policy preview | `c` copies compiled JSON after compile |
+| Miniscript agent payment draft | `c` copies initialized JSON draft |
 
-## Miniscript Policy Preview
+## Miniscript Agent Payment Policy
 
 Requires:
 
@@ -182,10 +182,14 @@ cargo run --features miniscript-policy -- tui
 
 | Key | Action |
 |-----|--------|
-| `p` from Home | Open policy preview |
-| `Enter` | Compile policy |
-| `c` | Copy compiled JSON output |
+| `p` from Home | Open agent payment policy screen |
+| `Tab`, `Shift-Tab` | Move between agent label, pubkey, payment fields, and custom policy input |
+| `[` / `]` | Cycle common policy templates |
+| `Enter` | Initialize agent payment draft |
+| `c` | Copy initialized JSON draft |
 | `Esc` | Back to Home |
+
+The policy input remains editable. Use the templates as starting points, then type a custom Miniscript policy when the policy field is focused.
 
 ## Nostr Room
 

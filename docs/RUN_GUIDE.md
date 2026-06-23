@@ -217,7 +217,7 @@ frostdao dkg-address --name treasury
 frostdao dkg-address --name treasury_recovered
 ```
 
-## 10. Miniscript Policy Preview
+## 10. Miniscript Agent Payment Policy
 
 Miniscript support is optional and disabled in default builds.
 
@@ -227,15 +227,21 @@ cargo run --features miniscript-policy -- policy-compile \
   --internal-key INTERNAL
 ```
 
-TUI preview:
+TUI agent payment draft:
 
 ```bash
 cargo run --features miniscript-policy -- tui
 ```
 
-Press `p` on the home screen, edit the policy, press `Enter` to compile, and press `c` to copy the compiled output.
+Select a wallet, press `p` on the home screen, then fill the agent payment fields.
 
-This is compile/preview only. Script-path transaction signing is not wired yet.
+- `[` / `]` cycles common policy templates.
+- `Tab` moves through agent label, agent pubkey, recipient, amount, daily limit, agent index, and policy.
+- The policy field is editable for custom Miniscript.
+- `Enter` initializes a JSON payment draft using the selected wallet's derived agent address.
+- `c` copies the draft.
+
+This initializes a reviewable draft. Script-path transaction signing is not wired yet.
 
 ## 11. Nostr Multi-Device Protocol
 

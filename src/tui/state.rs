@@ -84,7 +84,7 @@ pub enum AppState {
     /// Nostr signing
     NostrSign,
 
-    /// Miniscript policy preview
+    /// Miniscript-backed agent payment draft
     #[cfg(feature = "miniscript-policy")]
     PolicyPreview,
 }

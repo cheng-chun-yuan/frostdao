@@ -56,7 +56,7 @@ pub struct App {
     /// Send wizard form data
     pub send_form: SendFormData,
 
-    /// Miniscript policy preview form
+    /// Miniscript-backed agent payment draft form
     #[cfg(feature = "miniscript-policy")]
     pub policy_preview_form: PolicyPreviewFormData,
 

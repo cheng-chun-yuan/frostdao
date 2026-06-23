@@ -29,6 +29,8 @@ use ratatui::{
     Frame, Terminal,
 };
 use std::io;
+#[cfg(feature = "miniscript-policy")]
+use std::str::FromStr;
 
 use app::App;
 use state::{
@@ -248,28 +250,231 @@ fn handle_policy_preview_keys(app: &mut App, key: KeyEvent) {
         KeyCode::Esc => {
             app.state = AppState::Home;
         }
+        KeyCode::Tab => {
+            app.policy_preview_form.focused_field = app.policy_preview_form.focused_field.next();
+        }
+        KeyCode::BackTab => {
+            app.policy_preview_form.focused_field = app.policy_preview_form.focused_field.prev();
+        }
+        KeyCode::Char(']') => {
+            app.policy_preview_form.next_preset();
+        }
+        KeyCode::Char('[') => {
+            app.policy_preview_form.prev_preset();
+        }
         KeyCode::Enter => {
-            let policy = app.policy_preview_form.policy_input.content();
-            match frostdao::btc::miniscript_policy::compile_taproot_policy(&policy, None) {
-                Ok(result) => {
-                    app.policy_preview_form.output =
-                        serde_json::to_string_pretty(&result).unwrap_or_else(|e| e.to_string());
-                    app.policy_preview_form.error = None;
-                }
-                Err(err) => {
-                    app.policy_preview_form.output.clear();
-                    app.policy_preview_form.error = Some(err.to_string());
-                }
-            }
+            initialize_agent_payment_policy(app);
         }
         KeyCode::Char('c') if !app.policy_preview_form.output.trim().is_empty() => {
             let output = app.policy_preview_form.output.clone();
             app.copy_to_clipboard(&output);
         }
         _ => {
+            handle_policy_preview_input(app, key);
+        }
+    }
+}
+
+#[cfg(feature = "miniscript-policy")]
+fn handle_policy_preview_input(app: &mut App, key: KeyEvent) {
+    use screens::PolicyPreviewField;
+
+    match app.policy_preview_form.focused_field {
+        PolicyPreviewField::AgentLabel => {
+            app.policy_preview_form.agent_label.handle_key(key);
+        }
+        PolicyPreviewField::AgentPubkey => {
+            app.policy_preview_form.agent_pubkey.handle_key(key);
+        }
+        PolicyPreviewField::Recipient => {
+            app.policy_preview_form.recipient.handle_key(key);
+        }
+        PolicyPreviewField::Amount => {
+            app.policy_preview_form.amount_sats.handle_key(key);
+        }
+        PolicyPreviewField::DailyLimit => {
+            app.policy_preview_form.daily_limit_sats.handle_key(key);
+        }
+        PolicyPreviewField::AgentIndex => {
+            app.policy_preview_form.agent_index.handle_key(key);
+        }
+        PolicyPreviewField::Policy => {
             app.policy_preview_form.policy_input.handle_key(key);
         }
     }
+}
+
+#[cfg(feature = "miniscript-policy")]
+fn initialize_agent_payment_policy(app: &mut App) {
+    let Some(wallet) = app.selected_wallet().cloned() else {
+        app.policy_preview_form.output.clear();
+        app.policy_preview_form.error =
+            Some("Select a wallet before initializing an agent payment policy".to_string());
+        return;
+    };
+
+    let agent_label = app.policy_preview_form.agent_label.value().trim();
+    let agent_xonly_pubkey = app.policy_preview_form.agent_pubkey.value().trim();
+    let recipient = app.policy_preview_form.recipient.value().trim();
+    let amount_sats = app
+        .policy_preview_form
+        .amount_sats
+        .value()
+        .trim()
+        .parse::<u64>()
+        .unwrap_or(0);
+    let daily_limit_sats = app
+        .policy_preview_form
+        .daily_limit_sats
+        .value()
+        .trim()
+        .parse::<u64>()
+        .unwrap_or(0);
+    let agent_index = app
+        .policy_preview_form
+        .agent_index
+        .value()
+        .trim()
+        .parse::<u32>()
+        .unwrap_or(0);
+
+    if agent_label.is_empty() {
+        app.policy_preview_form.output.clear();
+        app.policy_preview_form.error = Some("Agent label is required".to_string());
+        return;
+    }
+    if agent_xonly_pubkey.is_empty() {
+        app.policy_preview_form.output.clear();
+        app.policy_preview_form.error = Some("Agent pubkey is required".to_string());
+        return;
+    }
+    let agent_pubkey_bytes = match hex::decode(agent_xonly_pubkey) {
+        Ok(bytes) if bytes.len() == 32 => bytes,
+        Ok(_) => {
+            app.policy_preview_form.output.clear();
+            app.policy_preview_form.error =
+                Some("Agent pubkey must be 32-byte x-only hex".to_string());
+            return;
+        }
+        Err(err) => {
+            app.policy_preview_form.output.clear();
+            app.policy_preview_form.error = Some(format!("Invalid agent pubkey hex: {err}"));
+            return;
+        }
+    };
+    if let Err(err) = bitcoin::secp256k1::XOnlyPublicKey::from_slice(&agent_pubkey_bytes) {
+        app.policy_preview_form.output.clear();
+        app.policy_preview_form.error = Some(format!("Invalid agent x-only pubkey: {err}"));
+        return;
+    }
+    if recipient.is_empty() {
+        app.policy_preview_form.output.clear();
+        app.policy_preview_form.error = Some("Recipient address is required".to_string());
+        return;
+    }
+    if amount_sats == 0 {
+        app.policy_preview_form.output.clear();
+        app.policy_preview_form.error = Some("Amount must be greater than zero".to_string());
+        return;
+    }
+    if daily_limit_sats == 0 {
+        app.policy_preview_form.output.clear();
+        app.policy_preview_form.error = Some("Daily limit must be greater than zero".to_string());
+        return;
+    }
+
+    let state_dir = keygen::get_state_dir(&wallet.name);
+    let storage = match FileStorage::new(&state_dir) {
+        Ok(storage) => storage,
+        Err(err) => {
+            app.policy_preview_form.output.clear();
+            app.policy_preview_form.error = Some(format!("Cannot open wallet storage: {err}"));
+            return;
+        }
+    };
+
+    let network = app.network.to_bitcoin_network();
+    let recipient_address = match bitcoin::Address::from_str(recipient) {
+        Ok(address) => match address.require_network(network) {
+            Ok(address) => address.to_string(),
+            Err(err) => {
+                app.policy_preview_form.output.clear();
+                app.policy_preview_form.error = Some(format!(
+                    "Recipient address is invalid for {}: {err}",
+                    app.network.display_name()
+                ));
+                return;
+            }
+        },
+        Err(err) => {
+            app.policy_preview_form.output.clear();
+            app.policy_preview_form.error = Some(format!("Invalid recipient address: {err}"));
+            return;
+        }
+    };
+    let (frost_key_path_address, frost_control_pubkey) =
+        match frostdao::btc::hd_address::derive_address_at_path(&storage, 0, agent_index, network) {
+            Ok(result) => result,
+            Err(err) => {
+                app.policy_preview_form.output.clear();
+                app.policy_preview_form.error =
+                    Some(format!("Cannot derive agent payment address: {err}"));
+                return;
+            }
+        };
+
+    let policy_template = app.policy_preview_form.policy_input.content();
+    let policy_for_compile = policy_template
+        .replace("AGENT", agent_xonly_pubkey)
+        .replace("DAO", &frost_control_pubkey);
+    let compiled = match frostdao::btc::miniscript_policy::compile_taproot_policy(
+        &policy_for_compile,
+        Some(&frost_control_pubkey),
+    ) {
+        Ok(result) => result,
+        Err(err) => {
+            app.policy_preview_form.output.clear();
+            app.policy_preview_form.error = Some(err.to_string());
+            return;
+        }
+    };
+
+    let policy_status = if amount_sats <= daily_limit_sats {
+        "draft_amount_within_limit"
+    } else {
+        "draft_needs_dao_approval"
+    };
+    let draft = serde_json::json!({
+        "type": "frostdao.agent_payment_init",
+        "version": 1,
+        "wallet": wallet.name,
+        "network": app.network.display_name(),
+        "agent": {
+            "label": agent_label,
+            "pubkey": agent_xonly_pubkey,
+            "index": agent_index,
+            "derivation_path": format!("m/86'/0'/0'/0/{agent_index}"),
+            "frost_key_path_address": frost_key_path_address,
+            "frost_control_pubkey": frost_control_pubkey,
+        },
+        "payment": {
+            "recipient": recipient_address,
+            "amount_sats": amount_sats,
+            "daily_limit_sats": daily_limit_sats,
+            "status": policy_status,
+        },
+        "miniscript": {
+            "scope": "descriptor_preview_only_script_path_spending_not_wired",
+            "policy_template": policy_template,
+            "compiled_policy": compiled.policy,
+            "taproot_descriptor_preview": compiled.descriptor,
+            "warning": compiled.warning,
+        }
+    });
+
+    app.policy_preview_form.output =
+        serde_json::to_string_pretty(&draft).unwrap_or_else(|err| err.to_string());
+    app.policy_preview_form.error = None;
 }
 
 fn handle_chain_select_keys(app: &mut App, code: KeyCode) {
@@ -2590,7 +2795,9 @@ fn render_help_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
             AppState::NostrKeygen => "Enter:Continue | r:Retry | Esc:Cancel".to_string(),
             AppState::NostrSign => "Enter:Continue | ↑/↓:Navigate | Esc:Cancel".to_string(),
             #[cfg(feature = "miniscript-policy")]
-            AppState::PolicyPreview => "Enter:Compile | c:Copy output | Esc:Back".to_string(),
+            AppState::PolicyPreview => {
+                "Enter:Init draft | [/]:Template | Tab:Field | c:Copy | Esc:Back".to_string()
+            }
         }
     };
 

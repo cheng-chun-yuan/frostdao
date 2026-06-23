@@ -672,7 +672,7 @@ pub fn round1_core(
         n_parties
     ));
     out.push_str("➜ Copy the \"all commitments\" JSON from webpage\n");
-    out.push_str("➜ Run: frostdao dkg-round2 --data '<JSON>'\n");
+    out.push_str("➜ Run: frostdao keygen-round2 --data '<JSON>'\n");
 
     // Create JSON result for copy-pasting
     let output = Round1Output {
