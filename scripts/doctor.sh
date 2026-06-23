@@ -324,6 +324,8 @@ def check_replay_cache_persistence():
         "tui_nostr_relay_mode_is_guarded_on_mainnet",
         "accept_nostr_room_join",
         "tui_nostr_room_rejects_malformed_join_payloads",
+        "accept_nostr_party_ciphertext",
+        "tui_nostr_poll_rejects_mismatched_ciphertext_payload_parties",
         "nostr_replay_cache_path",
         "tui_nostr_room_uses_runtime_and_replay_cache",
     ]
@@ -337,6 +339,10 @@ def check_replay_cache_persistence():
         missing.append("RUN_GUIDE validated room join documentation")
     if "payload `party_index` must match the envelope `from` party" not in docs:
         missing.append("NOSTR_PROTOCOL room join party binding documentation")
+    if "Encrypted signing nonce/share payloads must bind `party_index` to the envelope `from`" not in docs:
+        missing.append("NOSTR_PROTOCOL ciphertext payload binding documentation")
+    if "ciphertext payload party and recipient match the envelope sender and local party" not in run_guide:
+        missing.append("RUN_GUIDE ciphertext payload binding documentation")
     if "relay transport adapter" not in run_guide:
         missing.append("RUN_GUIDE relay transport adapter documentation")
     if "FROSTDAO_TUI_NOSTR_RELAYS" not in run_guide:

@@ -617,6 +617,13 @@ impl App {
                     let Some(session_id) = nonempty_message_session(&message) else {
                         continue;
                     };
+                    if !self.accept_nostr_party_ciphertext(
+                        &message,
+                        payload.party_index,
+                        payload.to_index,
+                    ) {
+                        continue;
+                    }
                     self.nostr_received_nonces
                         .entry(session_id)
                         .or_default()
@@ -627,6 +634,13 @@ impl App {
                     let Some(session_id) = nonempty_message_session(&message) else {
                         continue;
                     };
+                    if !self.accept_nostr_party_ciphertext(
+                        &message,
+                        payload.party_index,
+                        payload.to_index,
+                    ) {
+                        continue;
+                    }
                     self.nostr_received_shares
                         .entry(session_id.clone())
                         .or_default()
@@ -1115,6 +1129,19 @@ impl App {
             && payload.n_parties == self.nostr_n_parties
             && payload.scheme == frostdao::nostr::ThresholdScheme::Tss
             && payload.rank.is_none()
+    }
+
+    fn accept_nostr_party_ciphertext(
+        &self,
+        message: &frostdao::nostr::NostrProtocolMessage,
+        party_index: u32,
+        to_index: u32,
+    ) -> bool {
+        party_index == message.from
+            && party_index > 0
+            && party_index <= self.nostr_n_parties
+            && to_index == self.nostr_my_index
+            && message.to == Some(self.nostr_my_index)
     }
 }
 
@@ -1658,6 +1685,162 @@ mod tests {
             &app.nostr_sign_state,
             NostrSignState::Combining { session_id, .. } if session_id == "session-expected"
         ));
+
+        let _ = std::fs::remove_file(&cache_path);
+    }
+
+    #[test]
+    fn tui_nostr_poll_rejects_mismatched_ciphertext_payload_parties() {
+        let mut app = App::new().unwrap();
+        app.nostr_room_id = format!("tui-ciphertext-binding-test-{}", std::process::id());
+        app.nostr_my_index = 1;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 3;
+        let cache_path = app.nostr_replay_cache_path();
+        let _ = std::fs::remove_file(&cache_path);
+
+        app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
+
+        let mismatched_nonce =
+            frostdao::nostr::SigningNonceEvent::new(3, 1, "bad-nonce".to_string());
+        let mismatched_nonce_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::SigningNonceEncrypted,
+            2,
+            &mismatched_nonce,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-ciphertext")
+        .with_tss()
+        .to_party(1)
+        .unwrap();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(mismatched_nonce_message)
+            .unwrap();
+
+        let wrong_payload_recipient =
+            frostdao::nostr::SigningNonceEvent::new(2, 3, "wrong-recipient".to_string());
+        let wrong_payload_recipient_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::SigningNonceEncrypted,
+            2,
+            &wrong_payload_recipient,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-ciphertext")
+        .with_tss()
+        .to_party(1)
+        .unwrap();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(wrong_payload_recipient_message)
+            .unwrap();
+
+        let out_of_room_share =
+            frostdao::nostr::SigningShareEvent::new(4, 1, "out-of-room-share".to_string());
+        let out_of_room_share_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::SigningShareEncrypted,
+            4,
+            &out_of_room_share,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-ciphertext")
+        .with_tss()
+        .to_party(1)
+        .unwrap();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(out_of_room_share_message)
+            .unwrap();
+
+        app.nostr_sign_state = NostrSignState::CollectingShares {
+            wallet_name: "wallet-test".to_string(),
+            session_id: "session-ciphertext".to_string(),
+            received_shares: std::collections::HashMap::new(),
+        };
+        app.poll_nostr_room_runtime().unwrap();
+        assert!(app.nostr_received_nonces.is_empty());
+        assert!(app.nostr_received_shares.is_empty());
+        if let NostrSignState::CollectingShares {
+            received_shares, ..
+        } = &app.nostr_sign_state
+        {
+            assert!(received_shares.is_empty());
+        } else {
+            panic!("expected CollectingShares");
+        }
+
+        let valid_nonce = frostdao::nostr::SigningNonceEvent::new(2, 1, "good-nonce".to_string());
+        let valid_nonce_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::SigningNonceEncrypted,
+            2,
+            &valid_nonce,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-ciphertext")
+        .with_tss()
+        .to_party(1)
+        .unwrap();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(valid_nonce_message)
+            .unwrap();
+
+        let valid_share = frostdao::nostr::SigningShareEvent::new(2, 1, "good-share".to_string());
+        let valid_share_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::SigningShareEncrypted,
+            2,
+            &valid_share,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-ciphertext")
+        .with_tss()
+        .to_party(1)
+        .unwrap();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(valid_share_message)
+            .unwrap();
+
+        app.poll_nostr_room_runtime().unwrap();
+        assert_eq!(
+            app.nostr_received_nonces
+                .get("session-ciphertext")
+                .unwrap()
+                .get(&2)
+                .unwrap(),
+            "good-nonce"
+        );
+        assert_eq!(
+            app.nostr_received_shares
+                .get("session-ciphertext")
+                .unwrap()
+                .get(&2)
+                .unwrap(),
+            "good-share"
+        );
+        if let NostrSignState::CollectingShares {
+            received_shares, ..
+        } = &app.nostr_sign_state
+        {
+            assert_eq!(received_shares.get(&2).unwrap(), "good-share");
+        } else {
+            panic!("expected CollectingShares");
+        }
 
         let _ = std::fs::remove_file(&cache_path);
     }
