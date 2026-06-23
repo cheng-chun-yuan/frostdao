@@ -6,6 +6,10 @@ pub mod protocol;
 pub mod storage;
 pub mod wasm;
 
+// Nostr module (not available in WASM)
+#[cfg(not(target_arch = "wasm32"))]
+pub mod nostr;
+
 // Re-export WASM functions
 pub use wasm::*;
 

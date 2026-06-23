@@ -20,6 +20,12 @@ pub fn render_mnemonic(frame: &mut Frame, state: &MnemonicState, area: Rect) {
             .unwrap_or(1);
         if party_idx == 0 {
             format!("Share Backup - {}", state.wallet_name)
+        } else if state.hierarchical {
+            let rank = state.party_ranks.get(&party_idx).copied().unwrap_or(0);
+            format!(
+                "Share Backup - {} (Party {} r{})",
+                state.wallet_name, party_idx, rank
+            )
         } else {
             format!("Share Backup - {} (Party {})", state.wallet_name, party_idx)
         }
@@ -71,6 +77,9 @@ pub fn render_mnemonic(frame: &mut Frame, state: &MnemonicState, area: Rect) {
             };
             let label = if *party_idx == 0 {
                 format!("{}Your Share (Legacy Wallet)", prefix)
+            } else if state.hierarchical {
+                let rank = state.party_ranks.get(party_idx).copied().unwrap_or(0);
+                format!("{}Party {} (r{}) - Secret Share", prefix, party_idx, rank)
             } else {
                 format!("{}Party {} - Secret Share", prefix, party_idx)
             };

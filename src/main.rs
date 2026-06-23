@@ -55,6 +55,10 @@ enum Commands {
         /// JSON with all commitments from round 1 (paste from webpage)
         #[arg(long)]
         data: String,
+
+        /// Enable NIP-44 E2E encryption for shares
+        #[arg(long, default_value = "false")]
+        encrypt: bool,
     },
 
     /// Finalize keygen: Validate and combine shares
@@ -213,9 +217,9 @@ enum Commands {
     },
 
     // ========================================================================
-    // HD Key Derivation (BIP-32/BIP-44) Commands
+    // HD Key Derivation (BIP-32/BIP-86) Commands (Taproot)
     // ========================================================================
-    /// Derive address at BIP-44 path (m/44'/0'/0'/change/index)
+    /// Derive address at BIP-86 path (m/86'/0'/0'/change/index)
     DkgDeriveAddress {
         /// Wallet name
         #[arg(long)]
@@ -300,6 +304,29 @@ enum Commands {
         /// JSON with round1 outputs from old parties
         #[arg(long)]
         data: String,
+    },
+
+    /// Local reshare: refresh all shares at once (when you have t parties locally)
+    ReshareLocal {
+        /// Source wallet name
+        #[arg(long)]
+        source: String,
+
+        /// Target wallet name (new wallet to create)
+        #[arg(long)]
+        target: String,
+
+        /// New threshold (optional, defaults to current)
+        #[arg(long)]
+        new_threshold: Option<u32>,
+
+        /// New total parties (optional, defaults to current)
+        #[arg(long)]
+        new_n_parties: Option<u32>,
+
+        /// Enable hierarchical mode
+        #[arg(long, default_value = "false")]
+        hierarchical: bool,
     },
 
     /// Recovery Round 1: Helper party generates sub-share for lost party
@@ -474,8 +501,12 @@ fn main() -> Result<()> {
         } => {
             keygen::round1(&name, threshold, n_parties, my_index, rank, hierarchical)?;
         }
-        Commands::KeygenRound2 { name, data } => {
-            keygen::round2(&name, &data)?;
+        Commands::KeygenRound2 {
+            name,
+            data,
+            encrypt,
+        } => {
+            keygen::round2(&name, &data, encrypt)?;
         }
         Commands::KeygenFinalize { name, data } => {
             keygen::finalize(&name, &data)?;
@@ -635,6 +666,15 @@ fn main() -> Result<()> {
             data,
         } => {
             reshare::reshare_finalize(&source, &target, my_index, rank, hierarchical, &data)?;
+        }
+        Commands::ReshareLocal {
+            source,
+            target,
+            new_threshold,
+            new_n_parties,
+            hierarchical,
+        } => {
+            reshare::reshare_local(&source, &target, new_threshold, new_n_parties, hierarchical)?;
         }
         Commands::RecoverRound1 { name, lost_index } => {
             recovery::recover_round1(&name, lost_index)?;

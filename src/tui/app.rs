@@ -6,7 +6,9 @@ use ratatui::widgets::ListState;
 use std::collections::HashMap;
 
 use crate::tui::screens::{KeygenFormData, ReshareFormData, SendFormData};
-use crate::tui::state::{AppState, NetworkSelection};
+use crate::tui::state::{
+    AppState, NetworkSelection, NostrKeygenState, NostrRoomField, NostrRoomPhase, NostrSignState,
+};
 use frostdao::protocol::keygen::{list_wallets, WalletSummary};
 use frostdao::storage::{FileStorage, Storage};
 
@@ -51,6 +53,36 @@ pub struct App {
 
     /// Send wizard form data
     pub send_form: SendFormData,
+
+    // Nostr room configuration
+    /// Current Nostr room ID
+    pub nostr_room_id: String,
+    /// My participant index (1-based)
+    pub nostr_my_index: u32,
+    /// Signing threshold
+    pub nostr_threshold: u32,
+    /// Total number of parties
+    pub nostr_n_parties: u32,
+    /// Whether connected to relay
+    pub nostr_connected: bool,
+    /// Current focused field in room config
+    pub nostr_room_focus: NostrRoomField,
+    /// Current room phase
+    pub nostr_room_phase: NostrRoomPhase,
+    /// Participants who have joined (party_index -> pubkey/name)
+    pub nostr_participants: HashMap<u32, String>,
+
+    // Nostr DKG/signing state
+    /// Current keygen state
+    pub nostr_keygen_state: NostrKeygenState,
+    /// Current signing state
+    pub nostr_sign_state: NostrSignState,
+
+    // Nostr signing transaction data
+    /// Recipient address for transaction
+    pub nostr_to_address: String,
+    /// Amount in satoshis
+    pub nostr_amount_sats: u64,
 }
 
 impl App {
@@ -74,6 +106,19 @@ impl App {
             keygen_form: KeygenFormData::new(),
             reshare_form: ReshareFormData::new(),
             send_form: SendFormData::new(),
+            // Nostr defaults
+            nostr_room_id: String::new(),
+            nostr_my_index: 1,
+            nostr_threshold: 2,
+            nostr_n_parties: 3,
+            nostr_connected: false,
+            nostr_room_focus: NostrRoomField::RoomId,
+            nostr_room_phase: NostrRoomPhase::Configure,
+            nostr_participants: HashMap::new(),
+            nostr_keygen_state: NostrKeygenState::ModeSelect,
+            nostr_sign_state: NostrSignState::SelectWallet,
+            nostr_to_address: String::new(),
+            nostr_amount_sats: 0,
         })
     }
 
@@ -324,10 +369,11 @@ impl App {
     /// Confirm network selection
     pub fn confirm_network(&mut self) {
         self.network = match self.chain_selector_index {
-            0 => NetworkSelection::Testnet,
-            1 => NetworkSelection::Signet,
-            2 => NetworkSelection::Mainnet,
-            _ => NetworkSelection::Testnet,
+            0 => NetworkSelection::Testnet4,
+            1 => NetworkSelection::Testnet3,
+            2 => NetworkSelection::Signet,
+            3 => NetworkSelection::Mainnet,
+            _ => NetworkSelection::Testnet4,
         };
         self.state = AppState::Home;
         self.message = Some(format!("Switched to {}", self.network.display_name()));

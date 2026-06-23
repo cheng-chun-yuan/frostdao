@@ -14,6 +14,23 @@ use std::collections::BTreeMap;
 
 const STATE_DIR: &str = ".frost_state";
 
+// ============================================================================
+// Signing Message Security Model
+// ============================================================================
+//
+// All signing messages are SAFE TO BROADCAST:
+//
+// | Message Type      | Why Safe                                          |
+// |-------------------|---------------------------------------------------|
+// | Nonces            | Ephemeral, unique per session, reveals nothing    |
+// | Signature Shares  | Partial signatures, can't derive secret key       |
+// | Final Signature   | Public output, verifiable by anyone               |
+//
+// Unlike DKG Round 2 shares, signing messages don't expose key material.
+// ============================================================================
+
+/// Nonce output - SAFE TO BROADCAST
+/// Ephemeral commitment used once per signing session
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NonceOutput {
     pub party_index: u32,
@@ -37,6 +54,8 @@ pub struct NonceData {
     pub nonce: String,
 }
 
+/// Signature share output - SAFE TO BROADCAST
+/// Partial signature that combines with others to form final signature
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SignatureShareOutput {
     pub party_index: u32,

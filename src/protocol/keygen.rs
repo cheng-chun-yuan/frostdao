@@ -77,8 +77,49 @@ where
     Ok(objects)
 }
 
+// ============================================================================
+// DKG Message Security Model (TSS & HTSS)
+// ============================================================================
+//
+// This codebase supports two modes:
+//
+// TSS (Threshold Signature Scheme):
+//   - All parties have equal authority
+//   - Any t-of-n parties can sign
+//   - Uses Lagrange interpolation
+//
+// HTSS (Hierarchical Threshold Signature Scheme):
+//   - Parties have ranks (0 = highest authority)
+//   - Only valid rank combinations can sign
+//   - Uses Birkhoff interpolation (derivative-aware)
+//   - Example: CEO (rank 0) must always participate
+//
+// ============================================================================
+// Message Security Requirements (same for TSS and HTSS):
+// ============================================================================
+//
+// | Message Type              | Channel    | Reason                           |
+// |---------------------------|------------|----------------------------------|
+// | Round 1: Commitments      | BROADCAST  | Public curve points, safe to share|
+// | Round 2: Secret Shares    | E2E ENCRYPT| Reveals polynomial evaluations!  |
+// | Signing: Nonces           | BROADCAST  | Ephemeral, used once per session |
+// | Signing: Signature Shares | BROADCAST  | Partial sigs, can't derive key   |
+//
+// Round 2 shares MUST be encrypted because:
+// - TSS:  Each party sends f_i(j) to party j
+// - HTSS: Each party sends f_i^(rank_j)(j) to party j (derivative)
+// - If an adversary collects t shares from different senders to the same
+//   recipient, they can reconstruct that recipient's final secret share
+// - With all n final shares, the adversary reconstructs the full private key!
+//
+// The --encrypt flag enables NIP-44 E2E encryption for Round 2 shares using
+// in-protocol key exchange (each party's com[0] = a₀*G serves as their pubkey).
+// ============================================================================
+
 // JSON structures for copy-paste interface
 
+/// Round 1 output - SAFE TO BROADCAST
+/// Contains only public commitments (curve points) and proof of possession
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Round1Output {
     pub party_index: u32,
@@ -87,6 +128,10 @@ pub struct Round1Output {
     pub keygen_input: String, // Bincode hex
     #[serde(default)]
     pub hierarchical: bool, // Whether HTSS mode is enabled
+    /// Encryption public key (x-only, 32 bytes hex) - derived from com[0] = a₀*G
+    /// Used for NIP-44 E2E encryption of Round 2 shares
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encryption_pubkey: Option<String>,
     #[serde(rename = "type")]
     pub event_type: String,
 }
@@ -102,6 +147,8 @@ pub struct CommitmentData {
     pub data: String, // Bincode hex of KeygenInput
 }
 
+/// Round 2 output (PLAINTEXT) - ⚠️ INSECURE FOR PUBLIC BROADCAST
+/// Use Round2EncryptedOutput for secure transmission over public channels
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Round2Output {
     pub party_index: u32,
@@ -110,10 +157,28 @@ pub struct Round2Output {
     pub event_type: String,
 }
 
+/// Plaintext share data - contains secret polynomial evaluation
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ShareData {
     pub to_index: u32,
-    pub share: String, // Bincode hex of secret scalar
+    pub share: String, // Hex of secret scalar f_i(to_index)
+}
+
+/// NIP-44 encrypted share data - SAFE TO BROADCAST
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct EncryptedShareData {
+    pub to_index: u32,
+    pub ciphertext: String, // NIP-44 encrypted share (base64)
+}
+
+/// Round 2 output (ENCRYPTED) - SAFE TO BROADCAST
+/// Shares are E2E encrypted using NIP-44 with in-protocol key exchange
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Round2EncryptedOutput {
+    pub party_index: u32,
+    pub encrypted_shares: Vec<EncryptedShareData>,
+    #[serde(rename = "type")]
+    pub event_type: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -148,9 +213,12 @@ pub struct HtssMetadata {
     pub hierarchical: bool,
     /// Map of party_index -> rank for all participants
     pub party_ranks: std::collections::BTreeMap<u32, u32>,
+    /// Signing requirement per rank (e.g., [1,2,2] = need 1 rank-0, 2 rank-1, 2 rank-2)
+    #[serde(default)]
+    pub signing_requirement: Option<Vec<u32>>,
 }
 
-/// HD wallet metadata for BIP-32/BIP-44 key derivation
+/// HD wallet metadata for BIP-32/BIP-86 key derivation (Taproot)
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HdMetadata {
     /// 32-byte chain code for HD derivation (hex encoded)
@@ -228,41 +296,46 @@ pub fn list_wallets() -> Result<Vec<WalletSummary>> {
 
         // Try to load metadata from htss_metadata.json
         let htss_path = path.join("htss_metadata.json");
-        let (threshold, total_parties, hierarchical) = if htss_path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&htss_path) {
-                if let Ok(htss) = serde_json::from_str::<HtssMetadata>(&content) {
-                    (
-                        Some(htss.threshold),
-                        Some(htss.party_ranks.len() as u32),
-                        Some(htss.hierarchical),
-                    )
-                } else {
-                    (None, None, None)
-                }
-            } else {
-                (None, None, None)
-            }
-        } else {
-            // Try group_info.json as fallback
-            let group_info_path = path.join("group_info.json");
-            if group_info_path.exists() {
-                if let Ok(content) = std::fs::read_to_string(&group_info_path) {
-                    if let Ok(info) = serde_json::from_str::<GroupInfo>(&content) {
+        let (threshold, total_parties, hierarchical, signing_requirement, party_ranks) =
+            if htss_path.exists() {
+                if let Ok(content) = std::fs::read_to_string(&htss_path) {
+                    if let Ok(htss) = serde_json::from_str::<HtssMetadata>(&content) {
                         (
-                            Some(info.threshold),
-                            Some(info.total_parties),
-                            Some(info.hierarchical),
+                            Some(htss.threshold),
+                            Some(htss.party_ranks.len() as u32),
+                            Some(htss.hierarchical),
+                            htss.signing_requirement,
+                            Some(htss.party_ranks),
                         )
                     } else {
-                        (None, None, None)
+                        (None, None, None, None, None)
                     }
                 } else {
-                    (None, None, None)
+                    (None, None, None, None, None)
                 }
             } else {
-                (None, None, None)
-            }
-        };
+                // Try group_info.json as fallback
+                let group_info_path = path.join("group_info.json");
+                if group_info_path.exists() {
+                    if let Ok(content) = std::fs::read_to_string(&group_info_path) {
+                        if let Ok(info) = serde_json::from_str::<GroupInfo>(&content) {
+                            (
+                                Some(info.threshold),
+                                Some(info.total_parties),
+                                Some(info.hierarchical),
+                                None, // No signing_requirement in GroupInfo
+                                None, // No party_ranks in GroupInfo
+                            )
+                        } else {
+                            (None, None, None, None, None)
+                        }
+                    } else {
+                        (None, None, None, None, None)
+                    }
+                } else {
+                    (None, None, None, None, None)
+                }
+            };
 
         // Derive address from shared_key.bin
         let address = if let Ok(shared_key_bytes) = std::fs::read(&shared_key_path) {
@@ -296,6 +369,8 @@ pub fn list_wallets() -> Result<Vec<WalletSummary>> {
             total_parties,
             hierarchical,
             address,
+            signing_requirement,
+            party_ranks,
         });
     }
 
@@ -313,6 +388,10 @@ pub struct WalletSummary {
     pub total_parties: Option<u32>,
     pub hierarchical: Option<bool>,
     pub address: Option<String>,
+    /// Signing requirement per rank for HTSS (e.g., [1,2,2])
+    pub signing_requirement: Option<Vec<u32>>,
+    /// Party ranks for HTSS (party_index -> rank)
+    pub party_ranks: Option<std::collections::BTreeMap<u32, u32>>,
 }
 
 /// Print wallet list to console
@@ -474,6 +553,79 @@ pub fn round1_core(
     let keygen_input_bytes = bincode::serialize(&keygen_input)?;
     let keygen_input_hex = hex::encode(&keygen_input_bytes);
 
+    // Extract encryption pubkey from com[0] (first polynomial commitment = a₀*G)
+    // This will be used for NIP-44 E2E encryption of Round 2 shares
+    let encryption_pubkey_hex = {
+        // keygen_input.com is Vec<Point> where com[0] = a₀*G
+        // Convert to x-only (32 bytes) for use as encryption key
+        let first_commitment = &keygen_input.com[0];
+        let point_bytes = first_commitment.to_xonly_bytes();
+        hex::encode(point_bytes)
+    };
+
+    // Extract secret coefficient (a₀) using Lagrange interpolation at x=0
+    // f(0) = a₀ = Σ f(x_i) * L_i(0) where L_i(0) = Π_{j≠i} (-x_j)/(x_i - x_j)
+    let secret_coefficient_hex = {
+        use schnorr_fun::fun::{
+            marker::{Secret, Zero},
+            s, Scalar,
+        };
+
+        // Get t shares for interpolation (we need at least threshold shares)
+        let shares_for_interp: Vec<(u32, [u8; 32])> = secret_shares
+            .iter()
+            .take(threshold as usize)
+            .map(|(idx, share)| {
+                let idx_bytes = idx.to_bytes();
+                let idx_u32 = u32::from_be_bytes(idx_bytes[28..32].try_into().unwrap());
+                (idx_u32, share.to_bytes())
+            })
+            .collect();
+
+        // Compute f(0) using Lagrange interpolation
+        let mut result: Scalar<Secret, Zero> = Scalar::zero();
+        let x_coords: Vec<u32> = shares_for_interp.iter().map(|(x, _)| *x).collect();
+
+        for (x_i, y_bytes) in &shares_for_interp {
+            let y_i: Scalar<Secret, Zero> = Scalar::from_bytes(*y_bytes).unwrap_or(Scalar::zero());
+
+            // Compute L_i(0) = Π_{j≠i} (0 - x_j)/(x_i - x_j) = Π_{j≠i} -x_j/(x_i - x_j)
+            let mut lagrange_num: i64 = 1;
+            let mut lagrange_den: i64 = 1;
+
+            for x_j in &x_coords {
+                if x_j != x_i {
+                    lagrange_num *= -(*x_j as i64);
+                    lagrange_den *= (*x_i as i64) - (*x_j as i64);
+                }
+            }
+
+            // Convert to scalar (handle negative values)
+            let num_scalar: Scalar<Secret, Zero> = if lagrange_num >= 0 {
+                Scalar::from(lagrange_num as u32)
+            } else {
+                let pos = Scalar::<Secret, Zero>::from((-lagrange_num) as u32);
+                s!(-pos)
+            };
+
+            let den_scalar: Scalar<Secret, Zero> = if lagrange_den >= 0 {
+                Scalar::from(lagrange_den as u32)
+            } else {
+                let pos = Scalar::<Secret, Zero>::from((-lagrange_den) as u32);
+                s!(-pos)
+            };
+
+            // L_i(0) = num / den
+            if let Some(den_nonzero) = den_scalar.non_zero() {
+                let lagrange_coeff = s!(num_scalar * { den_nonzero.invert() });
+                let term = s!(lagrange_coeff * y_i);
+                result = s!(result + term);
+            }
+        }
+
+        hex::encode(result.to_bytes())
+    };
+
     // Save state for round 2
     let state = Round1State {
         my_index,
@@ -502,8 +654,17 @@ pub fn round1_core(
         serde_json::to_string_pretty(&shares_map)?.as_bytes(),
     )?;
 
+    // Save secret coefficient for E2E encryption (used for NIP-44)
+    storage.write("secret_coefficient.txt", secret_coefficient_hex.as_bytes())?;
+
     out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
     out.push_str("✉️  Your commitment generated!\n\n");
+
+    out.push_str("🔐 E2E Encryption (NIP-44):\n");
+    out.push_str("   Your secret coefficient (a₀) for E2E encryption:\n");
+    out.push_str(&format!("   {}\n", secret_coefficient_hex));
+    out.push_str("   ⚠️  KEEP THIS SECRET! Use it in the frontend to enable secure sharing.\n");
+    out.push_str(&format!("   📁 Also saved to: secret_coefficient.txt\n\n"));
 
     out.push_str("➜ Paste the result JSON into the webpage\n");
     out.push_str(&format!(
@@ -511,7 +672,7 @@ pub fn round1_core(
         n_parties
     ));
     out.push_str("➜ Copy the \"all commitments\" JSON from webpage\n");
-    out.push_str("➜ Run: yushan keygen-round2 --data '<JSON>'\n");
+    out.push_str("➜ Run: frostdao dkg-round2 --data '<JSON>'\n");
 
     // Create JSON result for copy-pasting
     let output = Round1Output {
@@ -519,6 +680,7 @@ pub fn round1_core(
         rank: my_rank,
         keygen_input: keygen_input_hex,
         hierarchical,
+        encryption_pubkey: Some(encryption_pubkey_hex),
         event_type: "keygen_round1".to_string(),
     };
     let result = serde_json::to_string(&output)?;
@@ -578,7 +740,9 @@ pub fn round1(
     Ok(())
 }
 
-pub fn round2_core(data: &str, storage: &dyn Storage) -> Result<CommandResult> {
+pub fn round2_core(data: &str, storage: &dyn Storage, encrypt: bool) -> Result<CommandResult> {
+    use crate::crypto::nip44;
+
     let mut out = String::new();
 
     out.push_str("FROST Keygen - Round 2\n\n");
@@ -594,6 +758,51 @@ pub fn round2_core(data: &str, storage: &dyn Storage) -> Result<CommandResult> {
 
     // Parse input - space-separated Round1Output objects
     let round1_outputs: Vec<Round1Output> = parse_space_separated_json(data)?;
+
+    // Build encryption pubkey map if encryption is enabled
+    let encryption_pubkeys: BTreeMap<u32, [u8; 32]> = if encrypt {
+        round1_outputs
+            .iter()
+            .filter_map(|o| {
+                o.encryption_pubkey.as_ref().and_then(|pk| {
+                    hex::decode(pk)
+                        .ok()
+                        .and_then(|bytes| bytes.try_into().ok().map(|arr| (o.party_index, arr)))
+                })
+            })
+            .collect()
+    } else {
+        BTreeMap::new()
+    };
+
+    // Load my secret coefficient for encryption
+    let my_secret: Option<[u8; 32]> = if encrypt {
+        storage
+            .read("secret_coefficient.txt")
+            .ok()
+            .and_then(|bytes| {
+                String::from_utf8(bytes).ok().and_then(|hex_str| {
+                    hex::decode(hex_str.trim())
+                        .ok()
+                        .and_then(|v| v.try_into().ok())
+                })
+            })
+    } else {
+        None
+    };
+
+    if encrypt {
+        if my_secret.is_none() {
+            anyhow::bail!(
+                "Encryption enabled but secret_coefficient.txt not found. Run keygen-round1 first."
+            );
+        }
+        out.push_str("🔐 E2E Encryption: ENABLED (NIP-44)\n");
+        out.push_str(&format!(
+            "   Found {} encryption pubkeys from Round 1\n\n",
+            encryption_pubkeys.len()
+        ));
+    }
 
     // Convert to expected format
     let commitments: Vec<CommitmentData> = round1_outputs
@@ -650,13 +859,18 @@ pub fn round2_core(data: &str, storage: &dyn Storage) -> Result<CommandResult> {
     out.push_str("   Party i sends f_i(j) to party j\n");
     out.push_str("   These keygen shares will be combined to create each party's\n");
     out.push_str("   final secret share (without anyone knowing the full key!)\n\n");
-    out.push_str("❓ Think about it:\n");
-    out.push_str("   By broadcasting these keygen shares publicly on Nostr, we're\n");
-    out.push_str("   making a critical security mistake! Anyone can reconstruct\n");
-    out.push_str("   the full private key. What should be done instead?\n\n");
 
-    // Create output with shares
+    if !encrypt {
+        out.push_str("❓ Think about it:\n");
+        out.push_str("   By broadcasting these keygen shares publicly on Nostr, we're\n");
+        out.push_str("   making a critical security mistake! Anyone can reconstruct\n");
+        out.push_str("   the full private key. Use --encrypt to enable E2E encryption!\n\n");
+    }
+
+    // Create output with shares (plaintext or encrypted)
     let mut shares = Vec::new();
+    let mut encrypted_shares = Vec::new();
+
     for (idx_hex, share_hex) in shares_map {
         let idx_bytes = hex::decode(&idx_hex)?;
         let idx_scalar: Scalar<Public, NonZero> = Scalar::<NonZero>::from_slice(&idx_bytes[..32])
@@ -665,12 +879,38 @@ pub fn round2_core(data: &str, storage: &dyn Storage) -> Result<CommandResult> {
         // Extract index value - scalars are big-endian, so small values are in last byte
         let to_index = idx_scalar.to_bytes()[31] as u32;
 
-        out.push_str(&format!("   Share for Party {}: {}\n", to_index, share_hex));
+        if encrypt {
+            // Encrypt share for recipient using NIP-44
+            if let (Some(recipient_pubkey), Some(my_secret_key)) =
+                (encryption_pubkeys.get(&to_index), my_secret.as_ref())
+            {
+                let share_bytes = hex::decode(&share_hex)?;
+                let ciphertext =
+                    nip44::encrypt_for_recipient(&share_bytes, my_secret_key, recipient_pubkey)?;
 
-        shares.push(ShareData {
-            to_index,
-            share: share_hex,
-        });
+                out.push_str(&format!(
+                    "   🔒 Encrypted share for Party {}: {}...\n",
+                    to_index,
+                    &ciphertext[..20.min(ciphertext.len())]
+                ));
+
+                encrypted_shares.push(EncryptedShareData {
+                    to_index,
+                    ciphertext,
+                });
+            } else {
+                out.push_str(&format!(
+                    "   ⚠️  No encryption pubkey for Party {} - skipping\n",
+                    to_index
+                ));
+            }
+        } else {
+            out.push_str(&format!("   Share for Party {}: {}\n", to_index, share_hex));
+            shares.push(ShareData {
+                to_index,
+                share: share_hex,
+            });
+        }
     }
 
     out.push_str("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
@@ -682,18 +922,27 @@ pub fn round2_core(data: &str, storage: &dyn Storage) -> Result<CommandResult> {
         "➜ Copy \"shares for Party {}\" JSON from webpage\n",
         state.my_index
     ));
-    out.push_str("➜ Run: yushan keygen-finalize --data '<JSON>'\n");
+    out.push_str("➜ Run: frostdao keygen-finalize --data '<JSON>'\n");
 
     // Save all commitments for validation
     storage.write("all_commitments.json", data.as_bytes())?;
 
     // Create JSON result for copy-pasting
-    let output = Round2Output {
-        party_index: state.my_index,
-        shares,
-        event_type: "keygen_round2".to_string(),
+    let result = if encrypt {
+        let output = Round2EncryptedOutput {
+            party_index: state.my_index,
+            encrypted_shares,
+            event_type: "keygen_round2_encrypted".to_string(),
+        };
+        serde_json::to_string(&output)?
+    } else {
+        let output = Round2Output {
+            party_index: state.my_index,
+            shares,
+            event_type: "keygen_round2".to_string(),
+        };
+        serde_json::to_string(&output)?
     };
-    let result = serde_json::to_string(&output)?;
 
     Ok(CommandResult {
         output: out,
@@ -701,7 +950,7 @@ pub fn round2_core(data: &str, storage: &dyn Storage) -> Result<CommandResult> {
     })
 }
 
-pub fn round2(name: &str, data: &str) -> Result<()> {
+pub fn round2(name: &str, data: &str, encrypt: bool) -> Result<()> {
     let state_dir = get_state_dir(name);
     let path = std::path::Path::new(&state_dir);
 
@@ -715,7 +964,7 @@ pub fn round2(name: &str, data: &str) -> Result<()> {
     }
 
     let storage = FileStorage::new(&state_dir)?;
-    let cmd_result = round2_core(data, &storage)?;
+    let cmd_result = round2_core(data, &storage, encrypt)?;
     println!("{}", cmd_result.output);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("📋 Copy this JSON:");
@@ -878,13 +1127,14 @@ pub fn finalize_core(data: &str, storage: &dyn Storage) -> Result<CommandResult>
         threshold: state.threshold,
         hierarchical: state.hierarchical,
         party_ranks,
+        signing_requirement: None,
     };
     storage.write(
         "htss_metadata.json",
         serde_json::to_string_pretty(&htss_metadata)?.as_bytes(),
     )?;
 
-    // Generate and save HD metadata for BIP-32/BIP-44 derivation
+    // Generate and save HD metadata for BIP-32/BIP-86 derivation
     // Chain code is derived deterministically from group public key
     let chain_code = crate::crypto::helpers::tagged_hash(
         "FrostDAO/ChainCode",
@@ -1097,7 +1347,8 @@ pub fn generate_all_parties(
     threshold: u32,
     n_parties: u32,
     hierarchical: bool,
-    ranks: Option<Vec<u32>>, // Optional ranks for HTSS mode
+    ranks: Option<Vec<u32>>,               // Optional ranks for HTSS mode
+    signing_requirement: Option<Vec<u32>>, // Optional signing requirement per rank
 ) -> Result<CommandResult> {
     let mut out = String::new();
 
@@ -1152,7 +1403,7 @@ pub fn generate_all_parties(
     for i in 1..=n_parties {
         let storage = &storages[(i - 1) as usize];
 
-        let result = round2_core(&all_round1_data, storage)?;
+        let result = round2_core(&all_round1_data, storage, false)?;
         round2_outputs.push(result.result);
         out.push_str(&format!("   Party {}: ✓\n", i));
     }
@@ -1176,6 +1427,21 @@ pub fn generate_all_parties(
             }
         }
         out.push_str(&format!("   Party {}: ✓\n", i));
+    }
+
+    // Update htss_metadata.json with signing_requirement for all parties
+    if hierarchical && signing_requirement.is_some() {
+        for storage in &storages {
+            if let Ok(data) = storage.read("htss_metadata.json") {
+                if let Ok(mut metadata) = serde_json::from_slice::<HtssMetadata>(&data) {
+                    metadata.signing_requirement = signing_requirement.clone();
+                    storage.write(
+                        "htss_metadata.json",
+                        serde_json::to_string_pretty(&metadata)?.as_bytes(),
+                    )?;
+                }
+            }
+        }
     }
 
     // Copy public data to the main wallet folder (no secret shares!)
@@ -1203,6 +1469,10 @@ pub fn generate_all_parties(
         out.push_str("\n🔐 HTSS Ranks:\n");
         for (i, rank) in party_ranks.iter().enumerate() {
             out.push_str(&format!("   Party {}: rank {}\n", i + 1, rank));
+        }
+        if let Some(ref req) = signing_requirement {
+            let req_str: Vec<String> = req.iter().map(|r| r.to_string()).collect();
+            out.push_str(&format!("   Signing Requirement: {}\n", req_str.join(",")));
         }
     }
 

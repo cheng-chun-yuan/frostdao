@@ -451,6 +451,7 @@ pub fn recover_finalize_core(
         threshold,
         hierarchical, // Already set from source_htss.hierarchical
         party_ranks,
+        signing_requirement: source_htss.signing_requirement.clone(),
     };
 
     target_storage.write(

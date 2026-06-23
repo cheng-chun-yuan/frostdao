@@ -18,6 +18,9 @@ pub struct KeygenFormData {
     pub name: TextInput,
     pub threshold: TextInput,
     pub n_parties: TextInput,
+    pub my_rank: TextInput,
+    pub rank_distribution: TextInput, // e.g., "2,3,3" = 2 at rank 0, 3 at rank 1, 3 at rank 2
+    pub signing_requirement: TextInput, // e.g., "1,2,2" = need 1 rank-0, 2 rank-1, 2 rank-2 to sign
     pub hierarchical: bool,
     pub focused_field: KeygenFormField,
     pub round1_output: String,
@@ -33,6 +36,9 @@ impl KeygenFormData {
             name: TextInput::new("Wallet Name").with_placeholder("my_wallet"),
             threshold: TextInput::new("Threshold").with_value("2").numeric(),
             n_parties: TextInput::new("Total Parties").with_value("3").numeric(),
+            my_rank: TextInput::new("My Rank").with_value("0").numeric(),
+            rank_distribution: TextInput::new("Parties per Rank").with_placeholder("2,3,3"),
+            signing_requirement: TextInput::new("Required to Sign").with_placeholder("1,2,2"),
             hierarchical: false,
             focused_field: KeygenFormField::Name,
             round1_output: String::new(),
@@ -41,6 +47,86 @@ impl KeygenFormData {
             finalize_input: TextArea::new("Paste Round 2 outputs from all parties"),
             error_message: None,
         }
+    }
+
+    /// Parse comma-separated numbers into a vector
+    /// e.g., "2,3,3" -> [2, 3, 3]
+    fn parse_numbers(input: &str) -> Option<Vec<u32>> {
+        let input = input.trim();
+        if input.is_empty() {
+            return None;
+        }
+
+        let counts: Result<Vec<u32>, _> =
+            input.split(',').map(|s| s.trim().parse::<u32>()).collect();
+
+        match counts {
+            Ok(counts) if !counts.is_empty() => Some(counts),
+            _ => None,
+        }
+    }
+
+    /// Parse rank distribution string into a vector of ranks for each party
+    /// e.g., "2,3,3" -> [0, 0, 1, 1, 1, 2, 2, 2]
+    pub fn parse_rank_distribution(&self) -> Option<Vec<u32>> {
+        let counts = Self::parse_numbers(self.rank_distribution.value())?;
+        let mut ranks = Vec::new();
+        for (rank, &count) in counts.iter().enumerate() {
+            for _ in 0..count {
+                ranks.push(rank as u32);
+            }
+        }
+        Some(ranks)
+    }
+
+    /// Parse signing requirement into counts per rank
+    /// e.g., "1,2,2" -> [1, 2, 2] (need 1 from rank 0, 2 from rank 1, 2 from rank 2)
+    pub fn parse_signing_requirement(&self) -> Option<Vec<u32>> {
+        Self::parse_numbers(self.signing_requirement.value())
+    }
+
+    /// Validate signing requirement against distribution
+    /// Returns (threshold, error_message)
+    pub fn validate_htss_config(&self) -> Result<u32, String> {
+        let distribution = Self::parse_numbers(self.rank_distribution.value())
+            .ok_or_else(|| "Enter parties per rank (e.g., 2,3,3)".to_string())?;
+
+        let requirement = Self::parse_numbers(self.signing_requirement.value())
+            .ok_or_else(|| "Enter signing requirement (e.g., 1,2,2)".to_string())?;
+
+        // Must have same number of ranks
+        if requirement.len() > distribution.len() {
+            return Err(format!(
+                "Requirement has {} ranks but distribution has {}",
+                requirement.len(),
+                distribution.len()
+            ));
+        }
+
+        // Check each rank has enough parties
+        for (rank, (&required, &available)) in
+            requirement.iter().zip(distribution.iter()).enumerate()
+        {
+            if required > available {
+                return Err(format!(
+                    "Rank {} needs {} signers but only {} available",
+                    rank, required, available
+                ));
+            }
+        }
+
+        // Must have at least 1 rank-0 signer (HTSS rule)
+        if requirement.first().copied().unwrap_or(0) == 0 {
+            return Err("Must require at least 1 rank-0 signer".to_string());
+        }
+
+        // Calculate threshold (sum of requirements)
+        let threshold: u32 = requirement.iter().sum();
+        if threshold < 1 {
+            return Err("Total signers required must be at least 1".to_string());
+        }
+
+        Ok(threshold)
     }
 }
 
@@ -68,7 +154,7 @@ fn render_mode_select(frame: &mut Frame, form: &KeygenFormData, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan))
-        .title(" Keygen - Step 1: Choose Mode ");
+        .title(" Demo Keygen - All parties generated locally ");
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -182,13 +268,14 @@ fn render_params_setup(frame: &mut Frame, form: &KeygenFormData, area: Rect) {
     frame.render_widget(block, area);
 
     if form.hierarchical {
-        // HTSS mode: Name, N Parties
+        // HTSS mode: Name + Rank Distribution + Signing Requirement
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(3), // Name
-                Constraint::Length(3), // N Parties
-                Constraint::Length(5), // Explanation
+                Constraint::Length(3), // Rank Distribution (parties per rank)
+                Constraint::Length(3), // Signing Requirement (signers per rank)
+                Constraint::Length(8), // Preview
                 Constraint::Min(1),    // Spacer
                 Constraint::Length(2), // Error
                 Constraint::Length(2), // Help
@@ -200,45 +287,100 @@ fn render_params_setup(frame: &mut Frame, form: &KeygenFormData, area: Rect) {
             chunks[0],
             form.focused_field == KeygenFormField::Name,
         );
-        form.n_parties.render(
+        form.rank_distribution.render(
             frame,
             chunks[1],
-            form.focused_field == KeygenFormField::NParties,
+            form.focused_field == KeygenFormField::RankDistribution,
+        );
+        form.signing_requirement.render(
+            frame,
+            chunks[2],
+            form.focused_field == KeygenFormField::SigningRequirement,
         );
 
-        let n: u32 = form.n_parties.value().parse().unwrap_or(3);
-        let explanation = Paragraph::new(vec![
-            Line::from(vec![
-                Span::styled(
-                    "HTSS: ",
+        // Parse and display configuration preview
+        let distribution = form.parse_rank_distribution();
+        let requirement = form.parse_signing_requirement();
+
+        let mut preview_lines = Vec::new();
+
+        match (&distribution, &requirement) {
+            (Some(dist), Some(req)) => {
+                let total_parties = dist.len();
+                let total_signers: u32 = req.iter().sum();
+
+                // Count parties per rank from distribution
+                let mut dist_counts: Vec<u32> = Vec::new();
+                for &r in dist {
+                    while dist_counts.len() <= r as usize {
+                        dist_counts.push(0);
+                    }
+                    dist_counts[r as usize] += 1;
+                }
+
+                preview_lines.push(Line::from(vec![Span::styled(
+                    format!("{}-of-{} HTSS", total_signers, total_parties),
                     Style::default()
                         .fg(Color::Yellow)
                         .add_modifier(Modifier::BOLD),
-                ),
-                Span::raw("Hierarchical Threshold Signature"),
-            ]),
-            Line::from(vec![
-                Span::styled("  Ranks: ", Style::default().fg(Color::Gray)),
-                Span::styled(
-                    format!("0, 1, 2, ... {}", n.saturating_sub(1)),
-                    Style::default().fg(Color::Cyan),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled("  Rule: ", Style::default().fg(Color::Gray)),
-                Span::raw("Signers' ranks (sorted) must satisfy rank[i] <= i"),
-            ]),
-        ]);
-        frame.render_widget(explanation, chunks[2]);
+                )]));
+                preview_lines.push(Line::from(""));
+
+                // Show each rank: available vs required
+                for (rank, &required) in req.iter().enumerate() {
+                    let available = dist_counts.get(rank).copied().unwrap_or(0);
+                    let status = if required <= available { "✓" } else { "✗" };
+                    let color = if required <= available {
+                        Color::Green
+                    } else {
+                        Color::Red
+                    };
+                    preview_lines.push(Line::from(vec![
+                        Span::styled(format!("  {} ", status), Style::default().fg(color)),
+                        Span::styled(format!("Rank {}: ", rank), Style::default().fg(Color::Gray)),
+                        Span::styled(format!("{}", required), Style::default().fg(Color::Cyan)),
+                        Span::styled(
+                            format!("/{} signers", available),
+                            Style::default().fg(Color::DarkGray),
+                        ),
+                    ]));
+                }
+            }
+            _ => {
+                preview_lines.push(Line::from(vec![Span::styled(
+                    "Example: ",
+                    Style::default().fg(Color::Gray),
+                )]));
+                preview_lines.push(Line::from(vec![
+                    Span::styled("  Parties: ", Style::default().fg(Color::DarkGray)),
+                    Span::styled("2,3,3", Style::default().fg(Color::Cyan)),
+                    Span::styled(
+                        " (2 rank-0, 3 rank-1, 3 rank-2)",
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                ]));
+                preview_lines.push(Line::from(vec![
+                    Span::styled("  Required: ", Style::default().fg(Color::DarkGray)),
+                    Span::styled("1,2,2", Style::default().fg(Color::Green)),
+                    Span::styled(
+                        " (need 1+2+2=5 to sign)",
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                ]));
+            }
+        }
+
+        let preview = Paragraph::new(preview_lines);
+        frame.render_widget(preview, chunks[3]);
 
         if let Some(error) = &form.error_message {
             let error_para = Paragraph::new(error.as_str()).style(Style::default().fg(Color::Red));
-            frame.render_widget(error_para, chunks[4]);
+            frame.render_widget(error_para, chunks[5]);
         }
 
-        let help = Paragraph::new("Tab: Next field | Enter: Generate All Parties | Esc: Back")
+        let help = Paragraph::new("Tab: Next field | Enter: Generate | Esc: Back")
             .style(Style::default().fg(Color::DarkGray));
-        frame.render_widget(help, chunks[5]);
+        frame.render_widget(help, chunks[6]);
     } else {
         // TSS mode: Name, Threshold, N Parties
         let chunks = Layout::default()

@@ -306,6 +306,7 @@ pub fn reshare_finalize(
         threshold: new_threshold,
         hierarchical,
         party_ranks,
+        signing_requirement: None, // Reshare creates new config
     };
 
     target_storage.write(
@@ -603,6 +604,7 @@ pub fn reshare_finalize_core(
         threshold: new_threshold,
         hierarchical,
         party_ranks,
+        signing_requirement: None, // Reshare creates new config
     };
 
     target_storage.write(
@@ -650,6 +652,316 @@ pub fn reshare_finalize_core(
         ),
         result: target_wallet.to_string(),
     })
+}
+
+/// Local reshare: refresh all shares at once when you have t parties locally
+/// This is for single-user/local scenarios where all shares are on the same machine
+pub fn reshare_local(
+    source_wallet: &str,
+    target_wallet: &str,
+    new_threshold: Option<u32>,
+    new_n_parties: Option<u32>,
+    hierarchical: bool,
+) -> Result<()> {
+    println!("Local Reshare - Refresh All Shares\n");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    let source_state_dir = get_state_dir(source_wallet);
+    let source_path = std::path::Path::new(&source_state_dir);
+
+    if !source_path.exists() {
+        anyhow::bail!(
+            "Source wallet '{}' not found at {}",
+            source_wallet,
+            source_state_dir
+        );
+    }
+
+    // Load source wallet info
+    let source_storage = FileStorage::new(&source_state_dir)?;
+    let shared_key_bytes = source_storage.read("shared_key.bin")?;
+    let shared_key: frost::SharedKey<EvenY> = bincode::deserialize(&shared_key_bytes)?;
+    let group_public_key = shared_key.public_key();
+
+    let source_htss_json = String::from_utf8(source_storage.read("htss_metadata.json")?)?;
+    let source_htss: HtssMetadata = serde_json::from_str(&source_htss_json)?;
+    let old_threshold = source_htss.threshold;
+    let old_n_parties = source_htss.party_ranks.len() as u32;
+
+    // Use provided or keep same config
+    let new_t = new_threshold.unwrap_or(old_threshold);
+    let new_n = new_n_parties.unwrap_or(old_n_parties);
+
+    println!("Source wallet: {}", source_wallet);
+    println!("Old config: {}-of-{}", old_threshold, old_n_parties);
+    println!("New config: {}-of-{}", new_t, new_n);
+    println!();
+
+    // Find available party folders
+    let mut available_parties: Vec<(u32, String)> = Vec::new();
+    for i in 1..=old_n_parties {
+        let party_dir = format!("{}/party{}", source_state_dir, i);
+        if std::path::Path::new(&party_dir).exists() {
+            available_parties.push((i, party_dir));
+        }
+    }
+
+    // Also check legacy structure (share directly in wallet folder)
+    if available_parties.is_empty() {
+        if source_storage.read("paired_secret_share.bin").is_ok() {
+            available_parties.push((source_htss.my_index, source_state_dir.clone()));
+        }
+    }
+
+    println!(
+        "Found {} local parties: {:?}",
+        available_parties.len(),
+        available_parties
+            .iter()
+            .map(|(i, _)| *i)
+            .collect::<Vec<_>>()
+    );
+
+    if (available_parties.len() as u32) < old_threshold {
+        anyhow::bail!(
+            "Not enough local shares: found {}, need at least {} (threshold)",
+            available_parties.len(),
+            old_threshold
+        );
+    }
+
+    // Use first t parties for resharing
+    let parties_to_use: Vec<(u32, String)> = available_parties
+        .into_iter()
+        .take(old_threshold as usize)
+        .collect();
+
+    println!(
+        "Using parties {:?} for resharing",
+        parties_to_use.iter().map(|(i, _)| *i).collect::<Vec<_>>()
+    );
+    println!();
+
+    // Step 1: Generate round1 outputs from each old party
+    let mut round1_outputs: Vec<ReshareRound1Output> = Vec::new();
+
+    for (old_idx, party_path) in &parties_to_use {
+        let party_storage = FileStorage::new(party_path)?;
+        let paired_share_bytes = party_storage.read("paired_secret_share.bin")?;
+        let paired_share: frost::PairedSecretShare<EvenY> =
+            bincode::deserialize(&paired_share_bytes)?;
+
+        let my_share = paired_share.secret_share();
+        let my_secret_bytes = my_share.share.to_bytes();
+
+        // Create polynomial of degree (new_t - 1) with f(0) = my_secret_share
+        let mut rng = rand::thread_rng();
+        let mut coefficients: Vec<[u8; 32]> = Vec::with_capacity(new_t as usize);
+        coefficients.push(my_secret_bytes);
+
+        for _ in 1..new_t {
+            let coeff = Scalar::<Secret, NonZero>::random(&mut rng);
+            coefficients.push(coeff.to_bytes());
+        }
+
+        // Create polynomial commitments
+        let polynomial_commitment: Vec<String> = coefficients
+            .iter()
+            .map(|coeff| {
+                let scalar: Scalar<Secret, Zero> =
+                    Scalar::from_bytes(*coeff).unwrap_or(Scalar::zero());
+                let point = g!(scalar * G);
+                hex::encode(point.normalize().to_bytes())
+            })
+            .collect();
+
+        // Generate sub-shares for each new party
+        let mut sub_shares: BTreeMap<u32, String> = BTreeMap::new();
+        for new_idx in 1..=new_n {
+            let x = new_idx;
+            let mut result = [0u8; 32];
+            for i in (0..coefficients.len()).rev() {
+                let result_scalar: Scalar<Secret, Zero> =
+                    Scalar::from_bytes(result).unwrap_or(Scalar::zero());
+                let x_scalar: Scalar<Public, Zero> = Scalar::from(x);
+                let coeff_scalar: Scalar<Secret, Zero> =
+                    Scalar::from_bytes(coefficients[i]).unwrap_or(Scalar::zero());
+                let new_result = s!(result_scalar * x_scalar + coeff_scalar);
+                result = new_result.to_bytes();
+            }
+            sub_shares.insert(new_idx, hex::encode(result));
+        }
+
+        round1_outputs.push(ReshareRound1Output {
+            old_party_index: *old_idx,
+            sub_shares,
+            polynomial_commitment,
+            event_type: "reshare_round1".to_string(),
+        });
+
+        println!("Generated sub-shares from party {}", old_idx);
+    }
+
+    // Step 2: Create target wallet directory
+    let target_state_dir = get_state_dir(target_wallet);
+    let target_path = std::path::Path::new(&target_state_dir);
+
+    if target_path.exists() {
+        println!("\n⚠️  Target wallet '{}' already exists", target_wallet);
+        print!("   Replace? [y/N]: ");
+        std::io::Write::flush(&mut std::io::stdout())?;
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input)?;
+        if input.trim().to_lowercase() != "y" {
+            println!("Aborted.");
+            return Ok(());
+        }
+        std::fs::remove_dir_all(target_path)?;
+    }
+
+    std::fs::create_dir_all(&target_state_dir)?;
+
+    // Save shared_key at wallet root
+    let root_storage = FileStorage::new(&target_state_dir)?;
+    root_storage.write("shared_key.bin", &shared_key_bytes)?;
+
+    // Collect old party indices for Lagrange computation
+    let old_indices: Vec<u32> = round1_outputs.iter().map(|o| o.old_party_index).collect();
+
+    // Step 3: Generate all new shares
+    println!();
+    for new_idx in 1..=new_n {
+        // Compute new share: sum of (lagrange_coeff * sub_share)
+        let mut new_share_bytes = [0u8; 32];
+
+        for output in &round1_outputs {
+            let sub_share_hex = output.sub_shares.get(&new_idx).unwrap();
+            let sub_share_bytes: [u8; 32] = hex::decode(sub_share_hex)?
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("Invalid sub-share length"))?;
+
+            let sub_share: Scalar<Secret, Zero> = Scalar::from_bytes(sub_share_bytes)
+                .ok_or_else(|| anyhow::anyhow!("Invalid sub-share scalar"))?;
+
+            let lagrange_coeff = crate::crypto::helpers::lagrange_coefficient_at_zero(
+                output.old_party_index,
+                &old_indices,
+            )?;
+
+            let current: Scalar<Secret, Zero> =
+                Scalar::from_bytes(new_share_bytes).unwrap_or(Scalar::zero());
+            let weighted = s!(lagrange_coeff * sub_share);
+            let sum = s!(current + weighted);
+            new_share_bytes = sum.to_bytes();
+        }
+
+        // Create party folder
+        let party_dir = format!("{}/party{}", target_state_dir, new_idx);
+        std::fs::create_dir_all(&party_dir)?;
+        let party_storage = FileStorage::new(&party_dir)?;
+
+        // Create PairedSecretShare
+        let share_scalar: Scalar<Secret, Zero> = Scalar::from_bytes(new_share_bytes)
+            .ok_or_else(|| anyhow::anyhow!("Invalid computed share"))?;
+        let share_nonzero = crate::crypto::helpers::share_to_nonzero(share_scalar)?;
+
+        let paired_share = crate::crypto::helpers::construct_paired_secret_share(
+            new_idx,
+            share_nonzero,
+            &group_public_key,
+        )?;
+        let paired_bytes = bincode::serialize(&paired_share)?;
+
+        party_storage.write("paired_secret_share.bin", &paired_bytes)?;
+
+        // Create HTSS metadata for this party
+        let mut party_ranks: BTreeMap<u32, u32> = BTreeMap::new();
+        for i in 1..=new_n {
+            party_ranks.insert(i, 0); // All rank 0 for standard TSS
+        }
+
+        let htss = HtssMetadata {
+            my_index: new_idx,
+            my_rank: 0,
+            threshold: new_t,
+            hierarchical,
+            party_ranks: party_ranks.clone(),
+            signing_requirement: None,
+        };
+
+        party_storage.write(
+            "htss_metadata.json",
+            serde_json::to_string_pretty(&htss)?.as_bytes(),
+        )?;
+
+        // Save share hex for verification
+        party_storage.write("share_hex.txt", hex::encode(new_share_bytes).as_bytes())?;
+
+        println!("Created party{} share", new_idx);
+    }
+
+    // Save root htss_metadata (for legacy compatibility)
+    let mut root_party_ranks: BTreeMap<u32, u32> = BTreeMap::new();
+    for i in 1..=new_n {
+        root_party_ranks.insert(i, 0);
+    }
+    let root_htss = HtssMetadata {
+        my_index: 1, // Default to party 1 for root
+        my_rank: 0,
+        threshold: new_t,
+        hierarchical,
+        party_ranks: root_party_ranks,
+        signing_requirement: None,
+    };
+    root_storage.write(
+        "htss_metadata.json",
+        serde_json::to_string_pretty(&root_htss)?.as_bytes(),
+    )?;
+
+    // Create group info
+    let pubkey_bytes: [u8; 32] = group_public_key.to_xonly_bytes();
+    let pubkey_hex = hex::encode(pubkey_bytes);
+
+    use bitcoin::{Address, Network, XOnlyPublicKey};
+    let xonly_pk = XOnlyPublicKey::from_slice(&pubkey_bytes)?;
+    let secp = bitcoin::secp256k1::Secp256k1::new();
+    let address_testnet = Address::p2tr(&secp, xonly_pk, None, Network::Testnet).to_string();
+    let address_mainnet = Address::p2tr(&secp, xonly_pk, None, Network::Bitcoin).to_string();
+
+    let group_info = GroupInfo {
+        name: target_wallet.to_string(),
+        group_public_key: pubkey_hex.clone(),
+        taproot_address_testnet: address_testnet.clone(),
+        taproot_address_mainnet: address_mainnet.clone(),
+        threshold: new_t,
+        total_parties: new_n,
+        hierarchical,
+        parties: vec![], // Will be populated when all parties complete verification
+    };
+
+    root_storage.write(
+        "group_info.json",
+        serde_json::to_string_pretty(&group_info)?.as_bytes(),
+    )?;
+
+    println!();
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("✅ Local reshare complete!");
+    println!();
+    println!("New wallet: {}", target_wallet);
+    println!("Config: {}-of-{}", new_t, new_n);
+    println!("Parties: party1, party2, ... party{}", new_n);
+    println!();
+    println!("Public Key: {}", pubkey_hex);
+    println!("Testnet Address: {}", address_testnet);
+    println!();
+    println!("⚠️  The public key and address are the SAME as before!");
+    println!("    Old shares are now INVALIDATED.");
+    println!();
+    println!("🗑️  Delete old wallet:");
+    println!("    rm -rf .frost_state/{}/", source_wallet);
+
+    Ok(())
 }
 
 #[cfg(test)]
