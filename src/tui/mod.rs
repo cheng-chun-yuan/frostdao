@@ -2564,45 +2564,19 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                     };
                 }
                 NostrSignState::ConfigureTx { wallet_name } => {
-                    // Create proposal and start waiting for consents
                     let timestamp = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .map(|d| d.as_secs())
                         .unwrap_or(0);
-                    let session_id = format!("session-{}", timestamp);
-                    let fee_rate = 10;
-                    let sighash = format!("{timestamp:064x}");
-                    let to_address = app.nostr_to_address.clone();
-                    let amount_sats = app.nostr_amount_sats;
-                    let from_address = app
-                        .wallets
-                        .iter()
-                        .find(|wallet| wallet.name == *wallet_name)
-                        .and_then(|wallet| wallet.address.clone())
-                        .unwrap_or_else(|| "unknown".to_string());
-                    let proposal = crate::tui::state::TxProposal {
-                        session_id: session_id.clone(),
-                        wallet_name: wallet_name.clone(),
-                        proposer_index: app.nostr_my_index,
-                        to_address: to_address.clone(),
-                        amount_sats,
-                        fee_rate,
-                        sighash: sighash.clone(),
-                        review: frostdao::nostr::TxReviewPayload {
-                            network: app.network.display_name().to_string(),
-                            source_path: "root key-path".to_string(),
-                            from_address,
-                            to_address,
-                            amount_sats,
-                            fee_rate_sats_vb: fee_rate,
-                            sighash_fingerprint: frostdao::protocol::dkg_tx::sighash_fingerprint(
-                                &sighash,
-                            ),
-                        },
-                        description: format!("Send {} sats", amount_sats),
-                        timestamp,
+                    let proposal = match app.build_nostr_tx_proposal(wallet_name, timestamp) {
+                        Ok(proposal) => proposal,
+                        Err(e) => {
+                            app.message = Some(format!("Cannot propose transaction: {}", e));
+                            return;
+                        }
                     };
                     let wallet_name = wallet_name.clone();
+                    let session_id = proposal.session_id.clone();
                     if let Err(e) = app.publish_nostr_tx_proposal(&wallet_name, &proposal) {
                         app.message = Some(format!("Nostr proposal publish error: {}", e));
                         return;

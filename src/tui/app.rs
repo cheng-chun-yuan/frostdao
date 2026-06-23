@@ -5,6 +5,7 @@ use bitcoin::{Address, XOnlyPublicKey};
 use ratatui::widgets::ListState;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 #[cfg(feature = "miniscript-policy")]
 use crate::tui::screens::PolicyPreviewFormData;
@@ -209,6 +210,56 @@ impl App {
         self.wallet_list_state
             .selected()
             .and_then(|i| self.wallets.get(i))
+    }
+
+    /// Build a locally proposed TUI Nostr transaction after validating the draft fields.
+    pub fn build_nostr_tx_proposal(&self, wallet_name: &str, timestamp: u64) -> Result<TxProposal> {
+        let to_address = parse_tui_recipient_address(
+            self.nostr_to_address.trim(),
+            self.network.to_bitcoin_network(),
+            self.network.display_name(),
+        )?;
+        if self.nostr_amount_sats == 0 {
+            anyhow::bail!("amount must be greater than zero");
+        }
+
+        let wallet = self
+            .wallets
+            .iter()
+            .find(|wallet| wallet.name == wallet_name)
+            .ok_or_else(|| anyhow::anyhow!("wallet '{wallet_name}' is not loaded"))?;
+        let from_address = wallet
+            .address
+            .as_deref()
+            .map(str::trim)
+            .filter(|address| !address.is_empty())
+            .ok_or_else(|| anyhow::anyhow!("wallet '{wallet_name}' has no known source address"))?
+            .to_string();
+
+        let session_id = format!("session-{timestamp}");
+        let fee_rate = 10;
+        let sighash = format!("{timestamp:064x}");
+
+        Ok(TxProposal {
+            session_id,
+            wallet_name: wallet_name.to_string(),
+            proposer_index: self.nostr_my_index,
+            to_address: to_address.clone(),
+            amount_sats: self.nostr_amount_sats,
+            fee_rate,
+            sighash: sighash.clone(),
+            review: frostdao::nostr::TxReviewPayload {
+                network: self.network.display_name().to_string(),
+                source_path: "root key-path".to_string(),
+                from_address,
+                to_address,
+                amount_sats: self.nostr_amount_sats,
+                fee_rate_sats_vb: fee_rate,
+                sighash_fingerprint: frostdao::protocol::dkg_tx::sighash_fingerprint(&sighash),
+            },
+            description: format!("Send {} sats", self.nostr_amount_sats),
+            timestamp,
+        })
     }
 
     /// Navigate to next wallet
@@ -1152,6 +1203,26 @@ fn unix_timestamp_secs() -> u64 {
         .unwrap_or(1)
 }
 
+fn parse_tui_recipient_address(
+    recipient: &str,
+    network: bitcoin::Network,
+    network_name: &str,
+) -> Result<String> {
+    if recipient.is_empty() {
+        anyhow::bail!("recipient address is required");
+    }
+
+    match Address::from_str(recipient) {
+        Ok(address) => address
+            .require_network(network)
+            .map(|address| address.to_string())
+            .map_err(|err| {
+                anyhow::anyhow!("recipient address is invalid for {network_name}: {err}")
+            }),
+        Err(err) => Err(anyhow::anyhow!("invalid recipient address: {err}")),
+    }
+}
+
 fn nonempty_message_session(message: &frostdao::nostr::NostrProtocolMessage) -> Option<String> {
     message
         .session
@@ -1193,6 +1264,105 @@ fn mainnet_nostr_enabled() -> bool {
 mod tests {
     use super::App;
     use crate::tui::state::{NetworkSelection, NostrSignState};
+    use bitcoin::secp256k1::{Keypair, Secp256k1, SecretKey};
+    use bitcoin::{Address, Network, XOnlyPublicKey};
+    use frostdao::protocol::keygen::WalletSummary;
+    use std::collections::BTreeMap;
+
+    fn wallet_summary(name: &str, address: Option<String>) -> WalletSummary {
+        WalletSummary {
+            name: name.to_string(),
+            threshold: Some(2),
+            total_parties: Some(3),
+            hierarchical: Some(false),
+            address,
+            signing_requirement: None,
+            party_ranks: None::<BTreeMap<u32, u32>>,
+        }
+    }
+
+    fn test_address(network: Network) -> String {
+        let secp = Secp256k1::new();
+        let secret_key = SecretKey::from_slice(&[1u8; 32]).unwrap();
+        let keypair = Keypair::from_secret_key(&secp, &secret_key);
+        let (xonly_pubkey, _) = XOnlyPublicKey::from_keypair(&keypair);
+        Address::p2tr(&secp, xonly_pubkey, None, network).to_string()
+    }
+
+    fn app_with_wallet(address: Option<String>) -> App {
+        let mut app = App::new().unwrap();
+        app.wallets = vec![wallet_summary("wallet-test", address)];
+        app.wallet_list_state.select(Some(0));
+        app.network = NetworkSelection::Testnet3;
+        app.nostr_my_index = 2;
+        app.nostr_to_address = test_address(Network::Testnet);
+        app.nostr_amount_sats = 50_000;
+        app
+    }
+
+    #[test]
+    fn tui_nostr_tx_proposal_builder_validates_and_populates_review() {
+        let app = app_with_wallet(Some(test_address(Network::Testnet)));
+
+        let proposal = app
+            .build_nostr_tx_proposal("wallet-test", 1_700_000_000)
+            .unwrap();
+
+        assert_eq!(proposal.session_id, "session-1700000000");
+        assert_eq!(proposal.wallet_name, "wallet-test");
+        assert_eq!(proposal.proposer_index, 2);
+        assert_eq!(proposal.to_address, app.nostr_to_address);
+        assert_eq!(proposal.amount_sats, 50_000);
+        assert_eq!(proposal.fee_rate, 10);
+        assert_eq!(proposal.review.network, "Testnet3");
+        assert_eq!(proposal.review.from_address, test_address(Network::Testnet));
+        assert_eq!(proposal.review.to_address, app.nostr_to_address);
+        assert_eq!(proposal.review.amount_sats, 50_000);
+        assert_eq!(proposal.review.fee_rate_sats_vb, 10);
+        assert!(!proposal.review.sighash_fingerprint.is_empty());
+    }
+
+    #[test]
+    fn tui_nostr_tx_proposal_builder_rejects_invalid_drafts() {
+        let mut app = app_with_wallet(Some(test_address(Network::Testnet)));
+
+        app.nostr_to_address = "   ".to_string();
+        assert!(app
+            .build_nostr_tx_proposal("wallet-test", 1_700_000_000)
+            .unwrap_err()
+            .to_string()
+            .contains("recipient address is required"));
+
+        app.nostr_to_address = test_address(Network::Testnet);
+        app.nostr_amount_sats = 0;
+        assert!(app
+            .build_nostr_tx_proposal("wallet-test", 1_700_000_000)
+            .unwrap_err()
+            .to_string()
+            .contains("amount must be greater than zero"));
+
+        app.nostr_amount_sats = 50_000;
+        app.nostr_to_address = test_address(Network::Bitcoin);
+        assert!(app
+            .build_nostr_tx_proposal("wallet-test", 1_700_000_000)
+            .unwrap_err()
+            .to_string()
+            .contains("invalid for Testnet3"));
+
+        app.nostr_to_address = test_address(Network::Testnet);
+        assert!(app
+            .build_nostr_tx_proposal("wallet-missing", 1_700_000_000)
+            .unwrap_err()
+            .to_string()
+            .contains("is not loaded"));
+
+        let app = app_with_wallet(None);
+        assert!(app
+            .build_nostr_tx_proposal("wallet-test", 1_700_000_000)
+            .unwrap_err()
+            .to_string()
+            .contains("has no known source address"));
+    }
 
     #[test]
     fn tui_nostr_room_uses_runtime_and_replay_cache() {
