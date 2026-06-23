@@ -17,6 +17,57 @@ use frostdao::nostr::RoomMessageTransport;
 use frostdao::protocol::keygen::{list_wallets, WalletSummary};
 use frostdao::storage::{FileStorage, Storage};
 
+const TUI_NOSTR_RELAYS_ENV: &str = "FROSTDAO_TUI_NOSTR_RELAYS";
+const TUI_MAINNET_NOSTR_ENV: &str = "FROSTDAO_ENABLE_MAINNET_NOSTR";
+
+pub enum TuiNostrRuntime {
+    Demo(frostdao::nostr::NostrRoomRuntime<frostdao::nostr::InMemoryRoomTransport>),
+    Relay(frostdao::nostr::NostrRoomRuntime<frostdao::nostr::RelayRoomTransport>),
+}
+
+impl TuiNostrRuntime {
+    fn publish(&mut self, message: frostdao::nostr::NostrProtocolMessage) -> Result<()> {
+        match self {
+            Self::Demo(runtime) => runtime.publish(message),
+            Self::Relay(runtime) => runtime.publish(message),
+        }
+    }
+
+    fn receive(&mut self, now: u64) -> Result<Vec<frostdao::nostr::NostrProtocolMessage>> {
+        match self {
+            Self::Demo(runtime) => runtime.receive(now),
+            Self::Relay(runtime) => runtime.receive(now),
+        }
+    }
+
+    fn label(&self) -> &'static str {
+        match self {
+            Self::Demo(_) => "demo",
+            Self::Relay(_) => "relay",
+        }
+    }
+
+    #[cfg(test)]
+    fn demo_room_len(&self, room: &str) -> Option<usize> {
+        match self {
+            Self::Demo(runtime) => Some(runtime.transport().room_len(room)),
+            Self::Relay(_) => None,
+        }
+    }
+
+    fn publish_demo_message(
+        &mut self,
+        message: frostdao::nostr::NostrProtocolMessage,
+    ) -> Result<()> {
+        match self {
+            Self::Demo(runtime) => runtime.transport_mut().publish(message),
+            Self::Relay(_) => {
+                anyhow::bail!("demo participant simulation is unavailable in relay mode")
+            }
+        }
+    }
+}
+
 /// Balance information for a wallet
 #[derive(Clone)]
 pub struct BalanceInfo {
@@ -81,8 +132,7 @@ pub struct App {
     /// Participants who have joined (party_index -> pubkey/name)
     pub nostr_participants: HashMap<u32, String>,
     /// Hardened room runtime for TUI relay flows
-    pub nostr_runtime:
-        Option<frostdao::nostr::NostrRoomRuntime<frostdao::nostr::InMemoryRoomTransport>>,
+    pub nostr_runtime: Option<TuiNostrRuntime>,
 
     // Nostr DKG/signing state
     /// Current keygen state
@@ -369,14 +419,40 @@ impl App {
 
     /// Join the configured Nostr room using the hardened runtime wrapper.
     pub fn join_nostr_room_runtime(&mut self) -> Result<()> {
-        let transport = frostdao::nostr::InMemoryRoomTransport::new();
+        let relay_urls = self.nostr_relay_urls_from_env();
+        self.join_nostr_room_runtime_with_relays(relay_urls)
+    }
+
+    /// Join the configured room with explicit relay URLs. Empty relays use demo mode.
+    pub fn join_nostr_room_runtime_with_relays(&mut self, relay_urls: Vec<String>) -> Result<()> {
         let cache_path = self.nostr_replay_cache_path();
-        let mut runtime = frostdao::nostr::NostrRoomRuntime::load(
-            self.nostr_room_id.clone(),
-            self.nostr_my_index,
-            transport,
-            cache_path,
-        )?;
+        let mut runtime = if relay_urls.is_empty() {
+            let transport = frostdao::nostr::InMemoryRoomTransport::new();
+            TuiNostrRuntime::Demo(frostdao::nostr::NostrRoomRuntime::load(
+                self.nostr_room_id.clone(),
+                self.nostr_my_index,
+                transport,
+                cache_path,
+            )?)
+        } else {
+            if self.network == NetworkSelection::Mainnet && !mainnet_nostr_enabled() {
+                anyhow::bail!(
+                    "mainnet relay rooms require {}=1; use testnet or signet by default",
+                    TUI_MAINNET_NOSTR_ENV
+                );
+            }
+            let transport = frostdao::nostr::RelayRoomTransport::connect(
+                &self.nostr_room_id,
+                self.nostr_my_index,
+                &relay_urls,
+            )?;
+            TuiNostrRuntime::Relay(frostdao::nostr::NostrRoomRuntime::load(
+                self.nostr_room_id.clone(),
+                self.nostr_my_index,
+                transport,
+                cache_path,
+            )?)
+        };
 
         let payload = frostdao::nostr::RoomJoinPayload {
             party_index: self.nostr_my_index,
@@ -400,6 +476,23 @@ impl App {
         self.nostr_participants.clear();
         self.poll_nostr_room_runtime()?;
         Ok(())
+    }
+
+    pub fn nostr_transport_label(&self) -> String {
+        if let Some(runtime) = &self.nostr_runtime {
+            return runtime.label().to_string();
+        }
+
+        let relays = self.nostr_relay_urls_from_env();
+        if relays.is_empty() {
+            "demo".to_string()
+        } else {
+            format!("relay ({})", relays.join(","))
+        }
+    }
+
+    fn nostr_relay_urls_from_env(&self) -> Vec<String> {
+        nostr_relay_urls_from_env()
     }
 
     /// Leave the current TUI Nostr room.
@@ -534,7 +627,7 @@ impl App {
         )?
         .with_tss();
 
-        runtime.transport_mut().publish(message)?;
+        runtime.publish_demo_message(message)?;
         self.poll_nostr_room_runtime()?;
         Ok(())
     }
@@ -723,9 +816,29 @@ fn unix_timestamp_secs() -> u64 {
         .unwrap_or(1)
 }
 
+fn nostr_relay_urls_from_env() -> Vec<String> {
+    std::env::var(TUI_NOSTR_RELAYS_ENV)
+        .ok()
+        .into_iter()
+        .flat_map(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|relay| !relay.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+fn mainnet_nostr_enabled() -> bool {
+    std::env::var(TUI_MAINNET_NOSTR_ENV).as_deref() == Ok("1")
+}
+
 #[cfg(test)]
 mod tests {
     use super::App;
+    use crate::tui::state::NetworkSelection;
 
     #[test]
     fn tui_nostr_room_uses_runtime_and_replay_cache() {
@@ -737,9 +850,10 @@ mod tests {
         let cache_path = app.nostr_replay_cache_path();
         let _ = std::fs::remove_file(&cache_path);
 
-        app.join_nostr_room_runtime().unwrap();
+        app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
         assert!(app.nostr_connected);
         assert!(app.nostr_runtime.is_some());
+        assert_eq!(app.nostr_transport_label(), "demo");
         assert_eq!(app.nostr_participants.get(&1).unwrap(), "tui-party-1");
         assert!(cache_path.exists());
 
@@ -764,7 +878,7 @@ mod tests {
         let cache_path = app.nostr_replay_cache_path();
         let _ = std::fs::remove_file(&cache_path);
 
-        app.join_nostr_room_runtime().unwrap();
+        app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
         let proposal = crate::tui::state::TxProposal {
             session_id: "session-test".to_string(),
             proposer_index: 1,
@@ -791,9 +905,8 @@ mod tests {
             app.nostr_runtime
                 .as_ref()
                 .unwrap()
-                .transport()
-                .room_len(&app.nostr_room_id),
-            2
+                .demo_room_len(&app.nostr_room_id),
+            Some(2)
         );
 
         app.publish_nostr_tx_consent("wallet-test", &proposal, true, None)
@@ -802,11 +915,25 @@ mod tests {
             app.nostr_runtime
                 .as_ref()
                 .unwrap()
-                .transport()
-                .room_len(&app.nostr_room_id),
-            3
+                .demo_room_len(&app.nostr_room_id),
+            Some(3)
         );
 
         let _ = std::fs::remove_file(&cache_path);
+    }
+
+    #[test]
+    fn tui_nostr_relay_mode_is_guarded_on_mainnet() {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Mainnet;
+        app.nostr_room_id = format!("tui-mainnet-relay-guard-test-{}", std::process::id());
+        app.nostr_my_index = 1;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 2;
+
+        let err = app
+            .join_nostr_room_runtime_with_relays(vec!["wss://relay.example.invalid".to_string()])
+            .unwrap_err();
+        assert!(err.to_string().contains("mainnet relay rooms require"));
     }
 }

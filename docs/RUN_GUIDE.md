@@ -264,7 +264,13 @@ The current Nostr protocol foundation is documented in [Nostr Protocol](NOSTR_PR
 
 The TUI room screen creates a `NostrRoomRuntime` when joining a room. The current TUI runtime uses deterministic in-memory transport for local testnet/demo flows, while still validating versioned envelopes and persisting replay-cache IDs under `.frost_state/nostr_replay/`. TUI transaction proposal and consent actions publish versioned `tx_proposal` and `tx_consent` messages through this runtime before advancing the signing flow.
 
-For relay-backed testnet experiments, the codebase exposes `RelayRoomTransport` and `NostrClient::connect_with_relays` so non-demo room wiring can reuse the same runtime checks with explicit relay URLs. Keep mainnet disabled until the relay integration tests and remaining live ceremony gates in [Production Readiness](PRODUCTION_READINESS.md) are complete.
+For relay-backed testnet experiments, the codebase exposes `RelayRoomTransport` and `NostrClient::connect_with_relays` so non-demo room wiring can reuse the same runtime checks with explicit relay URLs. The TUI stays in demo transport by default. Set comma-separated relays to opt into relay transport on testnet/signet:
+
+```bash
+FROSTDAO_TUI_NOSTR_RELAYS=wss://relay.damus.io cargo run
+```
+
+Mainnet relay rooms are blocked unless `FROSTDAO_ENABLE_MAINNET_NOSTR=1` is also set. Keep mainnet disabled until the relay integration tests and remaining live ceremony gates in [Production Readiness](PRODUCTION_READINESS.md) are complete.
 
 Sensitive payloads must be NIP-44 encrypted before relay publishing. The relay should only see public status messages and ciphertext.
 
@@ -280,4 +286,4 @@ frostdao <command> --help
 
 ## Current Production Note
 
-The CLI flows, protocol types, guarded TUI Nostr room runtime, runtime-published TUI proposal/consent messages, deterministic in-memory Nostr transport, relay transport adapter, and quality gate are implemented and tested. Before mainnet production use, finish public relay TUI wiring and relay integration testing listed in [Production Readiness](PRODUCTION_READINESS.md).
+The CLI flows, protocol types, guarded TUI Nostr room runtime, runtime-published TUI proposal/consent messages, deterministic in-memory Nostr transport, opt-in relay TUI transport, relay transport adapter, and quality gate are implemented and tested. Before mainnet production use, finish public relay TUI wiring and relay integration testing listed in [Production Readiness](PRODUCTION_READINESS.md).

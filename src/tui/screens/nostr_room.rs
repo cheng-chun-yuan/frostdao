@@ -61,8 +61,11 @@ fn render_configure(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(Color::Gray),
         )),
         Line::from(vec![
-            Span::styled("Relay: ", Style::default().fg(Color::DarkGray)),
-            Span::styled("wss://relay.damus.io", Style::default().fg(Color::Green)),
+            Span::styled("Transport: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                app.nostr_transport_label(),
+                Style::default().fg(Color::Green),
+            ),
         ]),
     ];
     let info = Paragraph::new(info_lines);

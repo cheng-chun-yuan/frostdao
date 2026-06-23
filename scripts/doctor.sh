@@ -292,7 +292,12 @@ def check_replay_cache_persistence():
         missing.append("src/nostr/mod.rs: RelayRoomTransport export")
     app_required = [
         "pub nostr_runtime",
+        "pub enum TuiNostrRuntime",
         "join_nostr_room_runtime",
+        "join_nostr_room_runtime_with_relays",
+        "FROSTDAO_TUI_NOSTR_RELAYS",
+        "FROSTDAO_ENABLE_MAINNET_NOSTR",
+        "tui_nostr_relay_mode_is_guarded_on_mainnet",
         "nostr_replay_cache_path",
         "tui_nostr_room_uses_runtime_and_replay_cache",
     ]
@@ -304,6 +309,10 @@ def check_replay_cache_persistence():
         missing.append("RUN_GUIDE TUI NostrRoomRuntime documentation")
     if "relay transport adapter" not in run_guide:
         missing.append("RUN_GUIDE relay transport adapter documentation")
+    if "FROSTDAO_TUI_NOSTR_RELAYS" not in run_guide:
+        missing.append("RUN_GUIDE relay opt-in env documentation")
+    if "FROSTDAO_ENABLE_MAINNET_NOSTR=1" not in run_guide:
+        missing.append("RUN_GUIDE mainnet relay guard documentation")
 
     if missing:
         doctor.fail(f"persisted replay cache markers missing: {', '.join(missing)}")

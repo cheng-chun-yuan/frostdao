@@ -2309,8 +2309,10 @@ fn handle_nostr_room_configure(app: &mut App, key: KeyEvent) {
                 Ok(()) => {
                     app.nostr_room_phase = NostrRoomPhase::WaitingForParticipants;
                     app.message = Some(format!(
-                        "Joined room '{}' as Party {} with replay guard",
-                        app.nostr_room_id, app.nostr_my_index
+                        "Joined room '{}' as Party {} with {} transport",
+                        app.nostr_room_id,
+                        app.nostr_my_index,
+                        app.nostr_transport_label()
                     ));
                 }
                 Err(e) => {
