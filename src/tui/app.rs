@@ -720,20 +720,34 @@ impl App {
                     let Some(session_id) = nonempty_message_session(&message) else {
                         continue;
                     };
+                    let Some(message_wallet) = nonempty_message_wallet(&message) else {
+                        continue;
+                    };
+                    if !self.accept_nostr_tx_broadcast(
+                        &message,
+                        &payload,
+                        &session_id,
+                        &message_wallet,
+                    ) {
+                        continue;
+                    }
                     self.nostr_broadcasts
                         .insert(session_id.clone(), payload.clone());
                     if matches!(
                         &self.nostr_sign_state,
                         NostrSignState::WaitingForExecution {
+                            wallet_name: active_wallet,
                             session_id: active_session,
                             ..
                         } | NostrSignState::CollectingShares {
+                            wallet_name: active_wallet,
                             session_id: active_session,
                             ..
                         } | NostrSignState::Combining {
+                            wallet_name: active_wallet,
                             session_id: active_session,
                             ..
-                        } if *active_session == session_id
+                        } if *active_wallet == message_wallet && *active_session == session_id
                     ) {
                         self.nostr_sign_state = NostrSignState::Complete { txid: payload.txid };
                     }
@@ -1244,6 +1258,49 @@ impl App {
         parse_tui_recipient_address(payload.review.from_address.trim(), network, network_name)
             .is_ok()
     }
+
+    fn accept_nostr_tx_broadcast(
+        &self,
+        message: &frostdao::nostr::NostrProtocolMessage,
+        payload: &frostdao::nostr::TxBroadcastEvent,
+        session_id: &str,
+        message_wallet: &str,
+    ) -> bool {
+        if message.from == 0
+            || message.from > self.nostr_n_parties
+            || payload.txid.trim().is_empty()
+            || payload.raw_tx.trim().is_empty()
+            || payload.network != self.network.display_name()
+        {
+            return false;
+        }
+
+        let active_matches = matches!(
+            &self.nostr_sign_state,
+            NostrSignState::WaitingForExecution {
+                wallet_name,
+                session_id: active_session,
+            } | NostrSignState::CollectingShares {
+                wallet_name,
+                session_id: active_session,
+                ..
+            } | NostrSignState::Combining {
+                wallet_name,
+                session_id: active_session,
+            } if wallet_name == message_wallet && active_session == session_id
+        );
+        if !active_matches {
+            return false;
+        }
+
+        let Ok(tx_bytes) = hex::decode(payload.raw_tx.trim()) else {
+            return false;
+        };
+        let Ok(tx) = bitcoin::consensus::deserialize::<bitcoin::Transaction>(&tx_bytes) else {
+            return false;
+        };
+        tx.compute_txid().to_string() == payload.txid
+    }
 }
 
 fn unix_timestamp_secs() -> u64 {
@@ -1314,8 +1371,13 @@ fn mainnet_nostr_enabled() -> bool {
 mod tests {
     use super::App;
     use crate::tui::state::{NetworkSelection, NostrSignState};
+    use bitcoin::absolute::LockTime;
     use bitcoin::secp256k1::{Keypair, Secp256k1, SecretKey};
-    use bitcoin::{Address, Network, XOnlyPublicKey};
+    use bitcoin::transaction::Version;
+    use bitcoin::{
+        Address, Amount, Network, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
+        XOnlyPublicKey,
+    };
     use frostdao::protocol::keygen::WalletSummary;
     use std::collections::BTreeMap;
 
@@ -1371,6 +1433,28 @@ mod tests {
             },
             description: "remote proposal".to_string(),
             timestamp: 1_700_000_010,
+        }
+    }
+
+    fn valid_broadcast_event_with_value(value_sats: u64) -> frostdao::nostr::TxBroadcastEvent {
+        let tx = Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![TxIn {
+                previous_output: OutPoint::null(),
+                script_sig: ScriptBuf::new(),
+                sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+                witness: Witness::new(),
+            }],
+            output: vec![TxOut {
+                value: Amount::from_sat(value_sats),
+                script_pubkey: ScriptBuf::new(),
+            }],
+        };
+        frostdao::nostr::TxBroadcastEvent {
+            txid: tx.compute_txid().to_string(),
+            raw_tx: bitcoin::consensus::encode::serialize_hex(&tx),
+            network: "Testnet3".to_string(),
         }
     }
 
@@ -2380,11 +2464,86 @@ mod tests {
             wallet_name: "wallet-test".to_string(),
             session_id: "session-remote".to_string(),
         };
-        let broadcast_event = frostdao::nostr::TxBroadcastEvent {
-            txid: "txid-remote".to_string(),
-            raw_tx: "raw-remote-transaction".to_string(),
-            network: "testnet".to_string(),
-        };
+        let wrong_wallet_broadcast = valid_broadcast_event_with_value(1_001);
+        let wrong_wallet_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxBroadcast,
+            2,
+            &wrong_wallet_broadcast,
+        )
+        .unwrap()
+        .with_wallet("wallet-other")
+        .with_session("session-remote")
+        .with_tss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(wrong_wallet_message)
+            .unwrap();
+
+        let mut wrong_network_broadcast = valid_broadcast_event_with_value(1_002);
+        wrong_network_broadcast.network = "Mainnet".to_string();
+        let wrong_network_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxBroadcast,
+            2,
+            &wrong_network_broadcast,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-remote")
+        .with_tss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(wrong_network_message)
+            .unwrap();
+
+        let mut wrong_txid_broadcast = valid_broadcast_event_with_value(1_003);
+        wrong_txid_broadcast.txid =
+            "0000000000000000000000000000000000000000000000000000000000000000".to_string();
+        let wrong_txid_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxBroadcast,
+            2,
+            &wrong_txid_broadcast,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-remote")
+        .with_tss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(wrong_txid_message)
+            .unwrap();
+
+        let mut invalid_raw_broadcast = valid_broadcast_event_with_value(1_004);
+        invalid_raw_broadcast.raw_tx = "not-hex".to_string();
+        let invalid_raw_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxBroadcast,
+            2,
+            &invalid_raw_broadcast,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-remote")
+        .with_tss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(invalid_raw_message)
+            .unwrap();
+
+        app.poll_nostr_room_runtime().unwrap();
+        assert!(app.nostr_broadcasts.is_empty());
+        assert!(matches!(
+            &app.nostr_sign_state,
+            NostrSignState::Combining { session_id, .. } if session_id == "session-remote"
+        ));
+
+        let broadcast_event = valid_broadcast_event_with_value(1_005);
         let broadcast_message = frostdao::nostr::NostrProtocolMessage::new(
             app.nostr_room_id.clone(),
             frostdao::nostr::NostrMessageKind::TxBroadcast,
@@ -2403,11 +2562,11 @@ mod tests {
         app.poll_nostr_room_runtime().unwrap();
         assert_eq!(
             app.nostr_broadcasts.get("session-remote").unwrap().txid,
-            "txid-remote"
+            broadcast_event.txid
         );
         assert!(matches!(
             &app.nostr_sign_state,
-            NostrSignState::Complete { txid } if txid == "txid-remote"
+            NostrSignState::Complete { txid } if txid == &broadcast_event.txid
         ));
 
         let _ = std::fs::remove_file(&cache_path);
