@@ -147,6 +147,23 @@ fn render_status_info(frame: &mut Frame, app: &App, area: Rect) {
                         Style::default().fg(Color::Green),
                     ),
                 ]),
+                Line::from(vec![
+                    Span::styled("Network: ", Style::default().fg(Color::Gray)),
+                    Span::styled(&proposal.review.network, Style::default().fg(Color::Cyan)),
+                    Span::raw("  "),
+                    Span::styled("Path: ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        &proposal.review.source_path,
+                        Style::default().fg(Color::White),
+                    ),
+                ]),
+                Line::from(vec![
+                    Span::styled("Sighash fingerprint: ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        &proposal.review.sighash_fingerprint,
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                ]),
                 Line::from(vec![Span::styled(
                     format!("Waiting for consents ({}/{})...", consent_count, threshold),
                     Style::default().fg(Color::Yellow),
@@ -166,6 +183,23 @@ fn render_status_info(frame: &mut Frame, app: &App, area: Rect) {
                     Span::styled(&proposal.session_id[..8], Style::default().fg(Color::Cyan)),
                 ]),
                 Line::from(vec![
+                    Span::styled("Network: ", Style::default().fg(Color::Gray)),
+                    Span::styled(&proposal.review.network, Style::default().fg(Color::Cyan)),
+                    Span::raw("  "),
+                    Span::styled("Source path: ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        &proposal.review.source_path,
+                        Style::default().fg(Color::White),
+                    ),
+                ]),
+                Line::from(vec![
+                    Span::styled("From: ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        &proposal.review.from_address,
+                        Style::default().fg(Color::White),
+                    ),
+                ]),
+                Line::from(vec![
                     Span::styled("To: ", Style::default().fg(Color::Gray)),
                     Span::styled(&proposal.to_address, Style::default().fg(Color::Yellow)),
                 ]),
@@ -183,9 +217,16 @@ fn render_status_info(frame: &mut Frame, app: &App, area: Rect) {
                     ),
                 ]),
                 Line::from(vec![
-                    Span::styled("Sighash: ", Style::default().fg(Color::Gray)),
+                    Span::styled("Sighash fingerprint: ", Style::default().fg(Color::Gray)),
                     Span::styled(
-                        format!("{}...", &proposal.sighash[..32.min(proposal.sighash.len())]),
+                        &proposal.review.sighash_fingerprint,
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                ]),
+                Line::from(vec![
+                    Span::styled("Raw sighash: ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        format!("{}...", &proposal.sighash[..16.min(proposal.sighash.len())]),
                         Style::default().fg(Color::DarkGray),
                     ),
                 ]),
@@ -454,7 +495,7 @@ fn render_shares_list(
 fn render_help(frame: &mut Frame, app: &App, area: Rect) {
     let help_text = match &app.nostr_sign_state {
         NostrSignState::SelectRole { .. } => "↑/↓: Select | Enter: Continue | Esc: Back",
-        NostrSignState::ReviewProposal { .. } => "Enter: Consent | r: Reject | Esc: Back",
+        NostrSignState::ReviewProposal { .. } => "y: Consent | r: Reject | Esc: Back",
         NostrSignState::Complete { .. } => "Enter: Done | c: Copy TXID",
         _ => "Enter: Continue | Esc: Cancel",
     };

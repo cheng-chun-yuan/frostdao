@@ -332,6 +332,29 @@ def check_audit_logging():
         doctor.ok("structured audit logging is present and excludes secret markers")
 
 
+def check_nostr_transaction_review():
+    events = read(Path("src/nostr/events.rs"))
+    tui = read(Path("src/tui/mod.rs"))
+    screen = read(Path("src/tui/screens/nostr_sign.rs"))
+    docs = read(Path("docs/NOSTR_PROTOCOL.md"))
+    keymap = read(Path("docs/TUI_KEYMAP.md"))
+    required = [
+        ("src/nostr/events.rs", events, "pub struct TxReviewPayload"),
+        ("src/nostr/events.rs", events, "reviewed_sighash_fingerprint"),
+        ("src/nostr/events.rs", events, "tx_consent_carries_reviewed_fingerprint"),
+        ("src/tui/mod.rs", tui, "press y to consent"),
+        ("src/tui/screens/nostr_sign.rs", screen, "Sighash fingerprint: "),
+        ("docs/NOSTR_PROTOCOL.md", docs, "`tx_proposal` must include a `review` object"),
+        ("docs/TUI_KEYMAP.md", keymap, "Consent after reviewing proposal fingerprint"),
+    ]
+    missing = [f"{path}: {marker}" for path, content, marker in required if marker not in content]
+
+    if missing:
+        doctor.fail(f"Nostr transaction review markers missing: {', '.join(missing)}")
+    else:
+        doctor.ok("Nostr proposal consent carries review metadata")
+
+
 print("FrostDAO Doctor")
 print("================")
 check_markdown_links()
@@ -345,6 +368,7 @@ check_agent_payment_semantics()
 check_replay_cache_persistence()
 check_transaction_review()
 check_audit_logging()
+check_nostr_transaction_review()
 
 if doctor.failures:
     print("\nDoctor found issues:")

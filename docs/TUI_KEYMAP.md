@@ -218,8 +218,9 @@ The policy input remains editable. Use the templates as starting points, then ty
 | Key | Action |
 |-----|--------|
 | `↑/↓`, `j/k` | Select wallet where applicable |
-| `Enter` | Continue/consent/done |
+| `Enter` | Continue/done |
 | `p` | Propose transaction, in role select |
 | `c` | Consent role in role select, or copy TXID on completion |
+| `y` | Consent after reviewing proposal fingerprint |
 | `r` | Reject proposal or retry where shown |
 | `Esc` | Back/cancel |

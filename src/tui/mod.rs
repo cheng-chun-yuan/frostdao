@@ -2554,14 +2554,35 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                         .map(|d| d.as_secs())
                         .unwrap_or(0);
                     let session_id = format!("session-{}", timestamp);
+                    let fee_rate = 10;
+                    let sighash = format!("{timestamp:064x}");
+                    let to_address = app.nostr_to_address.clone();
+                    let amount_sats = app.nostr_amount_sats;
+                    let from_address = app
+                        .wallets
+                        .iter()
+                        .find(|wallet| wallet.name == *wallet_name)
+                        .and_then(|wallet| wallet.address.clone())
+                        .unwrap_or_else(|| "unknown".to_string());
                     let proposal = crate::tui::state::TxProposal {
                         session_id: session_id.clone(),
                         proposer_index: app.nostr_my_index,
-                        to_address: app.nostr_to_address.clone(),
-                        amount_sats: app.nostr_amount_sats,
-                        fee_rate: 10, // Default fee rate
-                        sighash: "placeholder-sighash".to_string(),
-                        description: format!("Send {} sats", app.nostr_amount_sats),
+                        to_address: to_address.clone(),
+                        amount_sats,
+                        fee_rate,
+                        sighash: sighash.clone(),
+                        review: frostdao::nostr::TxReviewPayload {
+                            network: app.network.display_name().to_string(),
+                            source_path: "root key-path".to_string(),
+                            from_address,
+                            to_address,
+                            amount_sats,
+                            fee_rate_sats_vb: fee_rate,
+                            sighash_fingerprint: frostdao::protocol::dkg_tx::sighash_fingerprint(
+                                &sighash,
+                            ),
+                        },
+                        description: format!("Send {} sats", amount_sats),
                         timestamp,
                     };
                     app.nostr_sign_state = NostrSignState::WaitingForConsent {
@@ -2599,16 +2620,11 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                         proposal,
                     };
                 }
-                NostrSignState::ReviewProposal {
-                    wallet_name,
-                    proposal,
-                } => {
-                    // Consent to the proposal
-                    app.nostr_sign_state = NostrSignState::WaitingForExecution {
-                        wallet_name: wallet_name.clone(),
-                        session_id: proposal.session_id.clone(),
-                    };
-                    app.set_message("Consent sent! Waiting for execution...");
+                NostrSignState::ReviewProposal { proposal, .. } => {
+                    app.message = Some(format!(
+                        "Review fingerprint {}, then press y to consent",
+                        proposal.review.sighash_fingerprint
+                    ));
                 }
                 NostrSignState::WaitingForExecution {
                     wallet_name,
@@ -2687,6 +2703,25 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                     wallet_name: wallet_name.clone(),
                 };
                 app.set_message("Proposal rejected");
+            }
+        }
+        KeyCode::Char('y') | KeyCode::Char('Y') => {
+            if let NostrSignState::ReviewProposal {
+                wallet_name,
+                proposal,
+            } = &app.nostr_sign_state
+            {
+                let wallet_name = wallet_name.clone();
+                let session_id = proposal.session_id.clone();
+                let fingerprint = proposal.review.sighash_fingerprint.clone();
+                app.nostr_sign_state = NostrSignState::WaitingForExecution {
+                    wallet_name,
+                    session_id,
+                };
+                app.message = Some(format!(
+                    "Consent sent after reviewing fingerprint {}",
+                    fingerprint
+                ));
             }
         }
         _ => {}

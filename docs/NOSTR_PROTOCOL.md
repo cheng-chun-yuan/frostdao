@@ -157,6 +157,10 @@ For sorted signer ranks `[r0, r1, ..., r(t-1)]`, the signer set is valid when `r
 4. Parties exchange `signing_share_encrypted`.
 5. Aggregator combines shares, broadcasts the transaction, then publishes `tx_broadcast`.
 
+`tx_proposal` must include a `review` object with `network`, `source_path`, `from_address`, `to_address`, `amount_sats`, `fee_rate_sats_vb`, and `sighash_fingerprint`. Signers should compare these fields across devices before consenting.
+
+`tx_consent` should include `reviewed_sighash_fingerprint` so the proposer can confirm which proposal fingerprint each party approved.
+
 ## Reshare Flow
 
 1. Existing parties publish `reshare_round1`.

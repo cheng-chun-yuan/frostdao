@@ -387,8 +387,36 @@ pub struct TxProposalEvent {
     pub amount_sats: u64,
     pub fee_rate: u64,
     pub sighash: String,
+    #[serde(default)]
+    pub review: TxReviewPayload,
     pub description: String,
     pub timestamp: u64,
+}
+
+/// Human-checkable transaction review data carried over relay proposals.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TxReviewPayload {
+    pub network: String,
+    pub source_path: String,
+    pub from_address: String,
+    pub to_address: String,
+    pub amount_sats: u64,
+    pub fee_rate_sats_vb: u64,
+    pub sighash_fingerprint: String,
+}
+
+impl Default for TxReviewPayload {
+    fn default() -> Self {
+        Self {
+            network: "unknown".to_string(),
+            source_path: "unknown".to_string(),
+            from_address: "unknown".to_string(),
+            to_address: String::new(),
+            amount_sats: 0,
+            fee_rate_sats_vb: 0,
+            sighash_fingerprint: String::new(),
+        }
+    }
 }
 
 /// Consent message sent by a signer after reviewing a proposal.
@@ -396,6 +424,8 @@ pub struct TxProposalEvent {
 pub struct TxConsentEvent {
     pub proposal_session: String,
     pub consent: bool,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub reviewed_sighash_fingerprint: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
@@ -641,6 +671,15 @@ mod tests {
             amount_sats: 10_000,
             fee_rate: 5,
             sighash: "00".repeat(32),
+            review: TxReviewPayload {
+                network: "testnet".to_string(),
+                source_path: "m/86'/0'/0'/0/0".to_string(),
+                from_address: "tb1pfrom".to_string(),
+                to_address: "tb1ptest".to_string(),
+                amount_sats: 10_000,
+                fee_rate_sats_vb: 5,
+                sighash_fingerprint: "000000000000...000000000000".to_string(),
+            },
             description: "test spend".to_string(),
             timestamp: 1_700_000_000,
         };
@@ -655,6 +694,23 @@ mod tests {
         let parsed = parse_protocol_message(&encoded).unwrap();
         assert_eq!(parsed.kind, NostrMessageKind::TxProposal);
         assert_eq!(parsed.payload_as::<TxProposalEvent>().unwrap(), payload);
+    }
+
+    #[test]
+    fn tx_consent_carries_reviewed_fingerprint() {
+        let consent = TxConsentEvent {
+            proposal_session: "session-a".to_string(),
+            consent: true,
+            reviewed_sighash_fingerprint: "001122334455...aabbccddeeff".to_string(),
+            reason: None,
+        };
+
+        let encoded = serde_json::to_string(&consent).unwrap();
+        let parsed: TxConsentEvent = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(
+            parsed.reviewed_sighash_fingerprint,
+            consent.reviewed_sighash_fingerprint
+        );
     }
 
     #[test]
