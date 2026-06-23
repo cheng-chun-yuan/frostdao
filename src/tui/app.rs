@@ -617,6 +617,9 @@ impl App {
                     let Some(wallet_name) = nonempty_message_wallet(&message) else {
                         continue;
                     };
+                    if !self.accept_nostr_tx_proposal(&message, &payload) {
+                        continue;
+                    }
                     self.nostr_pending_proposals.insert(
                         session_id.clone(),
                         TxProposal {
@@ -1194,6 +1197,48 @@ impl App {
             && to_index == self.nostr_my_index
             && message.to == Some(self.nostr_my_index)
     }
+
+    fn accept_nostr_tx_proposal(
+        &self,
+        message: &frostdao::nostr::NostrProtocolMessage,
+        payload: &frostdao::nostr::TxProposalEvent,
+    ) -> bool {
+        if payload.proposer_index != message.from
+            || payload.proposer_index == 0
+            || payload.proposer_index > self.nostr_n_parties
+            || payload.amount_sats == 0
+            || payload.fee_rate == 0
+            || payload.sighash.trim().is_empty()
+        {
+            return false;
+        }
+
+        if payload.review.network != self.network.display_name()
+            || payload.review.source_path.trim().is_empty()
+            || payload.review.from_address.trim().is_empty()
+            || payload.review.to_address.trim().is_empty()
+            || payload.review.amount_sats != payload.amount_sats
+            || payload.review.fee_rate_sats_vb != payload.fee_rate
+            || payload.review.sighash_fingerprint
+                != frostdao::protocol::dkg_tx::sighash_fingerprint(&payload.sighash)
+        {
+            return false;
+        }
+
+        let network = self.network.to_bitcoin_network();
+        let network_name = self.network.display_name();
+        let Ok(to_address) =
+            parse_tui_recipient_address(payload.to_address.trim(), network, network_name)
+        else {
+            return false;
+        };
+        if payload.review.to_address != to_address {
+            return false;
+        }
+
+        parse_tui_recipient_address(payload.review.from_address.trim(), network, network_name)
+            .is_ok()
+    }
 }
 
 fn unix_timestamp_secs() -> u64 {
@@ -1298,6 +1343,30 @@ mod tests {
         app.nostr_to_address = test_address(Network::Testnet);
         app.nostr_amount_sats = 50_000;
         app
+    }
+
+    fn valid_remote_proposal_event(proposer_index: u32) -> frostdao::nostr::TxProposalEvent {
+        let to_address = test_address(Network::Testnet);
+        let from_address = test_address(Network::Testnet);
+        let sighash = "remote-sighash".to_string();
+        frostdao::nostr::TxProposalEvent {
+            proposer_index,
+            to_address: to_address.clone(),
+            amount_sats: 25_000,
+            fee_rate: 8,
+            sighash: sighash.clone(),
+            review: frostdao::nostr::TxReviewPayload {
+                network: "Testnet3".to_string(),
+                source_path: "m/86'/1'/0'/0/1".to_string(),
+                from_address,
+                to_address,
+                amount_sats: 25_000,
+                fee_rate_sats_vb: 8,
+                sighash_fingerprint: frostdao::protocol::dkg_tx::sighash_fingerprint(&sighash),
+            },
+            description: "remote proposal".to_string(),
+            timestamp: 1_700_000_010,
+        }
     }
 
     #[test]
@@ -1608,6 +1677,7 @@ mod tests {
     #[test]
     fn tui_nostr_poll_rejects_sessionless_signing_messages() {
         let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Testnet3;
         app.nostr_room_id = format!("tui-session-required-test-{}", std::process::id());
         app.nostr_my_index = 1;
         app.nostr_threshold = 2;
@@ -1617,24 +1687,7 @@ mod tests {
 
         app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
 
-        let proposal_event = frostdao::nostr::TxProposalEvent {
-            proposer_index: 2,
-            to_address: "tb1qrecipient".to_string(),
-            amount_sats: 25_000,
-            fee_rate: 8,
-            sighash: "remote-sighash".to_string(),
-            review: frostdao::nostr::TxReviewPayload {
-                network: "testnet".to_string(),
-                source_path: "m/86'/1'/0'/0/1".to_string(),
-                from_address: "tb1qremote".to_string(),
-                to_address: "tb1qrecipient".to_string(),
-                amount_sats: 25_000,
-                fee_rate_sats_vb: 8,
-                sighash_fingerprint: "remote123".to_string(),
-            },
-            description: "remote proposal".to_string(),
-            timestamp: 1_700_000_010,
-        };
+        let proposal_event = valid_remote_proposal_event(2);
         let walletless_proposal = frostdao::nostr::NostrProtocolMessage::new(
             app.nostr_room_id.clone(),
             frostdao::nostr::NostrMessageKind::TxProposal,
@@ -1689,19 +1742,11 @@ mod tests {
             session_id: "session-expected".to_string(),
             wallet_name: "wallet-test".to_string(),
             proposer_index: 2,
-            to_address: "tb1qrecipient".to_string(),
-            amount_sats: 25_000,
-            fee_rate: 8,
-            sighash: "remote-sighash".to_string(),
-            review: frostdao::nostr::TxReviewPayload {
-                network: "testnet".to_string(),
-                source_path: "m/86'/1'/0'/0/1".to_string(),
-                from_address: "tb1qremote".to_string(),
-                to_address: "tb1qrecipient".to_string(),
-                amount_sats: 25_000,
-                fee_rate_sats_vb: 8,
-                sighash_fingerprint: "remote123".to_string(),
-            },
+            to_address: proposal_event.to_address.clone(),
+            amount_sats: proposal_event.amount_sats,
+            fee_rate: proposal_event.fee_rate,
+            sighash: proposal_event.sighash.clone(),
+            review: proposal_event.review.clone(),
             description: "remote proposal".to_string(),
             timestamp: 1_700_000_010,
         };
@@ -1855,6 +1900,133 @@ mod tests {
             &app.nostr_sign_state,
             NostrSignState::Combining { session_id, .. } if session_id == "session-expected"
         ));
+
+        let _ = std::fs::remove_file(&cache_path);
+    }
+
+    #[test]
+    fn tui_nostr_poll_rejects_malformed_tx_proposals() {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Testnet3;
+        app.nostr_room_id = format!("tui-proposal-validation-test-{}", std::process::id());
+        app.nostr_my_index = 1;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 3;
+        let cache_path = app.nostr_replay_cache_path();
+        let _ = std::fs::remove_file(&cache_path);
+
+        app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
+
+        let mismatched_proposer = valid_remote_proposal_event(3);
+        let mismatched_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxProposal,
+            2,
+            &mismatched_proposer,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-mismatched-proposer")
+        .with_tss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(mismatched_message)
+            .unwrap();
+
+        let mut zero_amount = valid_remote_proposal_event(2);
+        zero_amount.amount_sats = 0;
+        zero_amount.review.amount_sats = 0;
+        let zero_amount_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxProposal,
+            2,
+            &zero_amount,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-zero-amount")
+        .with_tss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(zero_amount_message)
+            .unwrap();
+
+        let mut wrong_network = valid_remote_proposal_event(2);
+        wrong_network.review.network = "Mainnet".to_string();
+        let wrong_network_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxProposal,
+            2,
+            &wrong_network,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-wrong-network")
+        .with_tss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(wrong_network_message)
+            .unwrap();
+
+        let mut wrong_fingerprint = valid_remote_proposal_event(2);
+        wrong_fingerprint.review.sighash_fingerprint = "wrong-fingerprint".to_string();
+        let wrong_fingerprint_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxProposal,
+            2,
+            &wrong_fingerprint,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-wrong-fingerprint")
+        .with_tss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(wrong_fingerprint_message)
+            .unwrap();
+
+        let valid = valid_remote_proposal_event(2);
+        let valid_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxProposal,
+            2,
+            &valid,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-valid")
+        .with_tss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(valid_message)
+            .unwrap();
+
+        app.poll_nostr_room_runtime().unwrap();
+        assert!(!app
+            .nostr_pending_proposals
+            .contains_key("session-mismatched-proposer"));
+        assert!(!app
+            .nostr_pending_proposals
+            .contains_key("session-zero-amount"));
+        assert!(!app
+            .nostr_pending_proposals
+            .contains_key("session-wrong-network"));
+        assert!(!app
+            .nostr_pending_proposals
+            .contains_key("session-wrong-fingerprint"));
+        assert_eq!(
+            app.nostr_pending_proposals
+                .get("session-valid")
+                .unwrap()
+                .review
+                .sighash_fingerprint,
+            frostdao::protocol::dkg_tx::sighash_fingerprint("remote-sighash")
+        );
 
         let _ = std::fs::remove_file(&cache_path);
     }
@@ -2018,6 +2190,7 @@ mod tests {
     #[test]
     fn tui_nostr_poll_ingests_proposals_and_consents() {
         let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Testnet3;
         app.nostr_room_id = format!("tui-ingest-runtime-test-{}", std::process::id());
         app.nostr_my_index = 1;
         app.nostr_threshold = 2;
@@ -2027,24 +2200,7 @@ mod tests {
 
         app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
 
-        let proposal_event = frostdao::nostr::TxProposalEvent {
-            proposer_index: 2,
-            to_address: "tb1qrecipient".to_string(),
-            amount_sats: 25_000,
-            fee_rate: 8,
-            sighash: "remote-sighash".to_string(),
-            review: frostdao::nostr::TxReviewPayload {
-                network: "testnet".to_string(),
-                source_path: "m/86'/1'/0'/0/1".to_string(),
-                from_address: "tb1qremote".to_string(),
-                to_address: "tb1qrecipient".to_string(),
-                amount_sats: 25_000,
-                fee_rate_sats_vb: 8,
-                sighash_fingerprint: "remote123".to_string(),
-            },
-            description: "remote proposal".to_string(),
-            timestamp: 1_700_000_010,
-        };
+        let proposal_event = valid_remote_proposal_event(2);
         let proposal_message = frostdao::nostr::NostrProtocolMessage::new(
             app.nostr_room_id.clone(),
             frostdao::nostr::NostrMessageKind::TxProposal,
@@ -2065,7 +2221,10 @@ mod tests {
         let pending = app.nostr_pending_proposals.get("session-remote").unwrap();
         assert_eq!(pending.proposer_index, 2);
         assert_eq!(pending.amount_sats, 25_000);
-        assert_eq!(pending.review.sighash_fingerprint, "remote123");
+        assert_eq!(
+            pending.review.sighash_fingerprint,
+            frostdao::protocol::dkg_tx::sighash_fingerprint("remote-sighash")
+        );
 
         app.nostr_sign_state = NostrSignState::WaitingForConsent {
             wallet_name: "wallet-test".to_string(),

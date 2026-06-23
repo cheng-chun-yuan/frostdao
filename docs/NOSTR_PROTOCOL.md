@@ -161,7 +161,7 @@ For `room_join`, the payload `party_index` must match the envelope `from` party.
 4. Parties exchange `signing_share_encrypted`.
 5. Aggregator combines shares, broadcasts the transaction, then publishes `tx_broadcast`.
 
-`tx_proposal` must include a `review` object with `network`, `source_path`, `from_address`, `to_address`, `amount_sats`, `fee_rate_sats_vb`, and `sighash_fingerprint`. Signers should compare these fields across devices before consenting.
+`tx_proposal` must include a `review` object with `network`, `source_path`, `from_address`, `to_address`, `amount_sats`, `fee_rate_sats_vb`, and `sighash_fingerprint`. Signers should compare these fields across devices before consenting. The TUI runtime accepts inbound proposals only when the proposal's `proposer_index` matches the envelope `from`, the proposer is inside the active room range, amount and fee rate are nonzero, source and recipient addresses parse for the selected network, review amount/fee/recipient fields match the proposal payload, review network matches the selected TUI network, and the review fingerprint matches the proposal sighash.
 
 `tx_consent` should include `reviewed_sighash_fingerprint` so the proposer can confirm which proposal fingerprint each party approved.
 
