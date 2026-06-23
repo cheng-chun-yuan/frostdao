@@ -304,6 +304,34 @@ def check_transaction_review():
         doctor.ok("transaction review fields and TUI confirmation are present")
 
 
+def check_audit_logging():
+    audit = read(Path("src/audit.rs"))
+    protocol = read(Path("src/protocol/dkg_tx.rs"))
+    security = read(Path("docs/SECURITY_MODEL.md"))
+    required = [
+        ("src/audit.rs", audit, "pub struct AuditEvent"),
+        ("src/audit.rs", audit, "DEFAULT_AUDIT_LOG"),
+        ("src/audit.rs", audit, "audit_event_appends_jsonl_without_secret_fields"),
+        ("src/protocol/dkg_tx.rs", protocol, "AuditEvent::new(\"dkg_build_tx\""),
+        ("src/protocol/dkg_tx.rs", protocol, "AuditEvent::new(\"dkg_broadcast\""),
+        ("src/protocol/dkg_tx.rs", protocol, "AuditEvent::new(\"frost_auto_sign\""),
+        ("docs/SECURITY_MODEL.md", security, "Audit events must not include mnemonics"),
+        ("docs/SECURITY_MODEL.md", security, "FROSTDAO_AUDIT_LOG"),
+    ]
+    missing = [f"{path}: {marker}" for path, content, marker in required if marker not in content]
+
+    forbidden = ["secret_share", "signature_share", "raw_tx", "mnemonic", "nonce"]
+    audit_body = audit.replace("audit_event_appends_jsonl_without_secret_fields", "")
+    leaked = [term for term in forbidden if f'with_field("{term}"' in protocol or f'pub {term}' in audit_body]
+
+    if missing:
+        doctor.fail(f"audit logging markers missing: {', '.join(missing)}")
+    elif leaked:
+        doctor.fail(f"audit logging appears to include secret markers: {', '.join(leaked)}")
+    else:
+        doctor.ok("structured audit logging is present and excludes secret markers")
+
+
 print("FrostDAO Doctor")
 print("================")
 check_markdown_links()
@@ -316,6 +344,7 @@ check_cli_docs_match_help()
 check_agent_payment_semantics()
 check_replay_cache_persistence()
 check_transaction_review()
+check_audit_logging()
 
 if doctor.failures:
     print("\nDoctor found issues:")

@@ -48,6 +48,14 @@ Nonce reuse can leak signing key material. Treat every signing session as one-ti
 - Delete nonce state after successful signing.
 - Do not retry a failed signing session with the same nonce output.
 
+## Audit Logging
+
+FrostDAO writes metadata-only JSONL audit events to `.frost_state/audit.jsonl` by default. Set `FROSTDAO_AUDIT_LOG=/path/to/audit.jsonl` to choose another path.
+
+Audit events may include wallet name, event type, status, session ID, network, source path, addresses, amount, fee, fee rate, signer indexes, txid, and sighash fingerprint.
+
+Audit events must not include mnemonics, secret shares, private keys, nonces, signature shares, ciphertext payloads, or raw transactions.
+
 ## Recovery Caution
 
 The current recovery flow is useful for restoring a lost party share, but it should be handled as a high-risk ceremony:

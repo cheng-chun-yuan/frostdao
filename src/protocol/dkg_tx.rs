@@ -27,6 +27,7 @@
 //!         txid
 //! ```
 
+use crate::audit::{self, AuditEvent};
 use crate::btc::transaction::{broadcast_transaction, fetch_fee_estimates, fetch_utxos};
 use crate::protocol::keygen::{get_state_dir, HtssMetadata};
 use crate::protocol::signing::NonceOutput;
@@ -171,6 +172,10 @@ fn network_name(network: Network) -> &'static str {
         Network::Regtest => "regtest",
         _ => "unknown",
     }
+}
+
+fn append_audit_event(event: AuditEvent) {
+    let _ = audit::append(&event);
 }
 
 /// Generate a session ID based on transaction details
@@ -432,6 +437,19 @@ pub fn build_unsigned_tx_core(
         review,
         event_type: "dkg_build_tx".to_string(),
     };
+
+    append_audit_event(
+        AuditEvent::new("dkg_build_tx", wallet_name, "prepared")
+            .with_field("session_id", &output.session_id)
+            .with_field("network", &output.review.network)
+            .with_field("source_path", &output.review.source_path)
+            .with_field("from_address", &output.review.from_address)
+            .with_field("to_address", &output.review.to_address)
+            .with_field("amount_sats", output.review.amount_sats)
+            .with_field("fee_sats", output.review.fee_sats)
+            .with_field("fee_rate_sats_vb", output.review.fee_rate_sats_vb)
+            .with_field("sighash_fingerprint", &output.review.sighash_fingerprint),
+    );
 
     Ok(CommandResult {
         output: out,
@@ -748,7 +766,7 @@ pub fn dkg_broadcast(
 
 /// Core function for combining signatures and broadcasting
 pub fn dkg_broadcast_core(
-    _wallet_name: &str,
+    wallet_name: &str,
     session_id: &str,
     unsigned_tx_hex: &str,
     shares_data: &str,
@@ -905,6 +923,12 @@ pub fn dkg_broadcast_core(
         _ => format!("https://mempool.space/testnet/tx/{}", txid),
     };
 
+    let broadcast_status = if broadcast_result.is_ok() {
+        "broadcast"
+    } else {
+        "broadcast_failed"
+    };
+
     match broadcast_result {
         Ok(_) => {
             out.push_str("\n✅ Transaction broadcast successfully!\n");
@@ -924,6 +948,23 @@ pub fn dkg_broadcast_core(
         explorer_url,
         event_type: "dkg_broadcast".to_string(),
     };
+
+    append_audit_event(
+        AuditEvent::new("dkg_broadcast", wallet_name, broadcast_status)
+            .with_field("session_id", session_id)
+            .with_field("txid", &output.txid)
+            .with_field("network", &output.network)
+            .with_field("share_count", share_outputs.len())
+            .with_field("amount_sats", session_data["amount_sats"].clone())
+            .with_field("fee_sats", session_data["fee_sats"].clone())
+            .with_field("source_path", session_data["source_path"].clone())
+            .with_field("from_address", session_data["from_address"].clone())
+            .with_field("to_address", session_data["to_address"].clone())
+            .with_field(
+                "sighash_fingerprint",
+                session_data["sighash_fingerprint"].clone(),
+            ),
+    );
 
     Ok(CommandResult {
         output: out,
@@ -1385,7 +1426,14 @@ pub fn frost_sign_all_local(
         _ => format!("https://mempool.space/testnet/tx/{}", txid),
     };
 
-    match broadcast_transaction(&raw_tx, network) {
+    let broadcast_result = broadcast_transaction(&raw_tx, network);
+    let broadcast_status = if broadcast_result.is_ok() {
+        "broadcast"
+    } else {
+        "broadcast_failed"
+    };
+
+    match broadcast_result {
         Ok(_) => {
             out.push_str("\n✅ Transaction broadcast successfully!\n");
             out.push_str(&format!("   TxID: {}\n", txid));
@@ -1423,6 +1471,20 @@ pub fn frost_sign_all_local(
         signers: selected_parties.to_vec(),
         event_type: "frost_auto_sign".to_string(),
     };
+
+    append_audit_event(
+        AuditEvent::new("frost_auto_sign", wallet_name, broadcast_status)
+            .with_field("txid", &output.txid)
+            .with_field("network", &output.network)
+            .with_field("source_path", &output.source_path)
+            .with_field("from_address", &output.from_address)
+            .with_field("to_address", &output.to_address)
+            .with_field("amount_sats", output.amount_sats)
+            .with_field("fee_sats", output.fee_sats)
+            .with_field("fee_rate_sats_vb", output.review.fee_rate_sats_vb)
+            .with_field("sighash_fingerprint", &output.sighash_fingerprint)
+            .with_field("signers", &output.signers),
+    );
 
     Ok(CommandResult {
         output: out,

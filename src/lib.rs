@@ -1,3 +1,4 @@
+pub mod audit;
 pub mod btc;
 pub mod crypto;
 pub mod protocol;
