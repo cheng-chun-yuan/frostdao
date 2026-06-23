@@ -445,6 +445,10 @@ def check_nostr_transaction_review():
         ("src/nostr/events.rs", events, "pub struct TxReviewPayload"),
         ("src/nostr/events.rs", events, "reviewed_sighash_fingerprint"),
         ("src/nostr/events.rs", events, "tx_consent_carries_reviewed_fingerprint"),
+        ("src/nostr/events.rs", events, "encrypted_reshare_subshare_matches_envelope"),
+        ("src/nostr/events.rs", events, "encrypted_recovery_subshare_matches_envelope"),
+        ("src/nostr/events.rs", events, "rejects_reshare_events_with_mismatched_envelope_identity"),
+        ("src/nostr/events.rs", events, "rejects_recovery_events_with_mismatched_envelope_identity"),
         ("src/tui/app.rs", app, "publish_nostr_tx_proposal"),
         ("src/tui/app.rs", app, "publish_nostr_tx_consent"),
         ("src/tui/app.rs", app, "publish_nostr_signing_nonce"),
@@ -474,6 +478,9 @@ def check_nostr_transaction_review():
         ("docs/NOSTR_PROTOCOL.md", docs, "`tx_proposal` must include a `review` object"),
         ("docs/NOSTR_PROTOCOL.md", docs, "Session-scoped signing messages must carry a non-empty envelope `session`"),
         ("docs/NOSTR_PROTOCOL.md", docs, "Pending proposals are labeled by wallet"),
+        ("docs/NOSTR_PROTOCOL.md", docs, "Reshare relay envelopes must bind payload identity to transport identity"),
+        ("docs/NOSTR_PROTOCOL.md", docs, "Recovery relay envelopes follow the same identity binding"),
+        ("docs/RUN_GUIDE.md", run_guide, "Reshare and recovery relay parser helpers reject versioned messages"),
         ("docs/TUI_KEYMAP.md", keymap, "Consent after reviewing proposal fingerprint"),
     ]
     missing = [f"{path}: {marker}" for path, content, marker in required if marker not in content]

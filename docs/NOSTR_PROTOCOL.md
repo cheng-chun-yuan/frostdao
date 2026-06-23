@@ -178,6 +178,8 @@ Resharing changes party shares, not the wallet identity. The root group public k
 
 For TSS reshare, new parties are rank 0. For HTSS reshare, reshare messages must preserve or explicitly define the new rank map.
 
+Reshare relay envelopes must bind payload identity to transport identity. `reshare_round1.old_party_index` and `reshare_subshare_encrypted.old_party_index` must match the envelope `from`; `reshare_subshare_encrypted.new_party_index` must match the direct envelope `to`; and `reshare_finalize.new_party_index` must match the envelope `from`.
+
 ## Recovery Flow
 
 1. Helper parties publish `recovery_round1` for the lost party index.
@@ -186,6 +188,8 @@ For TSS reshare, new parties are rank 0. For HTSS reshare, reshare messages must
 4. The lost party reconstructs the local share, verifies the wallet public key/address, then may publish `recovery_finalize`.
 
 Recovery reconstructs one party share. It must not produce the full wallet secret, and HTSS recovery must preserve the recovered party's original rank.
+
+Recovery relay envelopes follow the same identity binding. `recovery_round1.helper_index` and `recovery_subshare_encrypted.helper_index` must match the envelope `from`; `recovery_subshare_encrypted.lost_index` must match the direct envelope `to`; and `recovery_finalize.recovered_party_index` must match the envelope `from`.
 
 ## Compatibility
 

@@ -629,13 +629,18 @@ pub fn parse_reshare_event(content: &str) -> Option<NostrReshareEvent> {
     let message = parse_protocol_message(content).ok()?;
 
     match message.kind {
-        NostrMessageKind::ReshareRound1 => message.payload_as().ok().map(NostrReshareEvent::Round1),
-        NostrMessageKind::ReshareSubshareEncrypted => message
-            .payload_as()
-            .ok()
-            .map(NostrReshareEvent::SubshareEncrypted),
+        NostrMessageKind::ReshareRound1 => {
+            let event: ReshareRound1Event = message.payload_as().ok()?;
+            (event.old_party_index == message.from).then_some(NostrReshareEvent::Round1(event))
+        }
+        NostrMessageKind::ReshareSubshareEncrypted => {
+            let event: ReshareSubshareEncryptedEvent = message.payload_as().ok()?;
+            encrypted_reshare_subshare_matches_envelope(&message, &event)
+                .then_some(NostrReshareEvent::SubshareEncrypted(event))
+        }
         NostrMessageKind::ReshareFinalize => {
-            message.payload_as().ok().map(NostrReshareEvent::Finalize)
+            let event: ReshareFinalizeEvent = message.payload_as().ok()?;
+            (event.new_party_index == message.from).then_some(NostrReshareEvent::Finalize(event))
         }
         _ => None,
     }
@@ -646,17 +651,35 @@ pub fn parse_recovery_event(content: &str) -> Option<NostrRecoveryEvent> {
 
     match message.kind {
         NostrMessageKind::RecoveryRound1 => {
-            message.payload_as().ok().map(NostrRecoveryEvent::Round1)
+            let event: RecoveryRound1Event = message.payload_as().ok()?;
+            (event.helper_index == message.from).then_some(NostrRecoveryEvent::Round1(event))
         }
-        NostrMessageKind::RecoverySubshareEncrypted => message
-            .payload_as()
-            .ok()
-            .map(NostrRecoveryEvent::SubshareEncrypted),
+        NostrMessageKind::RecoverySubshareEncrypted => {
+            let event: RecoverySubshareEncryptedEvent = message.payload_as().ok()?;
+            encrypted_recovery_subshare_matches_envelope(&message, &event)
+                .then_some(NostrRecoveryEvent::SubshareEncrypted(event))
+        }
         NostrMessageKind::RecoveryFinalize => {
-            message.payload_as().ok().map(NostrRecoveryEvent::Finalize)
+            let event: RecoveryFinalizeEvent = message.payload_as().ok()?;
+            (event.recovered_party_index == message.from)
+                .then_some(NostrRecoveryEvent::Finalize(event))
         }
         _ => None,
     }
+}
+
+fn encrypted_reshare_subshare_matches_envelope(
+    message: &NostrProtocolMessage,
+    event: &ReshareSubshareEncryptedEvent,
+) -> bool {
+    event.old_party_index == message.from && message.to == Some(event.new_party_index)
+}
+
+fn encrypted_recovery_subshare_matches_envelope(
+    message: &NostrProtocolMessage,
+    event: &RecoverySubshareEncryptedEvent,
+) -> bool {
+    event.helper_index == message.from && message.to == Some(event.lost_index)
 }
 
 #[cfg(test)]
@@ -836,6 +859,21 @@ mod tests {
 
     #[test]
     fn parses_reshare_event() {
+        let round1 = ReshareRound1Event {
+            old_party_index: 1,
+            new_threshold: 2,
+            new_n_parties: 3,
+            output: "round1".to_string(),
+        };
+        let round1_message =
+            NostrProtocolMessage::new("room-a", NostrMessageKind::ReshareRound1, 1, &round1)
+                .unwrap();
+        let encoded_round1 = serde_json::to_string(&round1_message).unwrap();
+        assert!(matches!(
+            parse_reshare_event(&encoded_round1),
+            Some(NostrReshareEvent::Round1(_))
+        ));
+
         let payload = ReshareSubshareEncryptedEvent {
             old_party_index: 1,
             new_party_index: 2,
@@ -856,10 +894,107 @@ mod tests {
             parse_reshare_event(&encoded),
             Some(NostrReshareEvent::SubshareEncrypted(_))
         ));
+
+        let finalize = ReshareFinalizeEvent {
+            new_party_index: 2,
+            wallet_name: "wallet-new".to_string(),
+        };
+        let finalize_message =
+            NostrProtocolMessage::new("room-a", NostrMessageKind::ReshareFinalize, 2, &finalize)
+                .unwrap();
+        let encoded_finalize = serde_json::to_string(&finalize_message).unwrap();
+        assert!(matches!(
+            parse_reshare_event(&encoded_finalize),
+            Some(NostrReshareEvent::Finalize(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_reshare_events_with_mismatched_envelope_identity() {
+        let mismatched_round1 = ReshareRound1Event {
+            old_party_index: 2,
+            new_threshold: 2,
+            new_n_parties: 3,
+            output: "round1".to_string(),
+        };
+        let mismatched_round1_message = NostrProtocolMessage::new(
+            "room-a",
+            NostrMessageKind::ReshareRound1,
+            1,
+            &mismatched_round1,
+        )
+        .unwrap();
+        let encoded_mismatched_round1 = serde_json::to_string(&mismatched_round1_message).unwrap();
+        assert!(parse_reshare_event(&encoded_mismatched_round1).is_none());
+
+        let mismatched_subshare = ReshareSubshareEncryptedEvent {
+            old_party_index: 3,
+            new_party_index: 2,
+            ciphertext: "ciphertext".to_string(),
+        };
+        let mismatched_subshare_message = NostrProtocolMessage::new(
+            "room-a",
+            NostrMessageKind::ReshareSubshareEncrypted,
+            1,
+            &mismatched_subshare,
+        )
+        .unwrap()
+        .to_party(2)
+        .unwrap();
+        let encoded_mismatched_subshare =
+            serde_json::to_string(&mismatched_subshare_message).unwrap();
+        assert!(parse_reshare_event(&encoded_mismatched_subshare).is_none());
+
+        let wrong_recipient_subshare = ReshareSubshareEncryptedEvent {
+            old_party_index: 1,
+            new_party_index: 3,
+            ciphertext: "ciphertext".to_string(),
+        };
+        let wrong_recipient_message = NostrProtocolMessage::new(
+            "room-a",
+            NostrMessageKind::ReshareSubshareEncrypted,
+            1,
+            &wrong_recipient_subshare,
+        )
+        .unwrap()
+        .to_party(2)
+        .unwrap();
+        let encoded_wrong_recipient = serde_json::to_string(&wrong_recipient_message).unwrap();
+        assert!(parse_reshare_event(&encoded_wrong_recipient).is_none());
+
+        let mismatched_finalize = ReshareFinalizeEvent {
+            new_party_index: 2,
+            wallet_name: "wallet-new".to_string(),
+        };
+        let mismatched_finalize_message = NostrProtocolMessage::new(
+            "room-a",
+            NostrMessageKind::ReshareFinalize,
+            1,
+            &mismatched_finalize,
+        )
+        .unwrap();
+        let encoded_mismatched_finalize =
+            serde_json::to_string(&mismatched_finalize_message).unwrap();
+        assert!(parse_reshare_event(&encoded_mismatched_finalize).is_none());
     }
 
     #[test]
     fn parses_recovery_event() {
+        let round1 = RecoveryRound1Event {
+            helper_index: 1,
+            lost_index: 2,
+            helper_rank: 0,
+            output: "round1".to_string(),
+        };
+        let round1_message =
+            NostrProtocolMessage::new("room-a", NostrMessageKind::RecoveryRound1, 1, &round1)
+                .unwrap();
+        let encoded_round1 = serde_json::to_string(&round1_message).unwrap();
+        assert!(matches!(
+            parse_recovery_event(&encoded_round1),
+            Some(NostrRecoveryEvent::Round1(_))
+        ));
+
         let payload = RecoverySubshareEncryptedEvent {
             helper_index: 1,
             lost_index: 2,
@@ -880,5 +1015,87 @@ mod tests {
             parse_recovery_event(&encoded),
             Some(NostrRecoveryEvent::SubshareEncrypted(_))
         ));
+
+        let finalize = RecoveryFinalizeEvent {
+            recovered_party_index: 2,
+            wallet_name: "wallet-recovered".to_string(),
+        };
+        let finalize_message =
+            NostrProtocolMessage::new("room-a", NostrMessageKind::RecoveryFinalize, 2, &finalize)
+                .unwrap();
+        let encoded_finalize = serde_json::to_string(&finalize_message).unwrap();
+        assert!(matches!(
+            parse_recovery_event(&encoded_finalize),
+            Some(NostrRecoveryEvent::Finalize(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_recovery_events_with_mismatched_envelope_identity() {
+        let mismatched_round1 = RecoveryRound1Event {
+            helper_index: 2,
+            lost_index: 3,
+            helper_rank: 0,
+            output: "round1".to_string(),
+        };
+        let mismatched_round1_message = NostrProtocolMessage::new(
+            "room-a",
+            NostrMessageKind::RecoveryRound1,
+            1,
+            &mismatched_round1,
+        )
+        .unwrap();
+        let encoded_mismatched_round1 = serde_json::to_string(&mismatched_round1_message).unwrap();
+        assert!(parse_recovery_event(&encoded_mismatched_round1).is_none());
+
+        let mismatched_subshare = RecoverySubshareEncryptedEvent {
+            helper_index: 3,
+            lost_index: 2,
+            ciphertext: "ciphertext".to_string(),
+        };
+        let mismatched_subshare_message = NostrProtocolMessage::new(
+            "room-a",
+            NostrMessageKind::RecoverySubshareEncrypted,
+            1,
+            &mismatched_subshare,
+        )
+        .unwrap()
+        .to_party(2)
+        .unwrap();
+        let encoded_mismatched_subshare =
+            serde_json::to_string(&mismatched_subshare_message).unwrap();
+        assert!(parse_recovery_event(&encoded_mismatched_subshare).is_none());
+
+        let wrong_recipient_subshare = RecoverySubshareEncryptedEvent {
+            helper_index: 1,
+            lost_index: 3,
+            ciphertext: "ciphertext".to_string(),
+        };
+        let wrong_recipient_message = NostrProtocolMessage::new(
+            "room-a",
+            NostrMessageKind::RecoverySubshareEncrypted,
+            1,
+            &wrong_recipient_subshare,
+        )
+        .unwrap()
+        .to_party(2)
+        .unwrap();
+        let encoded_wrong_recipient = serde_json::to_string(&wrong_recipient_message).unwrap();
+        assert!(parse_recovery_event(&encoded_wrong_recipient).is_none());
+
+        let mismatched_finalize = RecoveryFinalizeEvent {
+            recovered_party_index: 2,
+            wallet_name: "wallet-recovered".to_string(),
+        };
+        let mismatched_finalize_message = NostrProtocolMessage::new(
+            "room-a",
+            NostrMessageKind::RecoveryFinalize,
+            1,
+            &mismatched_finalize,
+        )
+        .unwrap();
+        let encoded_mismatched_finalize =
+            serde_json::to_string(&mismatched_finalize_message).unwrap();
+        assert!(parse_recovery_event(&encoded_mismatched_finalize).is_none());
     }
 }
