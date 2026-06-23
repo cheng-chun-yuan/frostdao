@@ -130,11 +130,9 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
             app.state = AppState::ChainSelect;
         }
         KeyCode::Char('g') => {
-            // Keygen wizard (will be implemented in Commit 3)
             app.state = AppState::Keygen(state::KeygenState::default());
         }
         KeyCode::Char('h') => {
-            // Reshare wizard (will be implemented in Commit 4)
             if app.selected_wallet().is_some() {
                 app.state = AppState::Reshare(state::ReshareState::default());
             } else {
@@ -142,7 +140,6 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
             }
         }
         KeyCode::Char('s') => {
-            // Send wizard (will be implemented in Commit 5)
             if app.selected_wallet().is_some() {
                 app.state = AppState::Send(state::SendState::default());
             } else {
@@ -2562,8 +2559,6 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                     }
                 }
                 NostrSignState::SelectRole { wallet_name } => {
-                    // For now, default to Propose flow (index 0)
-                    // TODO: Track selected role index
                     app.nostr_sign_state = NostrSignState::ConfigureTx {
                         wallet_name: wallet_name.clone(),
                     };
