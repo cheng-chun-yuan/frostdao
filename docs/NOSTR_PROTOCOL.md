@@ -169,6 +169,8 @@ Session-scoped signing messages must carry a non-empty envelope `session`. Walle
 
 After decrypting `signing_nonce_encrypted` or `signing_share_encrypted`, the plaintext must deserialize to the matching typed schema. Both schemas bind `wallet`, `session`, `attempt_id`, `signer_set`, `party_index`, `to_index`, and `sighash_fingerprint` to the accepted envelope and payload; nonce plaintexts additionally carry `public_nonce`, and share plaintexts carry `signature_share`. Receivers must reject decrypted plaintext whose wallet, session, sender, recipient, attempt, signer set, or fingerprint context does not match the active signing attempt.
 
+`SigningAttemptCollector` tracks one active signing attempt after decryption. It accepts only plaintexts for the configured wallet, session, attempt ID, signer set, and sighash fingerprint, requires a nonce before accepting a signature share from the same signer, and reports when nonce/share thresholds are met. This is the coordinator boundary before full ROAST retry and blame logic.
+
 ## Reshare Flow
 
 1. Existing parties publish `reshare_round1`.

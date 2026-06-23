@@ -7,6 +7,7 @@
 
 pub mod client;
 pub mod events;
+pub mod signing;
 pub mod transport;
 
 pub use client::{
@@ -18,10 +19,12 @@ pub use events::{
     NostrDkgEvent, NostrMessageKind, NostrProtocolMessage, NostrRecoveryEvent, NostrReshareEvent,
     NostrSigningEvent, RecoveryFinalizeEvent, RecoveryRound1Event, RecoverySubshareEncryptedEvent,
     ReshareFinalizeEvent, ReshareRound1Event, ReshareSubshareEncryptedEvent, RoomJoinPayload,
-    RoomReadyPayload, SigningNonceEvent, SigningShareEvent, ThresholdPolicyPayload,
-    ThresholdScheme, TxBroadcastEvent, TxConsentEvent, TxProposalEvent, TxReviewPayload,
-    DEFAULT_MESSAGE_TTL_SECS, FROSTDAO_APP, FROSTDAO_NOSTR_PROTOCOL_VERSION, MAX_CLOCK_SKEW_SECS,
+    RoomReadyPayload, SigningNonceEvent, SigningNoncePlaintext, SigningShareEvent,
+    SigningSharePlaintext, ThresholdPolicyPayload, ThresholdScheme, TxBroadcastEvent,
+    TxConsentEvent, TxProposalEvent, TxReviewPayload, DEFAULT_MESSAGE_TTL_SECS, FROSTDAO_APP,
+    FROSTDAO_NOSTR_PROTOCOL_VERSION, MAX_CLOCK_SKEW_SECS,
 };
+pub use signing::SigningAttemptCollector;
 pub use transport::{
     FileReplayCache, InMemoryRoomTransport, NostrRoomRuntime, RelayRoomTransport,
     RoomMessageTransport,
