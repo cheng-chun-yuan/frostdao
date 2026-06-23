@@ -265,6 +265,24 @@ def check_agent_payment_semantics():
         doctor.ok("agent payment draft distinguishes key-path spend and miniscript preview")
 
 
+def check_replay_cache_persistence():
+    source = read(Path("src/nostr/transport.rs"))
+    docs = read(Path("docs/NOSTR_PROTOCOL.md"))
+    required = [
+        "pub struct FileReplayCache",
+        "accept_and_save",
+        "file_replay_cache_survives_restart",
+    ]
+    missing = [item for item in required if item not in source]
+    if "FileReplayCache" not in docs:
+        missing.append("NOSTR_PROTOCOL FileReplayCache documentation")
+
+    if missing:
+        doctor.fail(f"persisted replay cache markers missing: {', '.join(missing)}")
+    else:
+        doctor.ok("persisted replay cache primitive is present and documented")
+
+
 print("FrostDAO Doctor")
 print("================")
 check_markdown_links()
@@ -275,6 +293,7 @@ check_duplicate_doc_titles()
 check_scripts_executable()
 check_cli_docs_match_help()
 check_agent_payment_semantics()
+check_replay_cache_persistence()
 
 if doctor.failures:
     print("\nDoctor found issues:")

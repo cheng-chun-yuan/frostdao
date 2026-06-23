@@ -48,7 +48,7 @@ The doctor check verifies documentation links, stale command/keymap strings, CLI
 
 - Wire the hardened Nostr envelope into the full interactive TUI room runtime.
 - Add relay integration tests against at least one local relay and one public relay.
-- Add persisted replay-cache behavior for long-running ceremonies.
+- Wire persisted replay-cache files into every live relay ceremony path.
 - Add explicit transaction review for amount, fee, network, source path, destination, and sighash fingerprint.
 - Add structured audit logs that exclude secret material.
 - Complete an external cryptography/security review for FROST, HTSS, NIP-44 use, reshare, and recovery.

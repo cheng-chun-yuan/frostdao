@@ -158,6 +158,30 @@ impl MessageReplayCache {
         Self::default()
     }
 
+    pub fn from_seen_message_ids<I, S>(message_ids: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        Self {
+            seen_message_ids: message_ids.into_iter().map(Into::into).collect(),
+        }
+    }
+
+    pub fn seen_message_ids(&self) -> Vec<String> {
+        let mut ids: Vec<String> = self.seen_message_ids.iter().cloned().collect();
+        ids.sort();
+        ids
+    }
+
+    pub fn len(&self) -> usize {
+        self.seen_message_ids.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.seen_message_ids.is_empty()
+    }
+
     pub fn accept(
         &mut self,
         message: &NostrProtocolMessage,

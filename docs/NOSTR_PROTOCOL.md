@@ -83,6 +83,8 @@ Receivers should reject messages when:
 - `message_id` was already accepted in the local replay cache.
 - `from` or `to` is party index 0.
 
+For long-running ceremonies, use `FileReplayCache` to persist accepted `message_id` values between process restarts. The file contains only message IDs, not payloads or secret material.
+
 The default envelope TTL is 1 hour. Long-running ceremonies should create fresh messages instead of extending stale ones.
 
 ## Threshold Schemes

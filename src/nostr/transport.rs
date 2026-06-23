@@ -6,6 +6,7 @@
 
 use anyhow::Result;
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 use super::events::{MessageReplayCache, NostrProtocolMessage};
 
@@ -65,6 +66,72 @@ impl RoomMessageTransport for InMemoryRoomTransport {
             })
             .collect()
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct FileReplayCache {
+    path: PathBuf,
+    cache: MessageReplayCache,
+}
+
+impl FileReplayCache {
+    pub fn load(path: impl Into<PathBuf>) -> Result<Self> {
+        let path = path.into();
+        let cache = if path.exists() {
+            let data = std::fs::read_to_string(&path)?;
+            let message_ids: Vec<String> = serde_json::from_str(&data)?;
+            MessageReplayCache::from_seen_message_ids(message_ids)
+        } else {
+            MessageReplayCache::new()
+        };
+
+        Ok(Self { path, cache })
+    }
+
+    pub fn cache(&self) -> &MessageReplayCache {
+        &self.cache
+    }
+
+    pub fn cache_mut(&mut self) -> &mut MessageReplayCache {
+        &mut self.cache
+    }
+
+    pub fn save(&self) -> Result<()> {
+        if let Some(parent) = self.path.parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent)?;
+            }
+        }
+
+        let tmp_path = tmp_path_for(&self.path);
+        let data = serde_json::to_vec_pretty(&self.cache.seen_message_ids())?;
+        std::fs::write(&tmp_path, data)?;
+        std::fs::rename(tmp_path, &self.path)?;
+        Ok(())
+    }
+
+    pub fn accept_and_save(
+        &mut self,
+        message: &NostrProtocolMessage,
+        expected_room: &str,
+        my_party_index: u32,
+        now: u64,
+    ) -> Result<()> {
+        self.cache
+            .accept(message, expected_room, my_party_index, now)?;
+        self.save()
+    }
+}
+
+fn tmp_path_for(path: &Path) -> PathBuf {
+    let mut tmp_path = path.to_path_buf();
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| format!("{value}.tmp"))
+        .unwrap_or_else(|| "tmp".to_string());
+    tmp_path.set_extension(extension);
+    tmp_path
 }
 
 #[cfg(test)]
@@ -149,5 +216,41 @@ mod tests {
                 .len(),
             0
         );
+    }
+
+    #[test]
+    fn file_replay_cache_survives_restart() {
+        let dir =
+            std::env::temp_dir().join(format!("frostdao-replay-cache-test-{}", std::process::id()));
+        let path = dir.join("room-a-party-2.json");
+        let _ = std::fs::remove_file(&path);
+
+        let join = RoomJoinPayload {
+            party_index: 1,
+            nostr_pubkey: "npub-test".to_string(),
+            threshold: 2,
+            n_parties: 3,
+            scheme: ThresholdScheme::Tss,
+            rank: None,
+        };
+        let message =
+            NostrProtocolMessage::new_at("room-a", NostrMessageKind::RoomJoin, 1, &join, 100)
+                .unwrap()
+                .with_tss();
+
+        let mut first_cache = FileReplayCache::load(&path).unwrap();
+        first_cache
+            .accept_and_save(&message, "room-a", 2, 110)
+            .unwrap();
+        assert_eq!(first_cache.cache().len(), 1);
+
+        let mut reloaded_cache = FileReplayCache::load(&path).unwrap();
+        assert_eq!(reloaded_cache.cache().len(), 1);
+        assert!(reloaded_cache
+            .accept_and_save(&message, "room-a", 2, 110)
+            .is_err());
+
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir(&dir);
     }
 }
