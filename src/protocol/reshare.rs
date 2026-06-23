@@ -707,10 +707,8 @@ pub fn reshare_local(
     }
 
     // Also check legacy structure (share directly in wallet folder)
-    if available_parties.is_empty() {
-        if source_storage.read("paired_secret_share.bin").is_ok() {
-            available_parties.push((source_htss.my_index, source_state_dir.clone()));
-        }
+    if available_parties.is_empty() && source_storage.read("paired_secret_share.bin").is_ok() {
+        available_parties.push((source_htss.my_index, source_state_dir.clone()));
     }
 
     println!(

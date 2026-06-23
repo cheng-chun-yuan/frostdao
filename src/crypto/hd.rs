@@ -26,6 +26,7 @@ use schnorr_fun::frost::PairedSecretShare;
 use secp256kfun::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::Sha512;
+use std::fmt;
 
 // ============================================================================
 // Data Structures
@@ -72,16 +73,19 @@ impl DerivationPath {
         }
     }
 
-    /// Format as BIP-86 style string (relative to account)
-    pub fn to_string(&self) -> String {
-        format!("{}/{}", self.change, self.address_index)
-    }
-
     /// Format as full BIP-86 path (assuming Bitcoin mainnet account 0)
     pub fn to_full_string(&self) -> String {
         format!("m/86'/0'/0'/{}/{}", self.change, self.address_index)
     }
 }
+
+impl fmt::Display for DerivationPath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}/{}", self.change, self.address_index)
+    }
+}
+
+type ChildPubkeyDerivation = (Point<EvenY>, [u8; 32], Scalar<Public, Zero>, bool);
 
 /// Derived key information
 #[derive(Clone, Debug)]
@@ -157,7 +161,7 @@ pub fn derive_child_pubkey(
     parent_pubkey: &Point<EvenY>,
     chain_code: &[u8; 32],
     index: u32,
-) -> Result<(Point<EvenY>, [u8; 32], Scalar<Public, Zero>, bool)> {
+) -> Result<ChildPubkeyDerivation> {
     let (tweak, new_chain_code) = derive_child_tweak(chain_code, parent_pubkey, index)?;
 
     // child_pubkey = parent_pubkey + tweak * G

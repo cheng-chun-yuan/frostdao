@@ -3,6 +3,10 @@ name = "frostdao"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+miniscript-policy = ["dep:miniscript", "miniscript/compiler"]
+
 [[bin]]
 name = "frostdao"
 path = "src/main.rs"
@@ -11,9 +15,6 @@ path = "src/main.rs"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-wasm-bindgen = "0.2"
-web-sys = { version = "0.3", features = ["Storage", "Window"] }
-console_error_panic_hook = "0.1"
 base64 = "0.22"
 # CLI
 clap = { version = "4.5", features = ["derive"] }
@@ -45,14 +46,13 @@ hkdf = "0.12"
 bip39 = "2.0"
 hmac = "0.12"
 zeroize = "1.7"
-getrandom = { version = "0.2", features = ["js"] }
 
 # Bitcoin
 bitcoin = { version = "0.32", features = ["serde"] }
-bech32 = "0.11"
+miniscript = { version = "13.1", optional = true, default-features = true }
 
 # HTTP client for blockchain API
-reqwest = { version = "0.12", features = ["blocking", "json"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 
 # Terminal UI
 ratatui = "0.29"
@@ -66,3 +66,9 @@ tokio = { version = "1", features = ["rt-multi-thread", "sync", "time"] }
 
 [dev-dependencies]
 serial_test = "3.1"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+console_error_panic_hook = "0.1"
+getrandom = { version = "0.2", features = ["js"] }
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = ["Storage", "Window"] }

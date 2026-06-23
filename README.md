@@ -42,10 +42,10 @@ frostdao tui
 frostdao keygen-round1 --name treasury --threshold 2 --n-parties 3 --my-index 1
 
 # Exchange outputs, run Round 2
-frostdao keygen-round2 --name treasury --data '<round1_outputs>'
+frostdao keygen-round2 --name treasury --data '<all_round1_outputs>' --encrypt
 
 # Finalize
-frostdao keygen-finalize --name treasury --data '<round2_outputs>'
+frostdao keygen-finalize --name treasury --data '<round2_outputs_for_this_party>'
 
 # Check address and balance
 frostdao dkg-address --name treasury
@@ -64,15 +64,17 @@ frostdao tui
 
 | Document | Description |
 |----------|-------------|
+| [Showcase](docs/SHOWCASE.md) | Demo path, code tour, and verification map |
+| [Run Guide](docs/RUN_GUIDE.md) | Current build, test, TUI, CLI, TSS, HTSS, reshare, recovery, and Nostr usage |
 | [CLI Reference](docs/CLI.md) | All CLI commands |
-| [TUI Guide](docs/TUI.md) | Terminal UI usage |
-| [DKG Protocol](docs/DKG.md) | Distributed key generation |
-| [HTSS Guide](docs/HTSS.md) | Hierarchical threshold signatures |
-| [Resharing](docs/RESHARE.md) | Proactive share refresh |
-| [Recovery](docs/RECOVERY.md) | Share recovery protocol |
-| [HD Derivation](docs/HD_DERIVATION.md) | BIP-32/44 key derivation |
-| [Cryptographic Analysis](docs/CRYPTOGRAPHIC_ANALYSIS.md) | Security analysis |
-| [Bitcoin Guide](docs/BITCOIN_GUIDE.md) | Bitcoin transaction details |
+| [TUI Keymap](docs/TUI_KEYMAP.md) | Unified terminal keyboard shortcuts |
+| [Backup Guide](docs/BACKUP.md) | Share mnemonic, manifest, verification, and storage guidance |
+| [Protocols](docs/PROTOCOLS.md) | Current TSS, HTSS, DKG, signing, derivation, reshare, and recovery overview |
+| [Nostr Protocol](docs/NOSTR_PROTOCOL.md) | Relay message protocol for DKG, signing, and resharing |
+| [Miniscript](docs/MINISCRIPT.md) | Optional Taproot policy preview for fallback script paths |
+| [Security Model](docs/SECURITY_MODEL.md) | Security invariants, threat model, and mainnet cautions |
+| [Production Readiness](docs/PRODUCTION_READINESS.md) | Release gates, runbooks, and mainnet criteria |
+| [User Flow](docs/USER_FLOW.md) | Multi-device UX flow for TSS, HTSS, signing, reshare, and recovery |
 
 ## Architecture
 
@@ -85,6 +87,13 @@ frostdao/
 │   └── tui/          # Terminal UI
 ├── docs/             # Documentation
 └── tests/            # Integration tests
+```
+
+## Quality
+
+```bash
+./scripts/quality.sh
+./scripts/quality.sh --full
 ```
 
 ## Security

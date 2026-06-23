@@ -701,12 +701,12 @@ pub fn send_transaction_core(
     let raw_tx = bitcoin::consensus::encode::serialize_hex(&tx);
     let txid = tx.compute_txid();
 
-    out.push_str(&format!("\nTransaction built successfully!\n"));
+    out.push_str("\nTransaction built successfully!\n");
     out.push_str(&format!("TxID: {}\n", txid));
     out.push_str(&format!("Size: {} bytes\n", raw_tx.len() / 2));
 
     // Calculate actual fee
-    let actual_fee = selected_amount - amount_sats - change_amount.max(0);
+    let actual_fee = selected_amount - amount_sats - change_amount;
 
     out.push_str(&format!("Actual fee: {} sats\n\n", actual_fee));
 
@@ -715,7 +715,7 @@ pub fn send_transaction_core(
 
     match broadcast_transaction(&raw_tx, network) {
         Ok(broadcast_txid) => {
-            out.push_str(&format!("\nTransaction broadcast successfully!\n"));
+            out.push_str("\nTransaction broadcast successfully!\n");
             out.push_str(&format!("TxID: {}\n", broadcast_txid));
 
             let explorer_url = match network {

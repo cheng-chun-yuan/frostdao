@@ -2,6 +2,8 @@
 //!
 //! This implements a multi-party threshold signing demonstration flow.
 
+use std::cmp::Reverse;
+
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -27,7 +29,7 @@ pub enum ScriptType {
     /// Recovery script - fallback after timeout
     Recovery,
     /// Hash Time-Locked Contract
-    HTLC,
+    Htlc,
 }
 
 impl ScriptType {
@@ -37,7 +39,7 @@ impl ScriptType {
             ScriptType::TimelockAbsolute,
             ScriptType::TimelockRelative,
             ScriptType::Recovery,
-            ScriptType::HTLC,
+            ScriptType::Htlc,
         ]
     }
 
@@ -47,7 +49,7 @@ impl ScriptType {
             ScriptType::TimelockAbsolute => "Timelock (Absolute)",
             ScriptType::TimelockRelative => "Timelock (Relative)",
             ScriptType::Recovery => "Recovery Script",
-            ScriptType::HTLC => "HTLC (Hash Lock)",
+            ScriptType::Htlc => "HTLC (Hash Lock)",
         }
     }
 
@@ -57,7 +59,7 @@ impl ScriptType {
             ScriptType::TimelockAbsolute => "Cannot spend until block height X",
             ScriptType::TimelockRelative => "Cannot spend until N blocks after confirmation",
             ScriptType::Recovery => "Fallback: recovery key can spend after timeout",
-            ScriptType::HTLC => "Requires hash preimage OR timeout for refund",
+            ScriptType::Htlc => "Requires hash preimage OR timeout for refund",
         }
     }
 }
@@ -292,7 +294,7 @@ impl SendFormData {
 
         // Get confirmed UTXOs sorted by value (largest first for fewer inputs)
         let mut confirmed: Vec<&UtxoDisplay> = self.utxos.iter().filter(|u| u.confirmed).collect();
-        confirmed.sort_by(|a, b| b.value.cmp(&a.value));
+        confirmed.sort_by_key(|utxo| Reverse(utxo.value));
 
         // Coin selection: select minimum UTXOs needed
         let mut selected_value: u64 = 0;
@@ -374,8 +376,8 @@ impl SendFormData {
 
 /// Render send wizard
 pub fn render_send(frame: &mut Frame, app: &App, form: &SendFormData, area: Rect) {
-    match &app.state {
-        crate::tui::state::AppState::Send(state) => match state {
+    if let crate::tui::state::AppState::Send(state) = &app.state {
+        match state {
             SendState::SelectWallet => render_select_wallet(frame, app, form, area),
             SendState::SelectSigners { .. } => render_select_signers(frame, form, area),
             SendState::SelectAddress { .. } => render_select_address(frame, form, area),
@@ -391,8 +393,7 @@ pub fn render_send(frame: &mut Frame, app: &App, form: &SendFormData, area: Rect
             }
             SendState::CombineShares { .. } => render_combine_shares(frame, form, area),
             SendState::Complete { txid } => render_complete(frame, txid, area),
-        },
-        _ => {}
+        }
     }
 }
 
@@ -526,11 +527,11 @@ fn render_select_signers(frame: &mut Frame, form: &SendFormData, area: Rect) {
 
     // Header with threshold info
     let my_rank = form.party_ranks.get(&form.my_party_index).copied();
-    let my_label = if form.hierarchical && my_rank.is_some() {
+    let my_label = if let (true, Some(rank)) = (form.hierarchical, my_rank) {
         format!(
             "{} (r{})",
             SendFormData::party_label(form.my_party_index),
-            my_rank.unwrap()
+            rank
         )
     } else {
         SendFormData::party_label(form.my_party_index)
@@ -596,7 +597,7 @@ fn render_select_signers(frame: &mut Frame, form: &SendFormData, area: Rect) {
 fn render_tss_party_list(form: &SendFormData) -> Vec<Line<'static>> {
     let mut party_lines = vec![];
     for i in 0..form.total_parties {
-        let party_idx = i as u32 + 1;
+        let party_idx = i + 1;
         let is_selected = form
             .selected_parties
             .get(i as usize)
@@ -1300,7 +1301,7 @@ fn render_configure_script(frame: &mut Frame, form: &SendFormData, area: Rect) {
                 )]),
             ]
         }
-        ScriptType::HTLC => {
+        ScriptType::Htlc => {
             let hash_focused = form.script_config.focused_field == 0;
             let timeout_focused = form.script_config.focused_field == 1;
             let refund_focused = form.script_config.focused_field == 2;

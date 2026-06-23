@@ -862,7 +862,7 @@ pub fn dkg_broadcast_core(
 
     match broadcast_result {
         Ok(_) => {
-            out.push_str(&format!("\n✅ Transaction broadcast successfully!\n"));
+            out.push_str("\n✅ Transaction broadcast successfully!\n");
             out.push_str(&format!("TxID: {}\n", txid));
             out.push_str(&format!("Explorer: {}\n", explorer_url));
         }
@@ -1116,7 +1116,7 @@ pub fn frost_sign_all_local(
         .context("Failed to compute sighash")?;
 
     let sighash_bytes: [u8; 32] = *sighash.as_byte_array();
-    let sighash_hex = hex::encode(&sighash_bytes);
+    let sighash_hex = hex::encode(sighash_bytes);
 
     out.push_str(&format!("📝 Sighash: {}...\n\n", &sighash_hex[..16]));
 
@@ -1190,7 +1190,7 @@ pub fn frost_sign_all_local(
         out.push_str(&format!("   Party {}: ✓ nonce generated\n", party_idx));
     }
 
-    out.push_str("\n");
+    out.push('\n');
 
     // Step 4: Generate signature shares (manual aggregation for HD compatibility)
     out.push_str("✍️  Generating signature shares...\n");
@@ -1286,7 +1286,7 @@ pub fn frost_sign_all_local(
         out.push_str(&format!("   Party {}: ✓ share created\n", party_idx));
     }
 
-    out.push_str("\n");
+    out.push('\n');
 
     // Step 5: Combine signatures with taptweak
     out.push_str("🔗 Combining signature shares...\n");
@@ -1335,7 +1335,7 @@ pub fn frost_sign_all_local(
 
     match broadcast_transaction(&raw_tx, network) {
         Ok(_) => {
-            out.push_str(&format!("\n✅ Transaction broadcast successfully!\n"));
+            out.push_str("\n✅ Transaction broadcast successfully!\n");
             out.push_str(&format!("   TxID: {}\n", txid));
             out.push_str(&format!("   Explorer: {}\n", explorer_url));
         }

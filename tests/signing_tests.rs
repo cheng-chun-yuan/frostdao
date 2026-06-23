@@ -1,11 +1,12 @@
 //! Integration tests for signing functionality
 
+mod common;
+
+use common::{cleanup_state_prefix, extract_json, frostdao_bin};
 use serial_test::serial;
 use std::fs;
 use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
-
-const FROSTDAO: &str = "./target/release/frostdao";
 const TEST_WALLET_PREFIX: &str = "test_sign";
 
 static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
@@ -20,26 +21,7 @@ fn get_unique_prefix() -> String {
 }
 
 fn cleanup_test_wallets() {
-    let state_dir = ".frost_state";
-    if let Ok(entries) = fs::read_dir(state_dir) {
-        for entry in entries.flatten() {
-            if let Some(name) = entry.file_name().to_str() {
-                if name.starts_with(TEST_WALLET_PREFIX) {
-                    let _ = fs::remove_dir_all(entry.path());
-                }
-            }
-        }
-    }
-}
-
-fn extract_json(output: &str) -> Option<String> {
-    for line in output.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('{') && trimmed.ends_with('}') {
-            return Some(trimmed.to_string());
-        }
-    }
-    None
+    cleanup_state_prefix(TEST_WALLET_PREFIX);
 }
 
 fn create_2_of_3_wallet(prefix: &str) -> (String, String, String) {
@@ -48,7 +30,7 @@ fn create_2_of_3_wallet(prefix: &str) -> (String, String, String) {
     let wallet3 = format!("{}_p3", prefix);
 
     // Round 1
-    let r1_p1 = Command::new(FROSTDAO)
+    let r1_p1 = Command::new(frostdao_bin())
         .args([
             "keygen-round1",
             "--name",
@@ -64,7 +46,7 @@ fn create_2_of_3_wallet(prefix: &str) -> (String, String, String) {
         .expect("keygen-round1 failed");
     let commit1 = extract_json(&String::from_utf8_lossy(&r1_p1.stdout)).unwrap();
 
-    let r1_p2 = Command::new(FROSTDAO)
+    let r1_p2 = Command::new(frostdao_bin())
         .args([
             "keygen-round1",
             "--name",
@@ -80,7 +62,7 @@ fn create_2_of_3_wallet(prefix: &str) -> (String, String, String) {
         .expect("keygen-round1 failed");
     let commit2 = extract_json(&String::from_utf8_lossy(&r1_p2.stdout)).unwrap();
 
-    let r1_p3 = Command::new(FROSTDAO)
+    let r1_p3 = Command::new(frostdao_bin())
         .args([
             "keygen-round1",
             "--name",
@@ -99,19 +81,19 @@ fn create_2_of_3_wallet(prefix: &str) -> (String, String, String) {
     let commits = format!("{} {} {}", commit1, commit2, commit3);
 
     // Round 2
-    let r2_p1 = Command::new(FROSTDAO)
+    let r2_p1 = Command::new(frostdao_bin())
         .args(["keygen-round2", "--name", &wallet1, "--data", &commits])
         .output()
         .expect("keygen-round2 failed");
     let shares1 = extract_json(&String::from_utf8_lossy(&r2_p1.stdout)).unwrap();
 
-    let r2_p2 = Command::new(FROSTDAO)
+    let r2_p2 = Command::new(frostdao_bin())
         .args(["keygen-round2", "--name", &wallet2, "--data", &commits])
         .output()
         .expect("keygen-round2 failed");
     let shares2 = extract_json(&String::from_utf8_lossy(&r2_p2.stdout)).unwrap();
 
-    let r2_p3 = Command::new(FROSTDAO)
+    let r2_p3 = Command::new(frostdao_bin())
         .args(["keygen-round2", "--name", &wallet3, "--data", &commits])
         .output()
         .expect("keygen-round2 failed");
@@ -120,17 +102,17 @@ fn create_2_of_3_wallet(prefix: &str) -> (String, String, String) {
     let shares = format!("{} {} {}", shares1, shares2, shares3);
 
     // Finalize
-    Command::new(FROSTDAO)
+    Command::new(frostdao_bin())
         .args(["keygen-finalize", "--name", &wallet1, "--data", &shares])
         .output()
         .expect("keygen-finalize failed");
 
-    Command::new(FROSTDAO)
+    Command::new(frostdao_bin())
         .args(["keygen-finalize", "--name", &wallet2, "--data", &shares])
         .output()
         .expect("keygen-finalize failed");
 
-    Command::new(FROSTDAO)
+    Command::new(frostdao_bin())
         .args(["keygen-finalize", "--name", &wallet3, "--data", &shares])
         .output()
         .expect("keygen-finalize failed");
@@ -142,7 +124,7 @@ fn create_2_of_3_wallet(prefix: &str) -> (String, String, String) {
 #[test]
 #[serial]
 fn test_btc_keygen() {
-    let output = Command::new(FROSTDAO)
+    let output = Command::new(frostdao_bin())
         .args(["btc-keygen"])
         .output()
         .expect("btc-keygen failed");
@@ -162,13 +144,13 @@ fn test_btc_keygen() {
 #[serial]
 fn test_btc_sign_and_verify() {
     // First generate a key
-    Command::new(FROSTDAO)
+    Command::new(frostdao_bin())
         .args(["btc-keygen"])
         .output()
         .expect("btc-keygen failed");
 
     // Get public key
-    let pubkey_output = Command::new(FROSTDAO)
+    let pubkey_output = Command::new(frostdao_bin())
         .args(["btc-pubkey"])
         .output()
         .expect("btc-pubkey failed");
@@ -180,7 +162,7 @@ fn test_btc_sign_and_verify() {
 
     // Sign a message
     let message = "Hello, Bitcoin!";
-    let sign_output = Command::new(FROSTDAO)
+    let sign_output = Command::new(frostdao_bin())
         .args(["btc-sign", "--message", message])
         .output()
         .expect("btc-sign failed");
@@ -193,7 +175,7 @@ fn test_btc_sign_and_verify() {
     let signature = sign_result["signature"].as_str().unwrap();
 
     // Verify the signature
-    let verify_output = Command::new(FROSTDAO)
+    let verify_output = Command::new(frostdao_bin())
         .args([
             "btc-verify",
             "--signature",
@@ -230,13 +212,13 @@ fn test_btc_sign_and_verify() {
 #[serial]
 fn test_btc_verify_wrong_message() {
     // Generate key
-    Command::new(FROSTDAO)
+    Command::new(frostdao_bin())
         .args(["btc-keygen"])
         .output()
         .expect("btc-keygen failed");
 
     // Get public key
-    let pubkey_output = Command::new(FROSTDAO)
+    let pubkey_output = Command::new(frostdao_bin())
         .args(["btc-pubkey"])
         .output()
         .expect("btc-pubkey failed");
@@ -247,7 +229,7 @@ fn test_btc_verify_wrong_message() {
     let public_key = pubkey["public_key"].as_str().unwrap();
 
     // Sign a message
-    let sign_output = Command::new(FROSTDAO)
+    let sign_output = Command::new(frostdao_bin())
         .args(["btc-sign", "--message", "Original message"])
         .output()
         .expect("btc-sign failed");
@@ -258,7 +240,7 @@ fn test_btc_verify_wrong_message() {
     let signature = sign_result["signature"].as_str().unwrap();
 
     // Verify with wrong message
-    let verify_output = Command::new(FROSTDAO)
+    let verify_output = Command::new(frostdao_bin())
         .args([
             "btc-verify",
             "--signature",
@@ -300,7 +282,7 @@ fn test_dkg_info() {
     let (wallet1, _, _) = create_2_of_3_wallet(&prefix);
 
     // Regenerate group info
-    let output = Command::new(FROSTDAO)
+    let output = Command::new(frostdao_bin())
         .args(["dkg-info", "--name", &wallet1])
         .output()
         .expect("dkg-info failed");
@@ -336,13 +318,13 @@ fn test_dkg_info() {
 #[serial]
 fn test_address_networks() {
     // Generate key first
-    Command::new(FROSTDAO)
+    Command::new(frostdao_bin())
         .args(["btc-keygen"])
         .output()
         .expect("btc-keygen failed");
 
     // Mainnet
-    let mainnet = Command::new(FROSTDAO)
+    let mainnet = Command::new(frostdao_bin())
         .args(["btc-address"])
         .output()
         .expect("btc-address failed");
@@ -354,7 +336,7 @@ fn test_address_networks() {
     );
 
     // Testnet
-    let testnet = Command::new(FROSTDAO)
+    let testnet = Command::new(frostdao_bin())
         .args(["btc-address-testnet"])
         .output()
         .expect("btc-address-testnet failed");
@@ -366,7 +348,7 @@ fn test_address_networks() {
     );
 
     // Signet
-    let signet = Command::new(FROSTDAO)
+    let signet = Command::new(frostdao_bin())
         .args(["btc-address-signet"])
         .output()
         .expect("btc-address-signet failed");

@@ -8,6 +8,8 @@
 //! - **transaction**: Transaction building, signing, and broadcasting
 
 pub mod hd_address;
+#[cfg(feature = "miniscript-policy")]
+pub mod miniscript_policy;
 pub mod schnorr;
 pub mod taproot_scripts;
 pub mod transaction;

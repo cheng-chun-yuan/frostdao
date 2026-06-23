@@ -1,11 +1,12 @@
 //! E2E tests for NIP-44 encrypted DKG flow
 
+mod common;
+
+use common::{cleanup_state_prefix, extract_json, frostdao_bin};
 use std::collections::HashMap;
 use std::fs;
 use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
-
-const FROSTDAO: &str = "./target/release/frostdao";
 
 // Atomic counter for unique test IDs
 static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
@@ -20,26 +21,7 @@ fn get_unique_prefix() -> String {
 }
 
 fn cleanup_wallet(prefix: &str) {
-    let state_dir = ".frost_state";
-    if let Ok(entries) = fs::read_dir(state_dir) {
-        for entry in entries.flatten() {
-            if let Some(name) = entry.file_name().to_str() {
-                if name.starts_with(prefix) {
-                    let _ = fs::remove_dir_all(entry.path());
-                }
-            }
-        }
-    }
-}
-
-fn extract_json(output: &str) -> Option<String> {
-    for line in output.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('{') && trimmed.ends_with('}') {
-            return Some(trimmed.to_string());
-        }
-    }
-    None
+    cleanup_state_prefix(prefix);
 }
 
 #[derive(serde::Deserialize, Debug)]
@@ -87,7 +69,7 @@ fn test_round1_outputs_encryption_pubkey() {
     let prefix = get_unique_prefix();
     let wallet = format!("{}_pubkey", prefix);
 
-    let output = Command::new(FROSTDAO)
+    let output = Command::new(frostdao_bin())
         .args([
             "keygen-round1",
             "--name",
@@ -142,7 +124,7 @@ fn test_round2_encrypt_flag() {
     let wallet2 = format!("{}_enc_p2", prefix);
 
     // Round 1 for two parties
-    let r1_p1 = Command::new(FROSTDAO)
+    let r1_p1 = Command::new(frostdao_bin())
         .args([
             "keygen-round1",
             "--name",
@@ -159,7 +141,7 @@ fn test_round2_encrypt_flag() {
     assert!(r1_p1.status.success());
     let commit1 = extract_json(&String::from_utf8_lossy(&r1_p1.stdout)).unwrap();
 
-    let r1_p2 = Command::new(FROSTDAO)
+    let r1_p2 = Command::new(frostdao_bin())
         .args([
             "keygen-round1",
             "--name",
@@ -179,7 +161,7 @@ fn test_round2_encrypt_flag() {
     let all_commits = format!("{} {}", commit1, commit2);
 
     // Round 2 with --encrypt for party 1
-    let r2_p1 = Command::new(FROSTDAO)
+    let r2_p1 = Command::new(frostdao_bin())
         .args([
             "keygen-round2",
             "--name",
@@ -246,7 +228,7 @@ fn test_full_encrypted_dkg_flow() {
     let mut secret_coefficients: HashMap<u32, String> = HashMap::new();
 
     for (i, wallet) in [(1, &wallet1), (2, &wallet2), (3, &wallet3)] {
-        let output = Command::new(FROSTDAO)
+        let output = Command::new(frostdao_bin())
             .args([
                 "keygen-round1",
                 "--name",
@@ -281,7 +263,7 @@ fn test_full_encrypted_dkg_flow() {
     let mut encrypted_outputs: Vec<Round2EncryptedOutput> = Vec::new();
 
     for (i, wallet) in [(1, &wallet1), (2, &wallet2), (3, &wallet3)] {
-        let output = Command::new(FROSTDAO)
+        let output = Command::new(frostdao_bin())
             .args([
                 "keygen-round2",
                 "--name",
@@ -353,7 +335,7 @@ fn test_full_encrypted_dkg_flow() {
     let mut plaintext_outputs: Vec<Round2Output> = Vec::new();
 
     for (_i, wallet) in [(1, &wallet1), (2, &wallet2), (3, &wallet3)] {
-        let output = Command::new(FROSTDAO)
+        let output = Command::new(frostdao_bin())
             .args(["keygen-round2", "--name", wallet, "--data", &all_commits])
             .output()
             .expect("Failed to run keygen-round2");
@@ -421,7 +403,7 @@ fn test_encryption_requires_pubkeys() {
     let fake_commit = r#"{"party_index":1,"rank":0,"keygen_input":"deadbeef","hierarchical":false,"type":"keygen_round1"}"#;
 
     // Round 1 for party 1
-    let r1_p1 = Command::new(FROSTDAO)
+    let r1_p1 = Command::new(frostdao_bin())
         .args([
             "keygen-round1",
             "--name",
@@ -442,7 +424,7 @@ fn test_encryption_requires_pubkeys() {
     let all_commits = format!("{} {}", commit1, fake_commit);
 
     // Round 2 with --encrypt should warn about missing pubkey
-    let r2_p1 = Command::new(FROSTDAO)
+    let r2_p1 = Command::new(frostdao_bin())
         .args([
             "keygen-round2",
             "--name",

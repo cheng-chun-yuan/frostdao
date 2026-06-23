@@ -4,7 +4,7 @@
 //! Uses ChaCha20-Poly1305 with HMAC-SHA256 and HKDF key derivation.
 //!
 //! References:
-//! - https://github.com/nostr-protocol/nips/blob/master/44.md
+//! - <https://github.com/nostr-protocol/nips/blob/master/44.md>
 
 use anyhow::{Context, Result};
 use chacha20poly1305::{
@@ -80,7 +80,7 @@ fn calc_padded_len(unpadded_len: usize) -> usize {
     }
     let next_power = (unpadded_len as u32).next_power_of_two();
     let chunk = (next_power / 8).max(32) as usize;
-    ((unpadded_len + chunk - 1) / chunk) * chunk
+    unpadded_len.div_ceil(chunk) * chunk
 }
 
 /// Pads plaintext per NIP-44 spec

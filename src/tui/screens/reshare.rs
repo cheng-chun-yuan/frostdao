@@ -80,8 +80,8 @@ impl ReshareFormData {
 
 /// Render reshare wizard
 pub fn render_reshare(frame: &mut Frame, app: &App, form: &ReshareFormData, area: Rect) {
-    match &app.state {
-        crate::tui::state::AppState::Reshare(state) => match state {
+    if let crate::tui::state::AppState::Reshare(state) = &app.state {
+        match state {
             ReshareState::ModeSelect => render_mode_select(frame, form, area),
             ReshareState::LocalSetup => render_local_setup(frame, app, form, area),
             ReshareState::LocalComplete { wallet_name } => {
@@ -93,8 +93,7 @@ pub fn render_reshare(frame: &mut Frame, app: &App, form: &ReshareFormData, area
             }
             ReshareState::FinalizeInput => render_finalize_input(frame, form, area),
             ReshareState::Complete { wallet_name } => render_complete(frame, wallet_name, area),
-        },
-        _ => {}
+        }
     }
 }
 

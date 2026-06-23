@@ -10,7 +10,7 @@
 //! - Deterministic nonces using aux randomness
 //!
 //! References:
-//! - BIP340: https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki
+//! - BIP340: <https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki>
 
 use crate::storage::{FileStorage, Storage};
 use crate::CommandResult;

@@ -32,6 +32,13 @@ impl MemoryStorage {
 }
 
 #[cfg(test)]
+impl Default for MemoryStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
 impl Storage for MemoryStorage {
     fn read(&self, key: &str) -> Result<Vec<u8>> {
         let data = self.data.read().unwrap();

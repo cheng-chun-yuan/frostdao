@@ -454,8 +454,8 @@ fn render_shares_list(
 fn render_help(frame: &mut Frame, app: &App, area: Rect) {
     let help_text = match &app.nostr_sign_state {
         NostrSignState::SelectRole { .. } => "↑/↓: Select | Enter: Continue | Esc: Back",
-        NostrSignState::ReviewProposal { .. } => "Enter: Consent | R: Reject | Esc: Back",
-        NostrSignState::Complete { .. } => "Enter: Done | C: Copy TXID",
+        NostrSignState::ReviewProposal { .. } => "Enter: Consent | r: Reject | Esc: Back",
+        NostrSignState::Complete { .. } => "Enter: Done | c: Copy TXID",
         _ => "Enter: Continue | Esc: Cancel",
     };
 

@@ -64,7 +64,7 @@ pub enum SpendingCondition {
 
 impl SpendingCondition {
     /// Build a timelock script with CHECKLOCKTIMEVERIFY
-    /// Script: <height> OP_CLTV OP_DROP <pubkey> OP_CHECKSIG
+    /// Script: `<height> OP_CLTV OP_DROP <pubkey> OP_CHECKSIG`
     pub fn build_cltv_script(lock_height: u32, pubkey: &[u8; 32]) -> ScriptBuf {
         Builder::new()
             .push_int(lock_height as i64)
@@ -76,7 +76,7 @@ impl SpendingCondition {
     }
 
     /// Build a relative timelock script with CHECKSEQUENCEVERIFY
-    /// Script: <blocks> OP_CSV OP_DROP <pubkey> OP_CHECKSIG
+    /// Script: `<blocks> OP_CSV OP_DROP <pubkey> OP_CHECKSIG`
     pub fn build_csv_script(blocks: u16, pubkey: &[u8; 32]) -> ScriptBuf {
         Builder::new()
             .push_int(blocks as i64)
@@ -88,7 +88,7 @@ impl SpendingCondition {
     }
 
     /// Build a recovery script (owner can spend anytime)
-    /// Script: <owner_pubkey> OP_CHECKSIG
+    /// Script: `<owner_pubkey> OP_CHECKSIG`
     pub fn build_owner_script(owner_pubkey: &[u8; 32]) -> ScriptBuf {
         Builder::new()
             .push_slice(owner_pubkey)
@@ -97,7 +97,7 @@ impl SpendingCondition {
     }
 
     /// Build a recovery fallback script (recovery key after timeout)
-    /// Script: <timeout> OP_CLTV OP_DROP <recovery_pubkey> OP_CHECKSIG
+    /// Script: `<timeout> OP_CLTV OP_DROP <recovery_pubkey> OP_CHECKSIG`
     pub fn build_recovery_script(timeout_height: u32, recovery_pubkey: &[u8; 32]) -> ScriptBuf {
         Builder::new()
             .push_int(timeout_height as i64)
@@ -109,7 +109,7 @@ impl SpendingCondition {
     }
 
     /// Build HTLC claim script (recipient claims with preimage)
-    /// Script: OP_SHA256 <hash> OP_EQUALVERIFY <recipient_pubkey> OP_CHECKSIG
+    /// Script: `OP_SHA256 <hash> OP_EQUALVERIFY <recipient_pubkey> OP_CHECKSIG`
     pub fn build_htlc_claim_script(hash: &[u8; 32], recipient_pubkey: &[u8; 32]) -> ScriptBuf {
         Builder::new()
             .push_opcode(OP_SHA256)
@@ -121,7 +121,7 @@ impl SpendingCondition {
     }
 
     /// Build HTLC refund script (sender refunds after timeout)
-    /// Script: <timeout> OP_CLTV OP_DROP <refund_pubkey> OP_CHECKSIG
+    /// Script: `<timeout> OP_CLTV OP_DROP <refund_pubkey> OP_CHECKSIG`
     pub fn build_htlc_refund_script(timeout_height: u32, refund_pubkey: &[u8; 32]) -> ScriptBuf {
         Builder::new()
             .push_int(timeout_height as i64)

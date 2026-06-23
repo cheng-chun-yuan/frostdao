@@ -132,8 +132,8 @@ impl KeygenFormData {
 
 /// Render keygen wizard
 pub fn render_keygen(frame: &mut Frame, app: &App, form: &KeygenFormData, area: Rect) {
-    match &app.state {
-        crate::tui::state::AppState::Keygen(state) => match state {
+    if let crate::tui::state::AppState::Keygen(state) = &app.state {
+        match state {
             KeygenState::ModeSelect => render_mode_select(frame, form, area),
             KeygenState::ParamsSetup => render_params_setup(frame, form, area),
             KeygenState::Round1Output { output_json } => {
@@ -145,8 +145,7 @@ pub fn render_keygen(frame: &mut Frame, app: &App, form: &KeygenFormData, area: 
             }
             KeygenState::FinalizeInput => render_finalize_input(frame, form, area),
             KeygenState::Complete { wallet_name } => render_complete(frame, wallet_name, area),
-        },
-        _ => {}
+        }
     }
 }
 

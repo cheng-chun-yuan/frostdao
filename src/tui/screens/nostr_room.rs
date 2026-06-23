@@ -164,11 +164,10 @@ fn render_waiting(frame: &mut Frame, app: &App, area: Rect) {
     // Progress bar
     let joined = app.nostr_participants.len();
     let total = app.nostr_n_parties as usize;
-    let pct = if total > 0 {
-        (joined * 100 / total) as u16
-    } else {
-        0
-    };
+    let pct = joined
+        .checked_mul(100)
+        .and_then(|value| value.checked_div(total))
+        .unwrap_or(0) as u16;
 
     let gauge = Gauge::default()
         .block(Block::default())
@@ -283,9 +282,9 @@ fn render_ready(frame: &mut Frame, app: &App, area: Rect) {
     // Help
     let help_lines = vec![
         Line::from(vec![
-            Span::styled("K", Style::default().fg(Color::Cyan)),
+            Span::styled("k", Style::default().fg(Color::Cyan)),
             Span::raw(": Start Keygen  "),
-            Span::styled("S", Style::default().fg(Color::Cyan)),
+            Span::styled("s", Style::default().fg(Color::Cyan)),
             Span::raw(": Start Signing  "),
             Span::styled("Esc", Style::default().fg(Color::Yellow)),
             Span::raw(": Leave"),

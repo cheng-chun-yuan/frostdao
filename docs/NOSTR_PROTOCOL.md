@@ -1,0 +1,187 @@
+# Nostr Message Protocol
+
+FrostDAO uses Nostr as a relay transport for multi-party coordination. Nostr does not define the cryptography; it only carries FrostDAO protocol messages between parties.
+
+Sensitive material must be encrypted before publishing. DKG shares, signing nonces, signing shares, and reshare sub-shares should be sent as NIP-44 ciphertext payloads.
+
+## Transport
+
+- Relay: `wss://relay.damus.io` by default.
+- Event kind: Nostr text note.
+- Room filter: custom single-letter `r` tag containing the room ID.
+- Nostr keys: ephemeral session keys are acceptable because FrostDAO payload identity is party-index based.
+
+## Envelope
+
+All new messages should use this versioned envelope:
+
+```json
+{
+  "app": "frostdao",
+  "version": 1,
+  "message_id": "2b8e0b5c9d6f...",
+  "created_at": 1700000000,
+  "expires_at": 1700003600,
+  "room": "treasury-2026",
+  "scheme": "htss",
+  "wallet": "treasury",
+  "session": "session-1700000000",
+  "kind": "keygen_round1",
+  "from": 1,
+  "to": 2,
+  "payload": {}
+}
+```
+
+Fields:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `app` | yes | Must be `frostdao` |
+| `version` | yes | Protocol version, currently `1` |
+| `message_id` | yes | Deterministic message identifier used for replay protection |
+| `created_at` | yes | Unix timestamp when the sender created the message |
+| `expires_at` | no | Unix timestamp after which receivers should reject the message |
+| `room` | yes | Shared room/session namespace |
+| `scheme` | no | `tss` for standard threshold signing, `htss` for hierarchical threshold signing |
+| `wallet` | no | Wallet name when known |
+| `session` | no | Signing or transaction session ID |
+| `kind` | yes | Message kind |
+| `from` | yes | Sender party index, 1-based |
+| `to` | no | Recipient party index for direct messages |
+| `payload` | yes | Message-specific payload |
+
+## Message Kinds
+
+| Kind | Visibility | Purpose |
+|------|------------|---------|
+| `room_join` | public | Announce participant and Nostr pubkey |
+| `room_ready` | public | Announce participant set is ready |
+| `keygen_round1` | public | Broadcast DKG commitment and encryption pubkey |
+| `keygen_round2_encrypted` | direct | Send encrypted DKG share to one party |
+| `tx_proposal` | public | Propose a transaction for review |
+| `tx_consent` | public/direct | Consent or reject a transaction proposal |
+| `signing_nonce_encrypted` | direct | Send encrypted signing nonce |
+| `signing_share_encrypted` | direct | Send encrypted signature share |
+| `tx_broadcast` | public | Announce broadcast transaction |
+| `reshare_round1` | public | Old party announces reshare round output |
+| `reshare_subshare_encrypted` | direct | Send encrypted reshare sub-share |
+| `reshare_finalize` | public | Announce new party finalized |
+| `recovery_round1` | public | Helper announces recovery round output |
+| `recovery_subshare_encrypted` | direct | Send encrypted recovery sub-share to the lost party |
+| `recovery_finalize` | public | Announce recovered party finalized |
+
+## Message Acceptance
+
+Receivers should reject messages when:
+
+- `app` or `version` does not match the supported FrostDAO protocol.
+- `room` does not match the active ceremony.
+- `to` is set and does not match the local party index.
+- `created_at` is more than 5 minutes in the future.
+- `expires_at` is present and older than the local clock.
+- `message_id` was already accepted in the local replay cache.
+- `from` or `to` is party index 0.
+
+The default envelope TTL is 1 hour. Long-running ceremonies should create fresh messages instead of extending stale ones.
+
+## Threshold Schemes
+
+FrostDAO supports both standard TSS and HTSS.
+
+### TSS
+
+Use `scheme: "tss"` for normal t-of-n signing. All parties are equivalent and have rank 0.
+
+```json
+{
+  "app": "frostdao",
+  "version": 1,
+  "room": "dao-room",
+  "scheme": "tss",
+  "kind": "room_ready",
+  "from": 1,
+  "payload": {
+    "threshold": 2,
+    "n_parties": 3,
+    "scheme": "tss"
+  }
+}
+```
+
+### HTSS
+
+Use `scheme: "htss"` for rank-aware signing. Lower rank numbers have higher authority. HTSS uses Birkhoff interpolation, and signer sets must satisfy the rank validity rule.
+
+```json
+{
+  "app": "frostdao",
+  "version": 1,
+  "room": "dao-room",
+  "scheme": "htss",
+  "kind": "room_ready",
+  "from": 1,
+  "payload": {
+    "threshold": 3,
+    "n_parties": 5,
+    "scheme": "htss",
+    "party_ranks": {
+      "1": 0,
+      "2": 1,
+      "3": 1,
+      "4": 2,
+      "5": 2
+    },
+    "signing_requirement": [1, 2, 3]
+  }
+}
+```
+
+For sorted signer ranks `[r0, r1, ..., r(t-1)]`, the signer set is valid when `r[i] <= i` for every required signer position.
+
+## DKG Flow
+
+1. Parties join the same room with `room_join`, including `scheme` and optional `rank`.
+2. Each party publishes `keygen_round1`.
+3. Each party encrypts round 2 shares per recipient using NIP-44.
+4. Each party sends `keygen_round2_encrypted` with `to` set to the recipient party.
+5. Each recipient finalizes locally after receiving enough valid shares.
+
+## Signing Flow
+
+1. Proposer publishes `tx_proposal`.
+2. Signers review and publish/send `tx_consent`.
+3. After threshold consent, parties exchange `signing_nonce_encrypted`.
+4. Parties exchange `signing_share_encrypted`.
+5. Aggregator combines shares, broadcasts the transaction, then publishes `tx_broadcast`.
+
+## Reshare Flow
+
+1. Existing parties publish `reshare_round1`.
+2. Existing parties encrypt sub-shares to new parties.
+3. New parties receive `reshare_subshare_encrypted`.
+4. New parties finalize and may publish `reshare_finalize`.
+
+Resharing changes party shares, not the wallet identity. The root group public key and derived address paths remain stable if the reshare preserves the same group secret.
+
+For TSS reshare, new parties are rank 0. For HTSS reshare, reshare messages must preserve or explicitly define the new rank map.
+
+## Recovery Flow
+
+1. Helper parties publish `recovery_round1` for the lost party index.
+2. Helper parties encrypt recovery sub-shares to the lost party.
+3. The lost party receives `recovery_subshare_encrypted`.
+4. The lost party reconstructs the local share, verifies the wallet public key/address, then may publish `recovery_finalize`.
+
+Recovery reconstructs one party share. It must not produce the full wallet secret, and HTSS recovery must preserve the recovered party's original rank.
+
+## Compatibility
+
+The Rust Nostr module still parses legacy payloads used by earlier frontend code:
+
+- `keygen_round1`
+- `keygen_round2_encrypted`
+- `signing_nonce_encrypted`
+- `signing_share_encrypted`
+
+New integrations should prefer the versioned envelope.

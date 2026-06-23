@@ -8,6 +8,8 @@ mod mnemonic;
 mod nostr_keygen;
 mod nostr_room;
 mod nostr_sign;
+#[cfg(feature = "miniscript-policy")]
+mod policy_preview;
 mod reshare;
 mod send;
 mod wallet_details;
@@ -20,6 +22,8 @@ pub use mnemonic::render_mnemonic;
 pub use nostr_keygen::render_nostr_keygen;
 pub use nostr_room::render_nostr_room;
 pub use nostr_sign::render_nostr_sign;
+#[cfg(feature = "miniscript-policy")]
+pub use policy_preview::{render_policy_preview, PolicyPreviewFormData};
 pub use reshare::{render_reshare, ReshareFormData};
 pub use send::{
     render_send, ScriptConfig, ScriptType, SendFormData, TimelockMode, TxDisplay, UtxoDisplay,

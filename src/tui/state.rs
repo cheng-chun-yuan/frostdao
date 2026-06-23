@@ -15,7 +15,7 @@ pub enum NetworkSelection {
 }
 
 impl NetworkSelection {
-    pub fn to_bitcoin_network(&self) -> Network {
+    pub fn to_bitcoin_network(self) -> Network {
         match self {
             Self::Testnet4 => Network::Testnet4,
             Self::Testnet3 => Network::Testnet,
@@ -83,6 +83,10 @@ pub enum AppState {
 
     /// Nostr signing
     NostrSign,
+
+    /// Miniscript policy preview
+    #[cfg(feature = "miniscript-policy")]
+    PolicyPreview,
 }
 
 /// Available wallet actions

@@ -7,6 +7,8 @@ use nostr_sdk::prelude::*;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
+use super::events::NostrProtocolMessage;
+
 /// Default relay (all data is E2E encrypted, single relay is fine)
 pub const DEFAULT_RELAY: &str = "wss://relay.damus.io";
 
@@ -53,6 +55,15 @@ impl NostrClient {
 
         let output = self.client.send_event(event).await?;
         Ok(output.val)
+    }
+
+    /// Publish a validated FrostDAO protocol message to the room.
+    pub async fn publish_protocol_message(
+        &self,
+        message: &NostrProtocolMessage,
+    ) -> Result<EventId> {
+        message.validate()?;
+        self.publish(&serde_json::to_string(message)?).await
     }
 
     /// Subscribe to room events

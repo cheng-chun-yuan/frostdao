@@ -91,9 +91,9 @@ impl BirkhoffParameter {
 /// After sorting by rank, `rank[i] <= i` for all positions i.
 ///
 /// # Examples
-/// - ranks [0,1,1] with t=3: Valid (0<=0, 1<=1, 1<=2)
-/// - ranks [0,1,2] with t=3: Valid (0<=0, 1<=1, 2<=2)
-/// - ranks [1,1,2] with t=3: Invalid (1>0 at position 0)
+/// - ranks `[0,1,1]` with t=3: Valid (0<=0, 1<=1, 1<=2)
+/// - ranks `[0,1,2]` with t=3: Valid (0<=0, 1<=1, 2<=2)
+/// - ranks `[1,1,2]` with t=3: Invalid (1>0 at position 0)
 pub fn validate_signer_set(ranks: &[u32], threshold: u32) -> Result<()> {
     if ranks.len() < threshold as usize {
         bail!(

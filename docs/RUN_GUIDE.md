@@ -1,0 +1,267 @@
+# FrostDAO Run Guide
+
+This guide matches the current CLI version. Use it for local testing, demos, and multi-device dry runs.
+
+## 1. Build And Verify
+
+```bash
+cargo build
+./scripts/quality.sh
+```
+
+Before a release or serious demo:
+
+```bash
+./scripts/quality.sh --full
+```
+
+This runs formatting checks, strict Clippy, tests, a debug build, and rustdoc warnings.
+
+## 2. Open The TUI
+
+```bash
+cargo run -- tui
+```
+
+Use the TUI for guided wallet management. Use the CLI below when you want fully reproducible steps.
+
+## 3. Create A 2-of-3 TSS Wallet
+
+Each device uses the same wallet name, threshold, and party count, but a different `--my-index`.
+
+Device 1:
+
+```bash
+frostdao keygen-round1 --name treasury --threshold 2 --n-parties 3 --my-index 1
+```
+
+Device 2:
+
+```bash
+frostdao keygen-round1 --name treasury --threshold 2 --n-parties 3 --my-index 2
+```
+
+Device 3:
+
+```bash
+frostdao keygen-round1 --name treasury --threshold 2 --n-parties 3 --my-index 3
+```
+
+Collect all round 1 JSON outputs, then run on each device:
+
+```bash
+frostdao keygen-round2 --name treasury --data '<all_round1_outputs>' --encrypt
+```
+
+Collect all round 2 JSON outputs intended for each party, then run on each device:
+
+```bash
+frostdao keygen-finalize --name treasury --data '<round2_outputs_for_this_party>'
+```
+
+Check the shared group address:
+
+```bash
+frostdao dkg-address --name treasury
+```
+
+List wallets:
+
+```bash
+frostdao dkg-list
+frostdao dkg-address
+```
+
+## 4. Create An HTSS Wallet
+
+HTSS adds ranks. Rank `0` is highest authority; larger numbers are lower authority.
+
+Example 3-of-5 setup:
+
+```bash
+frostdao keygen-round1 --name org --threshold 3 --n-parties 5 --my-index 1 --rank 0 --hierarchical
+frostdao keygen-round1 --name org --threshold 3 --n-parties 5 --my-index 2 --rank 1 --hierarchical
+frostdao keygen-round1 --name org --threshold 3 --n-parties 5 --my-index 3 --rank 1 --hierarchical
+frostdao keygen-round1 --name org --threshold 3 --n-parties 5 --my-index 4 --rank 2 --hierarchical
+frostdao keygen-round1 --name org --threshold 3 --n-parties 5 --my-index 5 --rank 2 --hierarchical
+```
+
+Then run the same `keygen-round2` and `keygen-finalize` flow as TSS.
+
+## 5. Derive Receive Addresses
+
+Generate a deterministic receive address from the same threshold wallet:
+
+```bash
+frostdao dkg-derive-address --name treasury --change 0 --index 0 --network testnet
+```
+
+List the next addresses:
+
+```bash
+frostdao dkg-list-addresses --name treasury --count 10 --network testnet
+```
+
+These addresses are deterministic tweaks from the same root threshold key. You do not rerun DKG for every new receive address.
+
+## 6. Back Up Your Share
+
+Generate the local party backup:
+
+```bash
+frostdao dkg-generate-mnemonic --name treasury
+```
+
+Write down the 24 words and keep the printed backup manifest. Verify the written words before relying on them:
+
+```bash
+frostdao dkg-verify-mnemonic --name treasury --words '<24 words>'
+```
+
+The mnemonic is secret. The manifest is public metadata for checking wallet, party, rank, public key, address, and backup ID.
+
+## 7. Build And Sign A Testnet Transaction
+
+Build an unsigned transaction:
+
+```bash
+frostdao dkg-build-tx \
+  --name treasury \
+  --to <recipient_testnet_address> \
+  --amount <satoshis> \
+  --fee-rate <sats_per_vbyte> \
+  --network testnet
+```
+
+Use the returned `session_id` and `sighash` to generate nonces:
+
+```bash
+frostdao dkg-nonce --name treasury --session <session_id>
+```
+
+After collecting nonce JSON from the signing parties:
+
+```bash
+frostdao dkg-sign \
+  --name treasury \
+  --session <session_id> \
+  --sighash <hex_sighash> \
+  --data '<nonce_outputs>'
+```
+
+After collecting enough signature shares:
+
+```bash
+frostdao dkg-broadcast \
+  --name treasury \
+  --session <session_id> \
+  --unsigned-tx <unsigned_tx_hex> \
+  --data '<signature_share_outputs>' \
+  --network testnet
+```
+
+Never reuse a signing session nonce.
+
+## 8. Reshare Without Changing Address
+
+Old parties generate reshare outputs:
+
+```bash
+frostdao reshare-round1 --source treasury --new-threshold 2 --new-n-parties 3 --my-index 1
+frostdao reshare-round1 --source treasury --new-threshold 2 --new-n-parties 3 --my-index 2
+```
+
+New parties finalize:
+
+```bash
+frostdao reshare-finalize \
+  --source treasury \
+  --target treasury_v2 \
+  --my-index 1 \
+  --data '<reshare_round1_outputs>'
+```
+
+For HTSS reshare, add `--hierarchical --rank <rank>` to `reshare-finalize`.
+
+Verify the address stayed the same:
+
+```bash
+frostdao dkg-address --name treasury
+frostdao dkg-address --name treasury_v2
+```
+
+## 9. Recover A Lost Share
+
+Helper parties create recovery outputs:
+
+```bash
+frostdao recover-round1 --name treasury --lost-index 3
+```
+
+The lost party finalizes into a new local wallet name:
+
+```bash
+frostdao recover-finalize \
+  --source treasury \
+  --target treasury_recovered \
+  --my-index 3 \
+  --data '<recovery_outputs>'
+```
+
+For HTSS recovery, add `--hierarchical --rank <original_rank>`.
+
+Verify the recovered address:
+
+```bash
+frostdao dkg-address --name treasury
+frostdao dkg-address --name treasury_recovered
+```
+
+## 10. Miniscript Policy Preview
+
+Miniscript support is optional and disabled in default builds.
+
+```bash
+cargo run --features miniscript-policy -- policy-compile \
+  --policy 'thresh(2,pk(A),pk(B),pk(C))' \
+  --internal-key INTERNAL
+```
+
+TUI preview:
+
+```bash
+cargo run --features miniscript-policy -- tui
+```
+
+Press `p` on the home screen, edit the policy, press `Enter` to compile, and press `c` to copy the compiled output.
+
+This is compile/preview only. Script-path transaction signing is not wired yet.
+
+## 11. Nostr Multi-Device Protocol
+
+The current Nostr protocol foundation is documented in [Nostr Protocol](NOSTR_PROTOCOL.md). The envelope supports:
+
+- room join and ready messages
+- TSS and HTSS policy metadata
+- encrypted keygen round 2 payloads
+- transaction proposal and consent
+- encrypted signing nonce/share exchange
+- reshare messages
+- recovery messages
+- message replay, recipient, room, timestamp, and expiry checks
+
+Sensitive payloads must be NIP-44 encrypted before relay publishing. The relay should only see public status messages and ciphertext.
+
+## 12. Useful Commands
+
+```bash
+frostdao --help
+frostdao <command> --help
+./scripts/demo.sh
+./scripts/demo-reshare.sh
+./scripts/quality.sh --full
+```
+
+## Current Production Note
+
+The CLI flows, protocol types, deterministic in-memory Nostr transport, and quality gate are implemented and tested. Before mainnet production use, finish the live TUI relay runtime and relay integration testing listed in [Production Readiness](PRODUCTION_READINESS.md).

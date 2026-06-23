@@ -5,6 +5,8 @@ use bitcoin::{Address, XOnlyPublicKey};
 use ratatui::widgets::ListState;
 use std::collections::HashMap;
 
+#[cfg(feature = "miniscript-policy")]
+use crate::tui::screens::PolicyPreviewFormData;
 use crate::tui::screens::{KeygenFormData, ReshareFormData, SendFormData};
 use crate::tui::state::{
     AppState, NetworkSelection, NostrKeygenState, NostrRoomField, NostrRoomPhase, NostrSignState,
@@ -53,6 +55,10 @@ pub struct App {
 
     /// Send wizard form data
     pub send_form: SendFormData,
+
+    /// Miniscript policy preview form
+    #[cfg(feature = "miniscript-policy")]
+    pub policy_preview_form: PolicyPreviewFormData,
 
     // Nostr room configuration
     /// Current Nostr room ID
@@ -106,6 +112,8 @@ impl App {
             keygen_form: KeygenFormData::new(),
             reshare_form: ReshareFormData::new(),
             send_form: SendFormData::new(),
+            #[cfg(feature = "miniscript-policy")]
+            policy_preview_form: PolicyPreviewFormData::new(),
             // Nostr defaults
             nostr_room_id: String::new(),
             nostr_my_index: 1,

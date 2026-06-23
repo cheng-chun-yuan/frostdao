@@ -214,7 +214,7 @@ fn render_shortcuts(frame: &mut Frame, has_wallet: bool, area: Rect) {
         Line::from(vec![
             Span::styled("g", Style::default().fg(Color::Yellow)),
             Span::raw(" Demo Keygen  "),
-            Span::styled("N", Style::default().fg(Color::Magenta)),
+            Span::styled("o", Style::default().fg(Color::Magenta)),
             Span::raw(" Nostr Room  "),
             Span::styled("n", Style::default().fg(Color::Yellow)),
             Span::raw(" Network"),
@@ -228,6 +228,15 @@ fn render_shortcuts(frame: &mut Frame, has_wallet: bool, area: Rect) {
             Span::raw(" Quit"),
         ]),
     ];
+
+    #[cfg(feature = "miniscript-policy")]
+    shortcuts.insert(
+        1,
+        Line::from(vec![
+            Span::styled("p", Style::default().fg(Color::Yellow)),
+            Span::raw(" Policy Preview"),
+        ]),
+    );
 
     // Wallet-specific shortcuts only shown when a wallet is selected
     if has_wallet {
@@ -281,8 +290,8 @@ fn get_address_for_network(
         NetworkSelection::Mainnet => {
             // Mainnet would use bc1p... prefix - need to regenerate
             wallet.address.as_ref().map(|addr| {
-                if addr.starts_with("tb1p") {
-                    format!("bc1p{}", &addr[4..])
+                if let Some(stripped) = addr.strip_prefix("tb1p") {
+                    format!("bc1p{}", stripped)
                 } else {
                     addr.clone()
                 }

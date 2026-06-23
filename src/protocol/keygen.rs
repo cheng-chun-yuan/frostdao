@@ -128,7 +128,7 @@ pub struct Round1Output {
     pub keygen_input: String, // Bincode hex
     #[serde(default)]
     pub hierarchical: bool, // Whether HTSS mode is enabled
-    /// Encryption public key (x-only, 32 bytes hex) - derived from com[0] = a₀*G
+    /// Encryption public key (x-only, 32 bytes hex) - derived from `com[0] = a0*G`
     /// Used for NIP-44 E2E encryption of Round 2 shares
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub encryption_pubkey: Option<String>,
@@ -213,7 +213,7 @@ pub struct HtssMetadata {
     pub hierarchical: bool,
     /// Map of party_index -> rank for all participants
     pub party_ranks: std::collections::BTreeMap<u32, u32>,
-    /// Signing requirement per rank (e.g., [1,2,2] = need 1 rank-0, 2 rank-1, 2 rank-2)
+    /// Signing requirement per rank (e.g., `[1,2,2]` = need 1 rank-0, 2 rank-1, 2 rank-2)
     #[serde(default)]
     pub signing_requirement: Option<Vec<u32>>,
 }
@@ -388,7 +388,7 @@ pub struct WalletSummary {
     pub total_parties: Option<u32>,
     pub hierarchical: Option<bool>,
     pub address: Option<String>,
-    /// Signing requirement per rank for HTSS (e.g., [1,2,2])
+    /// Signing requirement per rank for HTSS (e.g., `[1,2,2]`)
     pub signing_requirement: Option<Vec<u32>>,
     /// Party ranks for HTSS (party_index -> rank)
     pub party_ranks: Option<std::collections::BTreeMap<u32, u32>>,
@@ -664,7 +664,7 @@ pub fn round1_core(
     out.push_str("   Your secret coefficient (a₀) for E2E encryption:\n");
     out.push_str(&format!("   {}\n", secret_coefficient_hex));
     out.push_str("   ⚠️  KEEP THIS SECRET! Use it in the frontend to enable secure sharing.\n");
-    out.push_str(&format!("   📁 Also saved to: secret_coefficient.txt\n\n"));
+    out.push_str("   📁 Also saved to: secret_coefficient.txt\n\n");
 
     out.push_str("➜ Paste the result JSON into the webpage\n");
     out.push_str(&format!(

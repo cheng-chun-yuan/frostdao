@@ -86,16 +86,16 @@ frostdao btc-address-signet
 
 ### dkg-address
 
-Get the DKG group Taproot address (testnet).
+Get the DKG group Taproot address on testnet. Without `--name`, lists all wallets.
 
 ```bash
-frostdao dkg-address --name <wallet_name>
+frostdao dkg-address [--name <wallet_name>]
 ```
 
 **Parameters:**
 | Parameter | Description |
 |-----------|-------------|
-| `--name` | Wallet/session name |
+| `--name` | Wallet/session name; optional |
 
 **Requires:** Completed DKG (`keygen-finalize`)
 
@@ -103,16 +103,16 @@ frostdao dkg-address --name <wallet_name>
 
 ### dkg-balance
 
-Check DKG group wallet balance on testnet.
+Check DKG group wallet balance on testnet. Without `--name`, lists all wallets.
 
 ```bash
-frostdao dkg-balance --name <wallet_name>
+frostdao dkg-balance [--name <wallet_name>]
 ```
 
 **Parameters:**
 | Parameter | Description |
 |-----------|-------------|
-| `--name` | Wallet/session name |
+| `--name` | Wallet/session name; optional |
 
 **Output:**
 - DKG group address
@@ -209,6 +209,22 @@ frostdao btc-sign-taproot --sighash <hex>
 
 ---
 
+### policy-compile
+
+Compile and inspect a Taproot Miniscript policy.
+
+This command is available only with the optional `miniscript-policy` feature.
+
+```bash
+cargo run --features miniscript-policy -- policy-compile \
+  --policy 'thresh(2,pk(A),pk(B),pk(C))' \
+  --internal-key INTERNAL
+```
+
+**Output:** JSON with normalized policy, Taproot descriptor, descriptor type, SegWit version, sanity-check status, and scope warning.
+
+---
+
 ### btc-verify
 
 Verify a BIP340 signature.
@@ -279,7 +295,7 @@ frostdao keygen-round1 --name corp_wallet --threshold 3 --n-parties 4 --my-index
 Exchange encrypted shares.
 
 ```bash
-frostdao keygen-round2 --name <wallet_name> --data '<json>'
+frostdao keygen-round2 --name <wallet_name> --data '<json>' [--encrypt]
 ```
 
 **Parameters:**
@@ -287,6 +303,7 @@ frostdao keygen-round2 --name <wallet_name> --data '<json>'
 |-----------|-------------|
 | `--name` | Wallet/session name (must match round1) |
 | `--data` | JSON with all round1 commitments |
+| `--encrypt` | Enable NIP-44 end-to-end encryption for shares |
 
 ---
 
@@ -406,6 +423,8 @@ frostdao reshare-finalize \
   --source <old_wallet> \
   --target <new_wallet> \
   --my-index <i> \
+  [--rank <r>] \
+  [--hierarchical] \
   --data '<round1_outputs_json>'
 ```
 
@@ -415,6 +434,8 @@ frostdao reshare-finalize \
 | `--source` | Source wallet name (for metadata) |
 | `--target` | New wallet name to create |
 | `--my-index` | Your new party index |
+| `--rank` | Your HTSS rank; default `0` |
+| `--hierarchical` | Enable HTSS mode |
 | `--data` | JSON with round1 outputs from old parties |
 
 ---
@@ -480,7 +501,8 @@ frostdao dkg-build-tx \
   --name <wallet_name> \
   --to <recipient_address> \
   --amount <satoshis> \
-  [--fee-rate <sats_per_vbyte>]
+  [--fee-rate <sats_per_vbyte>] \
+  [--network testnet|signet|mainnet]
 ```
 
 **Parameters:**
@@ -490,6 +512,7 @@ frostdao dkg-build-tx \
 | `--to` | Recipient Taproot address | Required |
 | `--amount` | Amount in satoshis | Required |
 | `--fee-rate` | Fee rate (sats/vbyte) | Auto |
+| `--network` | Bitcoin network | `testnet` |
 
 **Output:** JSON with `session_id`, `sighash`, `unsigned_tx`
 
@@ -546,16 +569,20 @@ Combine signature shares and broadcast transaction.
 ```bash
 frostdao dkg-broadcast \
   --name <wallet_name> \
+  --session <session_id> \
   --unsigned-tx <hex> \
-  --data '<signature_shares_json>'
+  --data '<signature_shares_json>' \
+  [--network testnet|signet|mainnet]
 ```
 
 **Parameters:**
 | Parameter | Description |
 |-----------|-------------|
 | `--name` | DKG wallet name |
+| `--session` | Session ID |
 | `--unsigned-tx` | Unsigned transaction hex from dkg-build-tx |
 | `--data` | JSON array of signature shares |
+| `--network` | Bitcoin network; default `testnet` |
 
 **Output:** JSON with `txid` and broadcast status
 
@@ -591,11 +618,31 @@ frostdao dkg-list-addresses \
 
 ### dkg-generate-mnemonic
 
-Generate 24-word backup for your share.
+Generate 24-word backup for your local share and print a public backup manifest.
 
 ```bash
 frostdao dkg-generate-mnemonic --name <wallet_name>
 ```
+
+The mnemonic is secret. The manifest is public metadata that binds the mnemonic to wallet name, party index, rank, threshold, group public key, and address fingerprints.
+
+---
+
+### dkg-verify-mnemonic
+
+Verify a written share mnemonic against the local wallet backup manifest.
+
+```bash
+frostdao dkg-verify-mnemonic --name <wallet_name> --words '<24 words>'
+```
+
+**Parameters:**
+| Parameter | Description |
+|-----------|-------------|
+| `--name` | Wallet name |
+| `--words` | 24-word mnemonic in quotes |
+
+**Checks:** BIP-39 checksum, share fingerprint, wallet metadata, party index, rank, group public key, and backup ID.
 
 ---
 

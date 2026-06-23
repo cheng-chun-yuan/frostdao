@@ -91,6 +91,8 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut A
                     AppState::NostrRoom => handle_nostr_room_keys(app, key),
                     AppState::NostrKeygen => handle_nostr_keygen_keys(app, key.code),
                     AppState::NostrSign => handle_nostr_sign_keys(app, key.code),
+                    #[cfg(feature = "miniscript-policy")]
+                    AppState::PolicyPreview => handle_policy_preview_keys(app, key),
                 }
             }
         }
@@ -227,11 +229,46 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
                 app.set_message("Select a wallet first to copy address");
             }
         }
-        KeyCode::Char('N') => {
+        KeyCode::Char('o') | KeyCode::Char('N') => {
             // Nostr room for distributed DKG/signing
             app.state = AppState::NostrRoom;
         }
+        #[cfg(feature = "miniscript-policy")]
+        KeyCode::Char('p') => {
+            app.policy_preview_form = screens::PolicyPreviewFormData::new();
+            app.state = AppState::PolicyPreview;
+        }
         _ => {}
+    }
+}
+
+#[cfg(feature = "miniscript-policy")]
+fn handle_policy_preview_keys(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Esc => {
+            app.state = AppState::Home;
+        }
+        KeyCode::Enter => {
+            let policy = app.policy_preview_form.policy_input.content();
+            match frostdao::btc::miniscript_policy::compile_taproot_policy(&policy, None) {
+                Ok(result) => {
+                    app.policy_preview_form.output =
+                        serde_json::to_string_pretty(&result).unwrap_or_else(|e| e.to_string());
+                    app.policy_preview_form.error = None;
+                }
+                Err(err) => {
+                    app.policy_preview_form.output.clear();
+                    app.policy_preview_form.error = Some(err.to_string());
+                }
+            }
+        }
+        KeyCode::Char('c') if !app.policy_preview_form.output.trim().is_empty() => {
+            let output = app.policy_preview_form.output.clone();
+            app.copy_to_clipboard(&output);
+        }
+        _ => {
+            app.policy_preview_form.policy_input.handle_key(key);
+        }
     }
 }
 
@@ -445,7 +482,7 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
                 app.refresh_balance();
             }
         }
-        KeyCode::Char('q') => {
+        KeyCode::Char('v') => {
             // Show QR code popup
             if let AppState::WalletDetails(ref mut s) = app.state {
                 s.show_qr = true;
@@ -629,6 +666,10 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
                 app.keygen_form = screens::KeygenFormData::new();
                 app.state = AppState::Home;
             }
+            KeyCode::Char('c') => {
+                let output = app.keygen_form.round1_output.clone();
+                app.copy_to_clipboard(&output);
+            }
             KeyCode::Enter => {
                 app.state = AppState::Keygen(KeygenState::Round2Input);
             }
@@ -676,6 +717,10 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
         AppState::Keygen(KeygenState::Round2Output { .. }) => match key.code {
             KeyCode::Esc => {
                 app.state = AppState::Keygen(KeygenState::Round2Input);
+            }
+            KeyCode::Char('c') => {
+                let output = app.keygen_form.round2_output.clone();
+                app.copy_to_clipboard(&output);
             }
             KeyCode::Enter => {
                 app.state = AppState::Keygen(KeygenState::FinalizeInput);
@@ -746,11 +791,10 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
                 app.reshare_form = ReshareFormData::new();
                 app.state = AppState::Home;
             }
-            KeyCode::Up | KeyCode::Char('k') => {
-                if app.reshare_form.mode_selected_index > 0 {
-                    app.reshare_form.mode_selected_index -= 1;
-                }
+            KeyCode::Up | KeyCode::Char('k') if app.reshare_form.mode_selected_index > 0 => {
+                app.reshare_form.mode_selected_index -= 1;
             }
+            KeyCode::Up | KeyCode::Char('k') => {}
             KeyCode::Down | KeyCode::Char('j') => {
                 let modes = ReshareMode::all();
                 if app.reshare_form.mode_selected_index < modes.len() - 1 {
@@ -1043,6 +1087,10 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
                 app.reshare_form = ReshareFormData::new();
                 app.state = AppState::Home;
             }
+            KeyCode::Char('c') => {
+                let output = app.reshare_form.round1_output.clone();
+                app.copy_to_clipboard(&output);
+            }
             KeyCode::Enter => {
                 // New party: go to finalize
                 app.state = AppState::Reshare(ReshareState::FinalizeInput);
@@ -1166,12 +1214,10 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     app.send_form.wallet_index = app.wallets.len() - 1;
                 }
             }
-            KeyCode::Down | KeyCode::Char('j') => {
-                if !app.wallets.is_empty() {
-                    app.send_form.wallet_index =
-                        (app.send_form.wallet_index + 1) % app.wallets.len();
-                }
+            KeyCode::Down | KeyCode::Char('j') if !app.wallets.is_empty() => {
+                app.send_form.wallet_index = (app.send_form.wallet_index + 1) % app.wallets.len();
             }
+            KeyCode::Down | KeyCode::Char('j') => {}
             KeyCode::Enter => {
                 if app.wallets.is_empty() {
                     app.send_form.error_message = Some("No wallets available".to_string());
@@ -1314,17 +1360,15 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     wallet_name: wallet_name.clone(),
                 });
             }
-            KeyCode::Up | KeyCode::Char('k') => {
-                if app.send_form.use_hd_address {
-                    if app.send_form.hd_selected_index > 0 {
-                        app.send_form.hd_selected_index -= 1;
-                    } else {
-                        // Wrap to root address
-                        app.send_form.use_hd_address = false;
-                    }
+            KeyCode::Up | KeyCode::Char('k') if app.send_form.use_hd_address => {
+                if app.send_form.hd_selected_index > 0 {
+                    app.send_form.hd_selected_index -= 1;
+                } else {
+                    // Wrap to root address
+                    app.send_form.use_hd_address = false;
                 }
-                // If at root address and pressing up, do nothing
             }
+            KeyCode::Up | KeyCode::Char('k') => {}
             KeyCode::Down | KeyCode::Char('j') => {
                 if !app.send_form.use_hd_address {
                     // At root, move to first HD address if available
@@ -1354,7 +1398,7 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                                 schnorr_fun::frost::SharedKey<schnorr_fun::fun::marker::EvenY>,
                             >(&bytes)
                             .ok()
-                            .map(|sk| {
+                            .and_then(|sk| {
                                 let pubkey_bytes: [u8; 32] = sk.public_key().to_xonly_bytes();
                                 let xonly =
                                     bitcoin::secp256k1::XOnlyPublicKey::from_slice(&pubkey_bytes)
@@ -1370,7 +1414,6 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                                     .to_string(),
                                 )
                             })
-                            .flatten()
                         })
                     })
                 };
@@ -1393,11 +1436,10 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     wallet_name: wallet_name.clone(),
                 });
             }
-            KeyCode::Up | KeyCode::Char('k') => {
-                if app.send_form.script_config.selected_index > 0 {
-                    app.send_form.script_config.selected_index -= 1;
-                }
+            KeyCode::Up | KeyCode::Char('k') if app.send_form.script_config.selected_index > 0 => {
+                app.send_form.script_config.selected_index -= 1;
             }
+            KeyCode::Up | KeyCode::Char('k') => {}
             KeyCode::Down | KeyCode::Char('j') => {
                 let max = crate::tui::screens::ScriptType::all().len();
                 if app.send_form.script_config.selected_index + 1 < max {
@@ -1425,7 +1467,7 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                         TimelockMode::Time => 2,   // days + hours
                     },
                     ScriptType::Recovery => 2,
-                    ScriptType::HTLC => 3,
+                    ScriptType::Htlc => 3,
                 };
                 if max_fields > 0 {
                     config.focused_field = (config.focused_field + 1) % max_fields;
@@ -1446,11 +1488,10 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 use crate::tui::screens::{ScriptType, TimelockMode};
                 let config = &mut app.send_form.script_config;
                 match &config.script_type {
-                    ScriptType::TimelockAbsolute => {
-                        if config.focused_field == 0 {
-                            config.timelock_height.handle_key(key);
-                        }
+                    ScriptType::TimelockAbsolute if config.focused_field == 0 => {
+                        config.timelock_height.handle_key(key);
                     }
+                    ScriptType::TimelockAbsolute => {}
                     ScriptType::TimelockRelative => match config.timelock_mode {
                         TimelockMode::Blocks => {
                             if config.focused_field == 0 {
@@ -1476,7 +1517,7 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                         }
                         _ => {}
                     },
-                    ScriptType::HTLC => match config.focused_field {
+                    ScriptType::Htlc => match config.focused_field {
                         0 => {
                             config.htlc_hash.handle_key(key);
                         }
@@ -1599,6 +1640,9 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     wallet_name: wallet_name.clone(),
                 });
             }
+            KeyCode::Char('c') => {
+                app.copy_to_clipboard(&sighash);
+            }
             KeyCode::Enter => {
                 // Generate nonce
                 let state_dir = keygen::get_state_dir(&wallet_name);
@@ -1636,6 +1680,9 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     sighash,
                     session_id,
                 });
+            }
+            KeyCode::Char('c') => {
+                app.copy_to_clipboard(&nonce_output);
             }
             KeyCode::Enter => {
                 // Pre-fill with my nonce
@@ -1724,7 +1771,7 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 app.state = AppState::Home;
             }
             KeyCode::Char('c') => {
-                app.set_message("Signature share copied to clipboard (simulated)");
+                app.copy_to_clipboard(&share_output);
             }
             KeyCode::Enter => {
                 // Go to aggregator mode
@@ -2177,8 +2224,8 @@ fn check_participants_ready(app: &mut App) {
 fn simulate_participant_join(app: &mut App) {
     // Find next missing participant
     for i in 1..=app.nostr_n_parties {
-        if !app.nostr_participants.contains_key(&i) {
-            app.nostr_participants.insert(i, format!("npub-demo-{}", i));
+        if let std::collections::hash_map::Entry::Vacant(entry) = app.nostr_participants.entry(i) {
+            entry.insert(format!("npub-demo-{}", i));
             app.set_message(&format!("Party {} joined!", i));
             check_participants_ready(app);
             return;
@@ -2412,12 +2459,18 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                 }
                 NostrSignState::Complete { txid } => {
                     // Copy TXID to clipboard
-                    if let Ok(mut ctx) = arboard::Clipboard::new() {
-                        let _ = ctx.set_text(txid.clone());
-                        app.set_message("TXID copied to clipboard!");
-                    }
+                    let txid = txid.clone();
+                    app.copy_to_clipboard(&txid);
                 }
                 _ => {}
+            }
+        }
+        KeyCode::Char('r') | KeyCode::Char('R') => {
+            if let NostrSignState::ReviewProposal { wallet_name, .. } = &app.nostr_sign_state {
+                app.nostr_sign_state = NostrSignState::ViewProposals {
+                    wallet_name: wallet_name.clone(),
+                };
+                app.set_message("Proposal rejected");
             }
         }
         _ => {}
@@ -2455,6 +2508,10 @@ fn ui(frame: &mut Frame, app: &App) {
         AppState::NostrRoom => screens::render_nostr_room(frame, app, chunks[1]),
         AppState::NostrKeygen => screens::render_nostr_keygen(frame, app, chunks[1]),
         AppState::NostrSign => screens::render_nostr_sign(frame, app, chunks[1]),
+        #[cfg(feature = "miniscript-policy")]
+        AppState::PolicyPreview => {
+            screens::render_policy_preview(frame, app, &app.policy_preview_form, chunks[1])
+        }
     }
 
     // Help bar
@@ -2496,16 +2553,26 @@ fn render_help_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     } else {
         match &app.state {
             AppState::Home => {
-                "↑/↓:Navigate | Enter:Select | n:Network | g:New | N:Nostr | q:Quit".to_string()
+                #[cfg(feature = "miniscript-policy")]
+                {
+                    "↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | c:Copy | q:Quit".to_string()
+                }
+                #[cfg(not(feature = "miniscript-policy"))]
+                {
+                    "↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | c:Copy | q:Quit"
+                        .to_string()
+                }
             }
             AppState::WalletDetails(_) => {
-                "↑/↓:Navigate | Enter:Select | b:Balance | c:Copy | Esc:Back".to_string()
+                "↑/↓:Navigate | Enter:Select | b:Balance | c:Copy | v:QR | Esc:Back".to_string()
             }
             AppState::ChainSelect => "↑/↓:Select | Enter:Confirm | Esc:Cancel".to_string(),
             AppState::Keygen(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
             AppState::Reshare(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
             AppState::Send(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
-            AppState::AddressList(_) => "↑/↓:Navigate | c:Copy | Esc:Back".to_string(),
+            AppState::AddressList(_) => {
+                "↑/↓:Navigate | c:Copy | b:Balance | a:Add | x:Remove | Esc:Back".to_string()
+            }
             AppState::MnemonicBackup(state) => {
                 if state.revealed {
                     "Enter:Done | Esc:Back".to_string()
@@ -2518,10 +2585,12 @@ fn render_help_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
                 NostrRoomPhase::WaitingForParticipants => {
                     "Space:Simulate join | Esc:Leave".to_string()
                 }
-                NostrRoomPhase::Ready => "K:Keygen | S:Sign | Esc:Leave".to_string(),
+                NostrRoomPhase::Ready => "k:Keygen | s:Sign | Esc:Leave".to_string(),
             },
-            AppState::NostrKeygen => "Enter:Continue | R:Retry | Esc:Cancel".to_string(),
+            AppState::NostrKeygen => "Enter:Continue | r:Retry | Esc:Cancel".to_string(),
             AppState::NostrSign => "Enter:Continue | ↑/↓:Navigate | Esc:Cancel".to_string(),
+            #[cfg(feature = "miniscript-policy")]
+            AppState::PolicyPreview => "Enter:Compile | c:Copy output | Esc:Back".to_string(),
         }
     };
 

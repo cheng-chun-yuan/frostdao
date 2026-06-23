@@ -1,9 +1,9 @@
-use wasm_bindgen::prelude::*;
-
 pub mod btc;
 pub mod crypto;
 pub mod protocol;
 pub mod storage;
+
+#[cfg(target_arch = "wasm32")]
 pub mod wasm;
 
 // Nostr module (not available in WASM)
@@ -11,6 +11,7 @@ pub mod wasm;
 pub mod nostr;
 
 // Re-export WASM functions
+#[cfg(target_arch = "wasm32")]
 pub use wasm::*;
 
 /// Result from a command, separating educational output from copy-paste result
@@ -23,7 +24,7 @@ pub struct CommandResult {
 }
 
 // Test function to verify WASM compilation works
-#[wasm_bindgen]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen)]
 pub fn test_wasm() -> String {
     "WASM is working!".to_string()
 }

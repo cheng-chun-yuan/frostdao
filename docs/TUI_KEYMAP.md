@@ -1,0 +1,220 @@
+# TUI Keymap
+
+This is the maintained keyboard convention for FrostDAO TUI.
+
+## Global Convention
+
+| Key | Meaning |
+|-----|---------|
+| `Enter` | Primary action, continue, confirm, compile, generate, or complete |
+| `Esc` | Back, cancel, close popup, or leave current flow |
+| `↑/↓` | Move selection |
+| `j` / `k` | Move down/up, Vim-style alternative to arrows |
+| `Tab` / `Shift-Tab` | Next/previous form field |
+| `Space` | Toggle checkbox or binary option |
+| `c` | Copy current selected/output value when the screen has copyable output |
+| `r` | Refresh, retry, or reject depending on screen context |
+| `q` | Quit only from home; close QR popup when shown |
+
+Avoid function keys for required actions. Use lowercase shortcuts in help text. Uppercase aliases may work in some older flows, but new UI should document lowercase.
+
+## Home
+
+| Key | Action |
+|-----|--------|
+| `↑/↓`, `j/k` | Select wallet |
+| `Enter` | Open selected wallet |
+| `g` | Create demo/local wallet |
+| `n` | Select network |
+| `o` | Open Nostr room |
+| `p` | Open Miniscript policy preview, only with `miniscript-policy` feature |
+| `h` | Reshare selected wallet |
+| `s` | Send from selected wallet |
+| `a` | View derived addresses |
+| `m` | Show mnemonic backup flow |
+| `c` | Copy selected wallet address |
+| `r` | Refresh selected wallet balance |
+| `R` | Reload wallet list |
+| `q` | Quit |
+
+`N` still opens the Nostr room as a legacy alias, but visible help uses `o`.
+
+## Wallet Details
+
+| Key | Action |
+|-----|--------|
+| `↑/↓`, `j/k` | Select action |
+| `Enter` | Run selected action |
+| `b` | Fetch balance |
+| `c` | Copy wallet address |
+| `v` | Show QR code |
+| `Esc` | Back |
+| `y` | Confirm delete, only in delete confirmation |
+| `n`, `Esc` | Cancel delete confirmation |
+
+## Chain Select
+
+| Key | Action |
+|-----|--------|
+| `↑/↓`, `j/k` | Select network |
+| `Enter` | Confirm network |
+| `Esc` | Cancel |
+
+## Forms And Wizards
+
+Applies to keygen, reshare, send, and Nostr room configuration.
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Next field |
+| `Shift-Tab` | Previous field |
+| `Enter` | Submit current step |
+| `Esc` | Back/cancel |
+| `Space` | Toggle focused binary option |
+| `Ctrl+u` | Clear focused text input |
+
+Multiline paste areas accept typed text and paste. Screen help decides whether `Enter` submits the step or inserts a newline.
+
+## Text Editing
+
+Applies when a single-line input or multiline paste area is focused.
+
+| Key | Action |
+|-----|--------|
+| `Backspace` | Delete before cursor |
+| `Delete` | Delete under cursor |
+| `←/→` | Move cursor left/right |
+| `↑/↓` | Move cursor line in multiline paste areas |
+| `Home` / `End` | Move to start/end of current field or line |
+| `Ctrl+u` | Clear single-line input |
+
+## Keygen
+
+| Phase | Key | Action |
+|-------|-----|--------|
+| Mode select | `↑/↓` | Toggle TSS/HTSS |
+| Mode select | `1` | Select TSS |
+| Mode select | `2` | Select HTSS |
+| Mode select | `Enter` | Continue |
+| Parameters | `Tab`, `Shift-Tab` | Move fields |
+| Parameters | `Enter` | Generate local demo wallet or continue distributed flow |
+| Round output | `c` | Copy JSON output |
+| Round output | `Enter` | Continue |
+| Any phase | `Esc` | Back/cancel |
+
+## Reshare
+
+| Phase | Key | Action |
+|-------|-----|--------|
+| Mode select | `↑/↓`, `j/k` | Select local or distributed reshare |
+| Mode select | `Enter` | Continue |
+| Local setup | `Tab`, `Shift-Tab` | Move fields |
+| Local setup | `↑/↓` | Select source wallet when wallet field is focused |
+| Distributed setup | `Tab`, `Shift-Tab` | Move fields |
+| Distributed setup | `j/k` | Select source wallet when wallet field is focused |
+| Round output | `c` | Copy JSON output |
+| Round output | `Enter` | Go to finalize as new party |
+| Finalize | `Space` | Toggle HTSS when hierarchy field is focused |
+| Finalize | `Enter` | Finalize new share |
+| Any phase | `Esc` | Back/cancel |
+
+## Send
+
+| Phase | Key | Action |
+|-------|-----|--------|
+| Select wallet | `↑/↓`, `j/k` | Select source wallet |
+| Select signers | `↑/↓`, `j/k` | Select party |
+| Select signers | `Space` | Toggle selected party |
+| Select address | `↑/↓`, `j/k` | Select root or tweaked HD address |
+| Script config | `↑/↓`, `j/k` | Select script type |
+| Script config | `Space` | Apply selected script type |
+| Script config | `Tab` | Move script option field |
+| Script config | `m` | Toggle relative timelock mode |
+| Transaction details | `Tab`, `Shift-Tab` | Move address/amount fields |
+| Sighash | `c` | Copy sighash |
+| Nonce output | `c` | Copy nonce JSON |
+| Signature share | `c` | Copy signature share JSON |
+| Complete | `c` | Copy TXID or final result |
+| Any phase | `Enter` | Continue/submit |
+| Any phase | `Esc` | Back/cancel |
+
+## Address List
+
+| Key | Action |
+|-----|--------|
+| `↑/↓`, `j/k` | Select derived address |
+| `c` | Copy selected address |
+| `b` | Fetch selected address balance |
+| `+`, `a` | Add next derived address |
+| `-`, `x` | Remove last derived address |
+| `Esc` | Back |
+
+## Mnemonic Backup
+
+| Key | Action |
+|-----|--------|
+| `↑/↓`, `j/k` | Select party before reveal |
+| `Enter` | Continue through party select, warning, reveal, and done |
+| `Esc` | Cancel/back |
+
+The TUI does not provide a mnemonic copy shortcut. This keeps backup words deliberate and avoids accidental clipboard persistence.
+
+## Copyable Outputs
+
+| Screen | Key |
+|--------|-----|
+| Keygen round output | `c` copies JSON |
+| Reshare round output | `c` copies JSON |
+| Send sighash | `c` copies sighash |
+| Send nonce output | `c` copies JSON |
+| Send signature share | `c` copies JSON |
+| Send complete | `c` copies TXID |
+| Address list | `c` copies selected address |
+| Miniscript policy preview | `c` copies compiled JSON after compile |
+
+## Miniscript Policy Preview
+
+Requires:
+
+```bash
+cargo run --features miniscript-policy -- tui
+```
+
+| Key | Action |
+|-----|--------|
+| `p` from Home | Open policy preview |
+| `Enter` | Compile policy |
+| `c` | Copy compiled JSON output |
+| `Esc` | Back to Home |
+
+## Nostr Room
+
+| Phase | Key | Action |
+|-------|-----|--------|
+| Configure | `Tab` | Next field |
+| Configure | `Enter` | Join room |
+| Configure | `Esc` | Back |
+| Waiting | `Space` | Simulate participant join in local demo mode |
+| Waiting | `Esc` | Leave room |
+| Ready | `k` | Start distributed keygen |
+| Ready | `s` | Start distributed signing |
+| Ready | `Esc` | Leave room |
+
+## Nostr Keygen
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Start or continue current DKG phase |
+| `r` | Retry from setup |
+| `Esc` | Return to Nostr room |
+
+## Nostr Signing
+
+| Key | Action |
+|-----|--------|
+| `↑/↓`, `j/k` | Select wallet where applicable |
+| `Enter` | Continue/consent/done |
+| `p` | Propose transaction, in role select |
+| `c` | Consent role in role select, or copy TXID on completion |
+| `r` | Reject proposal or retry where shown |
+| `Esc` | Back/cancel |

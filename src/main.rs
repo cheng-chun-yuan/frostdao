@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
 // Use library crate for core functionality
@@ -183,6 +183,18 @@ enum Commands {
         sighash: String,
     },
 
+    /// Compile and inspect a Taproot Miniscript policy
+    #[cfg(feature = "miniscript-policy")]
+    PolicyCompile {
+        /// Miniscript policy string, for example: thresh(2,pk(A),pk(B),pk(C))
+        #[arg(long)]
+        policy: String,
+
+        /// Internal key label used for descriptor compilation
+        #[arg(long)]
+        internal_key: Option<String>,
+    },
+
     /// Get Bitcoin Taproot address (mainnet)
     BtcAddress,
 
@@ -258,6 +270,17 @@ enum Commands {
         /// Wallet name
         #[arg(long)]
         name: String,
+    },
+
+    /// Verify a BIP-39 share mnemonic against the local wallet backup manifest
+    DkgVerifyMnemonic {
+        /// Wallet name
+        #[arg(long)]
+        name: String,
+
+        /// 24-word mnemonic in quotes
+        #[arg(long)]
+        words: String,
     },
 
     /// Reshare Round 1: Old party generates sub-shares for new parties
@@ -487,6 +510,55 @@ enum Commands {
     },
 }
 
+fn load_backup_inputs(
+    name: &str,
+) -> Result<(
+    frostdao::crypto::backup::BackupWalletMetadata,
+    [u8; 32],
+    frostdao::protocol::keygen::GroupInfo,
+)> {
+    use frostdao::storage::FileStorage;
+
+    let state_dir = keygen::get_state_dir(name);
+    let storage = FileStorage::new(&state_dir)?;
+
+    let paired_share_bytes = storage
+        .read("paired_secret_share.bin")
+        .with_context(|| format!("wallet '{}' has no local secret share", name))?;
+    let paired_share: schnorr_fun::frost::PairedSecretShare<secp256kfun::marker::EvenY> =
+        bincode::deserialize(&paired_share_bytes)?;
+    let share_bytes: [u8; 32] = paired_share.secret_share().share.to_bytes();
+
+    let htss_json = String::from_utf8(storage.read("htss_metadata.json")?)
+        .context("htss_metadata.json is not valid UTF-8")?;
+    let htss: frostdao::protocol::keygen::HtssMetadata =
+        serde_json::from_str(&htss_json).context("failed to parse htss_metadata.json")?;
+
+    let group_info_json =
+        String::from_utf8(storage.read("group_info.json")?).with_context(|| {
+            format!(
+                "wallet '{}' has no group_info.json; run `frostdao dkg-info --name {}` first",
+                name, name
+            )
+        })?;
+    let group_info: frostdao::protocol::keygen::GroupInfo =
+        serde_json::from_str(&group_info_json).context("failed to parse group_info.json")?;
+
+    let metadata = frostdao::crypto::backup::BackupWalletMetadata {
+        wallet_name: group_info.name.clone(),
+        party_index: htss.my_index,
+        rank: htss.my_rank,
+        threshold: htss.threshold,
+        total_parties: group_info.total_parties,
+        hierarchical: htss.hierarchical,
+        group_public_key: group_info.group_public_key.clone(),
+        taproot_address_testnet: group_info.taproot_address_testnet.clone(),
+        taproot_address_mainnet: group_info.taproot_address_mainnet.clone(),
+    };
+
+    Ok((metadata, share_bytes, group_info))
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -565,6 +637,17 @@ fn main() -> Result<()> {
         Commands::BtcSignTaproot { sighash } => {
             bitcoin_schnorr::sign_taproot_sighash(&sighash)?;
         }
+        #[cfg(feature = "miniscript-policy")]
+        Commands::PolicyCompile {
+            policy,
+            internal_key,
+        } => {
+            let result = frostdao::btc::miniscript_policy::compile_taproot_policy(
+                &policy,
+                internal_key.as_deref(),
+            )?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        }
         Commands::BtcAddress => {
             bitcoin_schnorr::get_address_mainnet()?;
         }
@@ -618,22 +701,11 @@ fn main() -> Result<()> {
             println!("{}", result.output);
         }
         Commands::DkgGenerateMnemonic { name } => {
-            use frostdao::crypto::mnemonic;
-            use frostdao::storage::FileStorage;
+            use frostdao::crypto::{backup, mnemonic};
 
-            let state_dir = keygen::get_state_dir(&name);
-            let storage = FileStorage::new(&state_dir)?;
-
-            // Load the secret share
-            let paired_share_bytes = storage.read("paired_secret_share.bin")?;
-            let paired_share: schnorr_fun::frost::PairedSecretShare<secp256kfun::marker::EvenY> =
-                bincode::deserialize(&paired_share_bytes)?;
-
-            // Get share bytes
-            let share_bytes: [u8; 32] = paired_share.secret_share().share.to_bytes();
-
-            // Generate mnemonic from share
+            let (metadata, share_bytes, _) = load_backup_inputs(&name)?;
             let mnemonic_result = mnemonic::share_to_mnemonic(&share_bytes)?;
+            let manifest = backup::build_backup_manifest(metadata, &share_bytes)?;
 
             println!("BIP-39 Mnemonic Backup for Wallet '{}'\n", name);
             println!(
@@ -645,8 +717,32 @@ fn main() -> Result<()> {
             println!(
                 "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             );
+            println!("\nBackup manifest (public metadata):");
+            println!("{}", serde_json::to_string_pretty(&manifest)?);
             println!("\nWrite down these 24 words and store them securely!");
             println!("Never share them with anyone.");
+            println!(
+                "Verify later with: frostdao dkg-verify-mnemonic --name {} --words '<24 words>'",
+                name
+            );
+        }
+        Commands::DkgVerifyMnemonic { name, words } => {
+            use frostdao::crypto::{backup, mnemonic};
+
+            let (metadata, local_share_bytes, _) = load_backup_inputs(&name)?;
+            let manifest = backup::build_backup_manifest(metadata, &local_share_bytes)?;
+            let parsed = mnemonic::parse_mnemonic(&words)?;
+            let mnemonic_share = mnemonic::mnemonic_to_share(&parsed)?;
+            backup::verify_share_against_manifest(&mnemonic_share, &manifest)?;
+
+            println!("Backup mnemonic verified for wallet '{}'.", name);
+            println!("Backup ID: {}", manifest.backup_id);
+            println!("Party: {}", manifest.party_index);
+            println!("Rank: {}", manifest.rank);
+            println!(
+                "Threshold: {} of {}",
+                manifest.threshold, manifest.total_parties
+            );
         }
 
         Commands::ReshareRound1 {
