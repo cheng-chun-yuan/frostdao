@@ -448,6 +448,7 @@ def check_nostr_transaction_review():
     tui = read(Path("src/tui/mod.rs"))
     tui_state = read(Path("src/tui/state.rs"))
     screen = read(Path("src/tui/screens/nostr_sign.rs"))
+    coordinator = read(Path("src/protocol/signing_coordinator.rs"))
     run_guide = read(Path("docs/RUN_GUIDE.md"))
     docs = read(Path("docs/NOSTR_PROTOCOL.md"))
     keymap = read(Path("docs/TUI_KEYMAP.md"))
@@ -460,12 +461,15 @@ def check_nostr_transaction_review():
         ("src/nostr/events.rs", events, "pub struct SigningNoncePlaintext"),
         ("src/nostr/events.rs", events, "pub struct SigningSharePlaintext"),
         ("src/nostr/events.rs", events, "signing_plaintexts_reject_mismatched_envelope_context"),
-        ("src/nostr/signing.rs", read(Path("src/nostr/signing.rs")), "pub struct SigningAttemptCollector"),
         ("src/nostr/signing.rs", read(Path("src/nostr/signing.rs")), "pub fn encrypt_signing_nonce_plaintext"),
         ("src/nostr/signing.rs", read(Path("src/nostr/signing.rs")), "pub fn decrypt_signing_share_plaintext"),
         ("src/nostr/signing.rs", read(Path("src/nostr/signing.rs")), "signing_plaintext_helpers_reject_wrong_key_and_context"),
-        ("src/nostr/signing.rs", read(Path("src/nostr/signing.rs")), "signature share received before nonce for party"),
-        ("src/nostr/signing.rs", read(Path("src/nostr/signing.rs")), "signing_attempt_collector_rejects_wrong_attempt_context"),
+        ("src/nostr/signing.rs", read(Path("src/nostr/signing.rs")), "signing_plaintexts_convert_to_protocol_inputs"),
+        ("src/protocol/mod.rs", read(Path("src/protocol/mod.rs")), "pub use signing_coordinator::{SigningAttemptCollector"),
+        ("src/protocol/signing_coordinator.rs", coordinator, "pub struct SigningAttemptCollector"),
+        ("src/protocol/signing_coordinator.rs", coordinator, "pub struct SigningNonceInput"),
+        ("src/protocol/signing_coordinator.rs", coordinator, "signature share received before nonce for party"),
+        ("src/protocol/signing_coordinator.rs", coordinator, "signing_attempt_collector_rejects_wrong_attempt_context"),
         ("src/nostr/events.rs", events, "rejects_signing_events_with_mismatched_envelope_identity"),
         ("src/nostr/events.rs", events, "encrypted_dkg_round2_matches_envelope"),
         ("src/nostr/events.rs", events, "rejects_dkg_events_with_mismatched_envelope_identity"),
@@ -503,7 +507,7 @@ def check_nostr_transaction_review():
         ("docs/NOSTR_PROTOCOL.md", docs, "`tx_proposal` must include a `review` object"),
         ("docs/NOSTR_PROTOCOL.md", docs, "Session-scoped signing messages must carry a non-empty envelope `session`"),
         ("docs/NOSTR_PROTOCOL.md", docs, "Use `encrypt_signing_nonce_plaintext` and `encrypt_signing_share_plaintext`"),
-        ("docs/NOSTR_PROTOCOL.md", docs, "`SigningAttemptCollector` tracks one active signing attempt"),
+        ("docs/NOSTR_PROTOCOL.md", docs, "`protocol::SigningAttemptCollector` tracks one active signing attempt"),
         ("docs/NOSTR_PROTOCOL.md", docs, "bind `to_index` to the direct envelope `to`"),
         ("docs/NOSTR_PROTOCOL.md", docs, "Pending proposals are labeled by wallet"),
         ("docs/NOSTR_PROTOCOL.md", docs, "`keygen_round1.party_index` and `keygen_round2_encrypted.party_index` must also match envelope `from`"),

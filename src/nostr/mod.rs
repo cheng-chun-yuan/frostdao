@@ -26,7 +26,7 @@ pub use events::{
 };
 pub use signing::{
     decrypt_signing_nonce_plaintext, decrypt_signing_share_plaintext,
-    encrypt_signing_nonce_plaintext, encrypt_signing_share_plaintext, SigningAttemptCollector,
+    encrypt_signing_nonce_plaintext, encrypt_signing_share_plaintext,
 };
 pub use transport::{
     FileReplayCache, InMemoryRoomTransport, NostrRoomRuntime, RelayRoomTransport,
