@@ -266,7 +266,9 @@ def check_agent_payment_semantics():
 
 
 def check_replay_cache_persistence():
+    client = read(Path("src/nostr/client.rs"))
     source = read(Path("src/nostr/transport.rs"))
+    module = read(Path("src/nostr/mod.rs"))
     app = read(Path("src/tui/app.rs"))
     docs = read(Path("docs/NOSTR_PROTOCOL.md"))
     run_guide = read(Path("docs/RUN_GUIDE.md"))
@@ -276,8 +278,18 @@ def check_replay_cache_persistence():
         "accept_and_save",
         "file_replay_cache_survives_restart",
         "room_runtime_enforces_room_sender_and_persists_replay_cache",
+        "pub struct RelayRoomTransport",
+        "relay_content_filter_accepts_only_valid_room_messages_once",
     ]
     missing = [item for item in required if item not in source]
+    client_required = [
+        "connect_with_relays",
+        "create_room_client_with_relays",
+        "explicit_relay_client_rejects_empty_relay_list",
+    ]
+    missing.extend([f"src/nostr/client.rs: {item}" for item in client_required if item not in client])
+    if "RelayRoomTransport" not in module:
+        missing.append("src/nostr/mod.rs: RelayRoomTransport export")
     app_required = [
         "pub nostr_runtime",
         "join_nostr_room_runtime",
@@ -285,11 +297,13 @@ def check_replay_cache_persistence():
         "tui_nostr_room_uses_runtime_and_replay_cache",
     ]
     missing.extend([f"src/tui/app.rs: {item}" for item in app_required if item not in app])
-    for marker in ["NostrRoomRuntime", "FileReplayCache"]:
+    for marker in ["NostrRoomRuntime", "FileReplayCache", "RelayRoomTransport"]:
         if marker not in docs:
             missing.append(f"NOSTR_PROTOCOL {marker} documentation")
     if "TUI room screen creates a `NostrRoomRuntime`" not in run_guide:
         missing.append("RUN_GUIDE TUI NostrRoomRuntime documentation")
+    if "relay transport adapter" not in run_guide:
+        missing.append("RUN_GUIDE relay transport adapter documentation")
 
     if missing:
         doctor.fail(f"persisted replay cache markers missing: {', '.join(missing)}")

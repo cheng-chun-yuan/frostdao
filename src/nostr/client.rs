@@ -23,12 +23,30 @@ pub struct NostrClient {
 impl NostrClient {
     /// Create and connect to relay
     pub async fn connect(room_id: &str, my_index: u32) -> Result<Self> {
+        Self::connect_with_relays(room_id, my_index, [DEFAULT_RELAY]).await
+    }
+
+    /// Create and connect to explicit relays.
+    pub async fn connect_with_relays(
+        room_id: &str,
+        my_index: u32,
+        relay_urls: impl IntoIterator<Item = impl AsRef<str>>,
+    ) -> Result<Self> {
         // Generate ephemeral keys for this session
         let keys = Keys::generate();
         let client = Client::new(keys.clone());
 
-        // Add relay and connect
-        client.add_relay(DEFAULT_RELAY).await?;
+        let relays = relay_urls
+            .into_iter()
+            .map(|relay| relay.as_ref().to_string())
+            .collect::<Vec<_>>();
+        if relays.is_empty() {
+            anyhow::bail!("at least one relay URL is required");
+        }
+
+        for relay in &relays {
+            client.add_relay(relay).await?;
+        }
         client.connect().await;
 
         Ok(Self {
@@ -139,10 +157,36 @@ pub async fn create_room_client(
     room_id: &str,
     my_index: u32,
 ) -> Result<(Arc<NostrClient>, NostrReceiver)> {
-    let client = NostrClient::connect(room_id, my_index).await?;
+    create_room_client_with_relays(room_id, my_index, [DEFAULT_RELAY]).await
+}
+
+/// Create client and receiver pair with explicit relays.
+pub async fn create_room_client_with_relays(
+    room_id: &str,
+    my_index: u32,
+    relay_urls: impl IntoIterator<Item = impl AsRef<str>>,
+) -> Result<(Arc<NostrClient>, NostrReceiver)> {
+    let client = NostrClient::connect_with_relays(room_id, my_index, relay_urls).await?;
     let (tx, rx) = mpsc::channel(100);
 
     client.subscribe(tx).await?;
 
     Ok((Arc::new(client), NostrReceiver::new(rx)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::NostrClient;
+
+    #[test]
+    fn explicit_relay_client_rejects_empty_relay_list() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let result = runtime.block_on(NostrClient::connect_with_relays(
+            "room-a",
+            1,
+            Vec::<String>::new(),
+        ));
+
+        assert!(result.is_err());
+    }
 }

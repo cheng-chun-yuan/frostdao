@@ -7,14 +7,16 @@
 use anyhow::{bail, Result};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use super::events::{MessageReplayCache, NostrProtocolMessage};
+use super::client::{create_room_client_with_relays, NostrClient, NostrReceiver};
+use super::events::{parse_protocol_message, MessageReplayCache, NostrProtocolMessage};
 
 pub trait RoomMessageTransport {
     fn publish(&mut self, message: NostrProtocolMessage) -> Result<()>;
 
     fn receive_for_party(
-        &self,
+        &mut self,
         room: &str,
         party_index: u32,
         now: u64,
@@ -48,7 +50,7 @@ impl RoomMessageTransport for InMemoryRoomTransport {
     }
 
     fn receive_for_party(
-        &self,
+        &mut self,
         room: &str,
         party_index: u32,
         now: u64,
@@ -66,6 +68,84 @@ impl RoomMessageTransport for InMemoryRoomTransport {
             })
             .collect()
     }
+}
+
+pub struct RelayRoomTransport {
+    runtime: tokio::runtime::Runtime,
+    client: Arc<NostrClient>,
+    receiver: NostrReceiver,
+}
+
+impl RelayRoomTransport {
+    pub fn connect(
+        room: &str,
+        party_index: u32,
+        relay_urls: impl IntoIterator<Item = impl AsRef<str>>,
+    ) -> Result<Self> {
+        let relays = relay_urls
+            .into_iter()
+            .map(|relay| relay.as_ref().to_string())
+            .collect::<Vec<_>>();
+        if relays.is_empty() {
+            bail!("at least one relay URL is required");
+        }
+
+        let runtime = tokio::runtime::Runtime::new()?;
+        let (client, receiver) =
+            runtime.block_on(create_room_client_with_relays(room, party_index, &relays))?;
+
+        Ok(Self {
+            runtime,
+            client,
+            receiver,
+        })
+    }
+
+    pub fn client(&self) -> &NostrClient {
+        &self.client
+    }
+
+    pub fn disconnect(&self) {
+        self.runtime.block_on(self.client.disconnect());
+    }
+}
+
+impl RoomMessageTransport for RelayRoomTransport {
+    fn publish(&mut self, message: NostrProtocolMessage) -> Result<()> {
+        self.runtime
+            .block_on(self.client.publish_protocol_message(&message))?;
+        Ok(())
+    }
+
+    fn receive_for_party(
+        &mut self,
+        room: &str,
+        party_index: u32,
+        now: u64,
+        replay_cache: &mut MessageReplayCache,
+    ) -> Vec<NostrProtocolMessage> {
+        let mut messages = Vec::new();
+        while let Some(content) = self.receiver.try_recv() {
+            if let Some(message) =
+                accept_relay_protocol_content(&content, room, party_index, now, replay_cache)
+            {
+                messages.push(message);
+            }
+        }
+        messages
+    }
+}
+
+fn accept_relay_protocol_content(
+    content: &str,
+    room: &str,
+    party_index: u32,
+    now: u64,
+    replay_cache: &mut MessageReplayCache,
+) -> Option<NostrProtocolMessage> {
+    let message = parse_protocol_message(content).ok()?;
+    replay_cache.accept(&message, room, party_index, now).ok()?;
+    Some(message)
 }
 
 #[derive(Debug, Clone)]
@@ -378,5 +458,28 @@ mod tests {
 
         let _ = std::fs::remove_file(&path);
         let _ = std::fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn relay_content_filter_accepts_only_valid_room_messages_once() {
+        let join = RoomJoinPayload {
+            party_index: 1,
+            nostr_pubkey: "npub-test".to_string(),
+            threshold: 2,
+            n_parties: 3,
+            scheme: ThresholdScheme::Tss,
+            rank: None,
+        };
+        let message =
+            NostrProtocolMessage::new_at("room-a", NostrMessageKind::RoomJoin, 1, &join, 100)
+                .unwrap()
+                .with_tss();
+        let content = serde_json::to_string(&message).unwrap();
+        let mut cache = MessageReplayCache::new();
+
+        assert!(accept_relay_protocol_content(&content, "room-a", 1, 100, &mut cache).is_some());
+        assert!(accept_relay_protocol_content(&content, "room-a", 1, 100, &mut cache).is_none());
+        assert!(accept_relay_protocol_content(&content, "room-b", 1, 100, &mut cache).is_none());
+        assert!(accept_relay_protocol_content("not json", "room-a", 1, 100, &mut cache).is_none());
     }
 }
