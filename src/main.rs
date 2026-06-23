@@ -54,7 +54,7 @@ enum Commands {
         #[arg(long)]
         name: String,
 
-        /// JSON with all commitments from round 1 (paste from webpage)
+        /// JSON with all commitments from round 1
         #[arg(long)]
         data: String,
 
@@ -69,7 +69,7 @@ enum Commands {
         #[arg(long)]
         name: String,
 
-        /// JSON with all shares sent to you (paste from webpage)
+        /// JSON with all shares sent to you
         #[arg(long)]
         data: String,
     },
@@ -91,14 +91,14 @@ enum Commands {
         #[arg(long)]
         message: String,
 
-        /// JSON with nonces and group key (paste from webpage)
+        /// JSON with nonces and group key
         #[arg(long)]
         data: String,
     },
 
     /// Combine signature shares into final signature
     Combine {
-        /// JSON with all signature shares (includes message, paste from webpage)
+        /// JSON with all signature shares, including message
         #[arg(long)]
         data: String,
     },

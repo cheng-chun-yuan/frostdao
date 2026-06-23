@@ -45,6 +45,9 @@ KNOWN_STALE_PATTERNS = [
     "LocalStorageImpl",
     "test_wasm",
     "wasm_bindgen",
+    "webpage",
+    "yushan sign",
+    "yushan combine",
 ]
 
 

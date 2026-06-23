@@ -163,14 +163,14 @@ pub fn generate_nonce_core(session: &str, storage: &dyn Storage) -> Result<Comma
     out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
     out.push_str("✉️  Your public nonce generated!\n\n");
 
-    out.push_str("➜ Paste the result JSON into the webpage\n");
+    out.push_str("➜ Share the result JSON with the other signers\n");
     out.push_str("➜ Wait for threshold number of signers to post nonces\n");
     out.push_str(&format!(
-        "➜ Copy the \"nonces for session {}\" JSON from webpage\n",
+        "➜ Collect the \"nonces for session {}\" JSON from the signer set\n",
         session
     ));
     out.push_str(&format!(
-        "➜ Run: yushan sign --session {} --message \"<msg>\" --data '<JSON>'\n",
+        "➜ Run: frostdao sign --session {} --message \"<msg>\" --data '<JSON>'\n",
         session
     ));
 
@@ -440,10 +440,10 @@ pub fn create_signature_share_core(
     out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
     out.push_str("✓ Your signature share generated!\n\n");
 
-    out.push_str("➜ Paste the result JSON into the webpage\n");
+    out.push_str("➜ Share the result JSON with the other signers\n");
     out.push_str("➜ Once all signers post shares, anyone can combine them\n");
     out.push_str(&format!(
-        "➜ Run: yushan combine --message \"{}\" --data '<shares JSON>'\n",
+        "➜ Run: frostdao combine --message \"{}\" --data '<shares JSON>'\n",
         message
     ));
 

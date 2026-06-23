@@ -666,12 +666,12 @@ pub fn round1_core(
     out.push_str("   ⚠️  KEEP THIS SECRET! Use it only in your local encrypted-share workflow.\n");
     out.push_str("   📁 Also saved to: secret_coefficient.txt\n\n");
 
-    out.push_str("➜ Paste the result JSON into the webpage\n");
+    out.push_str("➜ Share the result JSON with the other parties\n");
     out.push_str(&format!(
         "➜ Wait for all {} parties to post their commitments\n",
         n_parties
     ));
-    out.push_str("➜ Copy the \"all commitments\" JSON from webpage\n");
+    out.push_str("➜ Collect the \"all commitments\" JSON from the group\n");
     out.push_str("➜ Run: frostdao keygen-round2 --data '<JSON>'\n");
 
     // Create JSON result for copy-pasting
@@ -916,10 +916,10 @@ pub fn round2_core(data: &str, storage: &dyn Storage, encrypt: bool) -> Result<C
     out.push_str("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
     out.push_str("✉️  Your shares generated!\n\n");
 
-    out.push_str("➜ Paste the result JSON into the webpage\n");
+    out.push_str("➜ Share the result JSON with the other parties\n");
     out.push_str("➜ Wait for all parties to post their shares\n");
     out.push_str(&format!(
-        "➜ Copy \"shares for Party {}\" JSON from webpage\n",
+        "➜ Collect \"shares for Party {}\" JSON from the group\n",
         state.my_index
     ));
     out.push_str("➜ Run: frostdao keygen-finalize --data '<JSON>'\n");
