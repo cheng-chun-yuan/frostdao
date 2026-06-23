@@ -283,6 +283,27 @@ def check_replay_cache_persistence():
         doctor.ok("persisted replay cache primitive is present and documented")
 
 
+def check_transaction_review():
+    protocol = read(Path("src/protocol/dkg_tx.rs"))
+    tui_state = read(Path("src/tui/state.rs"))
+    tui_keys = read(Path("src/tui/mod.rs"))
+    docs = read(Path("docs/RUN_GUIDE.md"))
+    required = [
+        ("src/protocol/dkg_tx.rs", protocol, "pub struct TransactionReview"),
+        ("src/protocol/dkg_tx.rs", protocol, "sighash_fingerprint"),
+        ("src/protocol/dkg_tx.rs", protocol, "fee_rate_sats_vb"),
+        ("src/tui/state.rs", tui_state, "ReviewTransaction"),
+        ("src/tui/mod.rs", tui_keys, "KeyCode::Char('y')"),
+        ("docs/RUN_GUIDE.md", docs, "compare the returned `review` fields"),
+    ]
+    missing = [f"{path}: {marker}" for path, content, marker in required if marker not in content]
+
+    if missing:
+        doctor.fail(f"transaction review markers missing: {', '.join(missing)}")
+    else:
+        doctor.ok("transaction review fields and TUI confirmation are present")
+
+
 print("FrostDAO Doctor")
 print("================")
 check_markdown_links()
@@ -294,6 +315,7 @@ check_scripts_executable()
 check_cli_docs_match_help()
 check_agent_payment_semantics()
 check_replay_cache_persistence()
+check_transaction_review()
 
 if doctor.failures:
     print("\nDoctor found issues:")

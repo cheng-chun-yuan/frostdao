@@ -383,6 +383,9 @@ pub fn render_send(frame: &mut Frame, app: &App, form: &SendFormData, area: Rect
             SendState::SelectAddress { .. } => render_select_address(frame, form, area),
             SendState::ConfigureScript { .. } => render_configure_script(frame, form, area),
             SendState::EnterDetails { .. } => render_enter_details(frame, form, area),
+            SendState::ReviewTransaction { wallet_name } => {
+                render_review_transaction(frame, app, form, wallet_name, area)
+            }
             SendState::ShowSighash { sighash, .. } => render_show_sighash(frame, sighash, area),
             SendState::GenerateNonce { nonce_output, .. } => {
                 render_generate_nonce(frame, nonce_output, area)
@@ -1535,6 +1538,163 @@ fn render_enter_details(frame: &mut Frame, form: &SendFormData, area: Rect) {
 
     // Recent transactions panel
     render_recent_txs_panel(frame, form, right_chunks[1]);
+}
+
+fn render_review_transaction(
+    frame: &mut Frame,
+    app: &App,
+    form: &SendFormData,
+    wallet_name: &str,
+    area: Rect,
+) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Yellow))
+        .title(" Send - Step 5: Review Transaction ");
+
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(2),
+            Constraint::Min(12),
+            Constraint::Length(3),
+            Constraint::Length(2),
+        ])
+        .split(inner);
+
+    let amount: u64 = form.amount.value().parse().unwrap_or(0);
+    let confirmed_balance: u64 = form
+        .utxos
+        .iter()
+        .filter(|u| u.confirmed)
+        .map(|u| u.value)
+        .sum();
+    let total_spend = amount.saturating_add(form.estimated_fee);
+    let remaining = confirmed_balance.saturating_sub(total_spend);
+    let source_path = form
+        .get_derivation_path()
+        .map(|(change, index)| format!("m/86'/0'/0'/{}/{}", change, index))
+        .unwrap_or_else(|| "root key-path".to_string());
+    let signer_list = form
+        .get_selected_indices()
+        .iter()
+        .map(u32::to_string)
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let title = Paragraph::new(Line::from(vec![
+        Span::styled(
+            "Confirm before signing and broadcasting",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("  "),
+        Span::styled(
+            app.network.display_name(),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+    ]));
+    frame.render_widget(title, chunks[0]);
+
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled("Wallet: ", Style::default().fg(Color::Gray)),
+            Span::raw(wallet_name.to_string()),
+        ]),
+        Line::from(vec![
+            Span::styled("Source path: ", Style::default().fg(Color::Gray)),
+            Span::raw(source_path),
+        ]),
+        Line::from(vec![
+            Span::styled("Destination: ", Style::default().fg(Color::Gray)),
+            Span::raw(form.to_address.value().to_string()),
+        ]),
+        Line::from(vec![
+            Span::styled("Amount: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                format!("{} sats", amount),
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("Estimated fee: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                format!("{} sats", form.estimated_fee),
+                Style::default().fg(Color::Yellow),
+            ),
+            Span::styled(
+                format!(" at {} sat/vB", form.fee_rate),
+                Style::default().fg(Color::DarkGray),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("Total debit: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                format!("{} sats", total_spend),
+                Style::default().fg(if total_spend > confirmed_balance {
+                    Color::Red
+                } else {
+                    Color::White
+                }),
+            ),
+            Span::styled("  Remaining: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                format!("{} sats", remaining),
+                Style::default().fg(if total_spend > confirmed_balance {
+                    Color::Red
+                } else {
+                    Color::Green
+                }),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("Signers: ", Style::default().fg(Color::Gray)),
+            Span::raw(format!(
+                "{} of {} [{}]",
+                form.threshold, form.total_parties, signer_list
+            )),
+        ]),
+    ];
+
+    if form.hierarchical {
+        let requirement = form
+            .signing_requirement
+            .as_ref()
+            .map(|req| req.iter().map(u32::to_string).collect::<Vec<_>>().join(","))
+            .unwrap_or_else(|| "unknown".to_string());
+        lines.push(Line::from(vec![
+            Span::styled("HTSS ranks: ", Style::default().fg(Color::Gray)),
+            Span::raw(format!("requirement [{}]", requirement)),
+        ]));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "This local flow signs and attempts to broadcast after confirmation.",
+        Style::default().fg(Color::Yellow),
+    )));
+
+    let review = Paragraph::new(lines)
+        .wrap(Wrap { trim: false })
+        .block(Block::default().borders(Borders::ALL).title("Review"));
+    frame.render_widget(review, chunks[1]);
+
+    if let Some(error) = &form.error_message {
+        let error_para = Paragraph::new(error.as_str()).style(Style::default().fg(Color::Red));
+        frame.render_widget(error_para, chunks[2]);
+    }
+
+    let help = Paragraph::new("y: Confirm and sign | Esc: Back to edit")
+        .style(Style::default().fg(Color::DarkGray));
+    frame.render_widget(help, chunks[3]);
 }
 
 fn render_utxos_panel(frame: &mut Frame, form: &SendFormData, area: Rect) {

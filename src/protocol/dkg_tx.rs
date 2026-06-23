@@ -108,8 +108,23 @@ pub struct BuildTxOutput {
     pub fee_sats: u64,
     /// Network
     pub network: String,
+    /// Human-checkable transaction review fields
+    pub review: TransactionReview,
     #[serde(rename = "type")]
     pub event_type: String,
+}
+
+/// Human-checkable transaction details that every signer should review.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct TransactionReview {
+    pub network: String,
+    pub source_path: String,
+    pub from_address: String,
+    pub to_address: String,
+    pub amount_sats: u64,
+    pub fee_sats: u64,
+    pub fee_rate_sats_vb: u64,
+    pub sighash_fingerprint: String,
 }
 
 /// Output from dkg-sign command
@@ -167,6 +182,18 @@ fn generate_session_id(to_address: &str, amount: u64) -> String {
     let hash_input = format!("{}:{}:{}", to_address, amount, timestamp);
     let hash = Sha256::digest(hash_input.as_bytes());
     hex::encode(&hash[..8]) // First 8 bytes for readability
+}
+
+pub fn sighash_fingerprint(sighash_hex: &str) -> String {
+    if sighash_hex.len() <= 24 {
+        return sighash_hex.to_string();
+    }
+
+    format!(
+        "{}...{}",
+        &sighash_hex[..12],
+        &sighash_hex[sighash_hex.len() - 12..]
+    )
 }
 
 // ============================================================================
@@ -337,6 +364,8 @@ pub fn build_unsigned_tx_core(
 
     // Generate session ID
     let session_id = generate_session_id(to_address, amount_sats);
+    let source_path = "root key-path".to_string();
+    let sighash_fingerprint = sighash_fingerprint(&sighash_hex);
 
     // Serialize unsigned tx
     let unsigned_tx_hex = bitcoin::consensus::encode::serialize_hex(&tx);
@@ -356,7 +385,10 @@ pub fn build_unsigned_tx_core(
         "to_address": dest_address.to_string(),
         "amount_sats": amount_sats,
         "fee_sats": estimated_fee,
+        "fee_rate_sats_vb": fee_rate,
         "network": network_name(network),
+        "source_path": source_path.clone(),
+        "sighash_fingerprint": sighash_fingerprint.clone(),
     });
 
     storage.write(
@@ -366,6 +398,7 @@ pub fn build_unsigned_tx_core(
 
     out.push_str(&format!("\nSession ID: {}\n", session_id));
     out.push_str(&format!("Sighash: {}\n", sighash_hex));
+    out.push_str(&format!("Sighash fingerprint: {}\n", sighash_fingerprint));
     out.push_str(&format!("Estimated fee: {} sats\n\n", estimated_fee));
 
     out.push_str("🧠 Next steps:\n");
@@ -376,6 +409,17 @@ pub fn build_unsigned_tx_core(
     out.push_str("   3. Exchange nonces, then run: frostdao dkg-sign ...\n");
     out.push_str("   4. Coordinator runs: frostdao dkg-broadcast ...\n");
 
+    let review = TransactionReview {
+        network: network_name(network).to_string(),
+        source_path,
+        from_address: from_address.to_string(),
+        to_address: dest_address.to_string(),
+        amount_sats,
+        fee_sats: estimated_fee,
+        fee_rate_sats_vb: fee_rate,
+        sighash_fingerprint,
+    };
+
     let output = BuildTxOutput {
         session_id,
         sighash: sighash_hex,
@@ -385,6 +429,7 @@ pub fn build_unsigned_tx_core(
         amount_sats,
         fee_sats: estimated_fee,
         network: network_name(network).to_string(),
+        review,
         event_type: "dkg_build_tx".to_string(),
     };
 
@@ -900,6 +945,9 @@ pub struct AutoSignResult {
     pub amount_sats: u64,
     pub fee_sats: u64,
     pub network: String,
+    pub source_path: String,
+    pub sighash_fingerprint: String,
+    pub review: TransactionReview,
     pub explorer_url: String,
     pub signers: Vec<u32>,
     #[serde(rename = "type")]
@@ -987,6 +1035,9 @@ pub fn frost_sign_all_local(
     out.push_str(&format!("Destination: {}\n", to_address));
     out.push_str(&format!("Amount: {} sats\n\n", amount_sats));
     let main_storage = FileStorage::new(&state_dir)?;
+    let source_path = derivation_path
+        .map(|(change, index)| format!("m/86'/0'/0'/{}/{}", change, index))
+        .unwrap_or_else(|| "root key-path".to_string());
 
     let shared_key_bytes = main_storage
         .read("shared_key.bin")
@@ -1117,6 +1168,7 @@ pub fn frost_sign_all_local(
 
     let sighash_bytes: [u8; 32] = *sighash.as_byte_array();
     let sighash_hex = hex::encode(sighash_bytes);
+    let sighash_fingerprint = sighash_fingerprint(&sighash_hex);
 
     out.push_str(&format!("📝 Sighash: {}...\n\n", &sighash_hex[..16]));
 
@@ -1345,6 +1397,17 @@ pub fn frost_sign_all_local(
         }
     }
 
+    let review = TransactionReview {
+        network: network_name(network).to_string(),
+        source_path: source_path.clone(),
+        from_address: from_address.to_string(),
+        to_address: dest_address.to_string(),
+        amount_sats,
+        fee_sats: estimated_fee,
+        fee_rate_sats_vb: fee_rate,
+        sighash_fingerprint: sighash_fingerprint.clone(),
+    };
+
     let output = AutoSignResult {
         txid: txid.to_string(),
         raw_tx,
@@ -1353,6 +1416,9 @@ pub fn frost_sign_all_local(
         amount_sats,
         fee_sats: estimated_fee,
         network: network_name(network).to_string(),
+        source_path,
+        sighash_fingerprint,
+        review,
         explorer_url,
         signers: selected_parties.to_vec(),
         event_type: "frost_auto_sign".to_string(),
@@ -1362,4 +1428,36 @@ pub fn frost_sign_all_local(
         output: out,
         result: serde_json::to_string(&output)?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{sighash_fingerprint, TransactionReview};
+
+    #[test]
+    fn sighash_fingerprint_keeps_prefix_and_suffix() {
+        let sighash = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+        assert_eq!(sighash_fingerprint(sighash), "001122334455...aabbccddeeff");
+    }
+
+    #[test]
+    fn transaction_review_serializes_required_fields() {
+        let review = TransactionReview {
+            network: "testnet".to_string(),
+            source_path: "m/86'/0'/0'/0/7".to_string(),
+            from_address: "tb1pfrom".to_string(),
+            to_address: "tb1pto".to_string(),
+            amount_sats: 10_000,
+            fee_sats: 200,
+            fee_rate_sats_vb: 1,
+            sighash_fingerprint: "abc...def".to_string(),
+        };
+
+        let json = serde_json::to_value(&review).unwrap();
+        assert_eq!(json["network"], "testnet");
+        assert_eq!(json["source_path"], "m/86'/0'/0'/0/7");
+        assert_eq!(json["amount_sats"], 10_000);
+        assert_eq!(json["fee_sats"], 200);
+        assert_eq!(json["sighash_fingerprint"], "abc...def");
+    }
 }

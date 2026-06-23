@@ -1790,25 +1790,45 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     return;
                 }
 
-                // Get network from app
+                app.send_form.estimate_fee();
+                app.send_form.error_message = None;
+                app.state = AppState::Send(SendState::ReviewTransaction { wallet_name });
+            }
+            _ => match app.send_form.focused_field {
+                SendFormField::ToAddress => {
+                    app.send_form.to_address.handle_key(key);
+                }
+                SendFormField::Amount => {
+                    app.send_form.amount.handle_key(key);
+                    // Recalculate fee estimate when amount changes
+                    app.send_form.estimate_fee();
+                }
+            },
+        },
+        AppState::Send(SendState::ReviewTransaction { wallet_name }) => match key.code {
+            KeyCode::Esc => {
+                app.state = AppState::Send(SendState::EnterDetails {
+                    wallet_name: wallet_name.clone(),
+                });
+            }
+            KeyCode::Char('y') | KeyCode::Char('Y') => {
+                let to_addr = app.send_form.to_address.value().to_string();
+                let amount: u64 = app.send_form.amount.value().parse().unwrap_or(0);
+                let selected_parties = app.send_form.get_selected_indices();
                 let network = app.network.to_bitcoin_network();
-
-                // Get derivation path if HD address selected
                 let derivation_path = app.send_form.get_derivation_path();
 
-                // Call automated FROST signing
                 match frostdao::protocol::dkg_tx::frost_sign_all_local(
                     &wallet_name,
                     &to_addr,
                     amount,
                     &selected_parties,
                     derivation_path,
-                    None, // Use default fee rate
+                    None,
                     network,
                 ) {
                     Ok(result) => {
                         app.send_form.error_message = None;
-                        // Extract txid from result
                         let txid = if let Ok(parsed) =
                             serde_json::from_str::<serde_json::Value>(&result.result)
                         {
@@ -1823,16 +1843,7 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     }
                 }
             }
-            _ => match app.send_form.focused_field {
-                SendFormField::ToAddress => {
-                    app.send_form.to_address.handle_key(key);
-                }
-                SendFormField::Amount => {
-                    app.send_form.amount.handle_key(key);
-                    // Recalculate fee estimate when amount changes
-                    app.send_form.estimate_fee();
-                }
-            },
+            _ => {}
         },
         AppState::Send(SendState::ShowSighash {
             wallet_name,

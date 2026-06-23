@@ -135,6 +135,8 @@ frostdao dkg-build-tx \
 
 Use the returned `session_id` and `sighash` to generate nonces:
 
+Before signing, compare the returned `review` fields on every device: network, source path, source address, destination address, amount, fee, fee rate, and `sighash_fingerprint`.
+
 ```bash
 frostdao dkg-nonce --name treasury --session <session_id>
 ```
@@ -161,6 +163,8 @@ frostdao dkg-broadcast \
 ```
 
 Never reuse a signing session nonce.
+
+In the TUI send flow, `Enter` prepares the transaction review screen. Press `y` only after the review fields match what every signer expects.
 
 ## 8. Reshare Without Changing Address
 

@@ -268,6 +268,8 @@ pub enum SendState {
     ConfigureScript { wallet_name: String },
     /// Enter recipient and amount
     EnterDetails { wallet_name: String },
+    /// Review transaction details before local signing/broadcast
+    ReviewTransaction { wallet_name: String },
     /// Show sighash for signing
     ShowSighash {
         wallet_name: String,

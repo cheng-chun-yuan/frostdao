@@ -514,7 +514,9 @@ frostdao dkg-build-tx \
 | `--fee-rate` | Fee rate (sats/vbyte) | Auto |
 | `--network` | Bitcoin network | `testnet` |
 
-**Output:** JSON with `session_id`, `sighash`, `unsigned_tx`
+**Output:** JSON with `session_id`, `sighash`, `unsigned_tx`, and `review`.
+
+The `review` object contains the network, source path, source address, destination address, amount, fee, fee rate, and a short `sighash_fingerprint` for cross-device comparison before signing.
 
 ---
 
