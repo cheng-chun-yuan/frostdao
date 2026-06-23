@@ -163,6 +163,8 @@ For sorted signer ranks `[r0, r1, ..., r(t-1)]`, the signer set is valid when `r
 
 `tx_consent` should include `reviewed_sighash_fingerprint` so the proposer can confirm which proposal fingerprint each party approved.
 
+Session-scoped signing messages must carry a non-empty envelope `session`. The TUI runtime rejects `tx_proposal`, `tx_consent`, `signing_nonce_encrypted`, `signing_share_encrypted`, and `tx_broadcast` messages without an explicit session; consent envelope sessions must match the `proposal_session` payload.
+
 ## Reshare Flow
 
 1. Existing parties publish `reshare_round1`.

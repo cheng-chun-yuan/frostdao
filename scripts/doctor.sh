@@ -433,6 +433,8 @@ def check_nostr_transaction_review():
         ("src/tui/app.rs", app, "nostr_received_nonces"),
         ("src/tui/app.rs", app, "nostr_received_shares"),
         ("src/tui/app.rs", app, "nostr_broadcasts"),
+        ("src/tui/app.rs", app, "nonempty_message_session"),
+        ("src/tui/app.rs", app, "tui_nostr_poll_rejects_sessionless_signing_messages"),
         ("src/tui/app.rs", app, "tui_nostr_signing_publishes_runtime_messages"),
         ("src/tui/app.rs", app, "tui_nostr_poll_ingests_proposals_and_consents"),
         ("src/tui/mod.rs", tui, "press y to consent"),
@@ -442,9 +444,11 @@ def check_nostr_transaction_review():
         ("src/tui/screens/nostr_sign.rs", screen, "nostr_pending_proposals"),
         ("docs/RUN_GUIDE.md", run_guide, "publish versioned `tx_proposal` and `tx_consent` messages"),
         ("docs/RUN_GUIDE.md", run_guide, "Runtime polling also ingests incoming `tx_proposal` messages"),
+        ("docs/RUN_GUIDE.md", run_guide, "Session-scoped signing messages without an explicit envelope `session` are ignored"),
         ("docs/RUN_GUIDE.md", run_guide, "Encrypted `signing_nonce_encrypted` and `signing_share_encrypted` messages"),
         ("docs/RUN_GUIDE.md", run_guide, "`tx_broadcast` announcements are also published and ingested through the runtime"),
         ("docs/NOSTR_PROTOCOL.md", docs, "`tx_proposal` must include a `review` object"),
+        ("docs/NOSTR_PROTOCOL.md", docs, "Session-scoped signing messages must carry a non-empty envelope `session`"),
         ("docs/TUI_KEYMAP.md", keymap, "Consent after reviewing proposal fingerprint"),
     ]
     missing = [f"{path}: {marker}" for path, content, marker in required if marker not in content]
