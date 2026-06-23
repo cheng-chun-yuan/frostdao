@@ -947,6 +947,7 @@ impl App {
         to_index: u32,
         ciphertext: String,
     ) -> Result<()> {
+        self.validate_nostr_direct_publish(wallet_name, session_id, to_index, &ciphertext)?;
         let Some(runtime) = self.nostr_runtime.as_mut() else {
             anyhow::bail!("join a Nostr room before publishing signing nonce");
         };
@@ -985,6 +986,7 @@ impl App {
         to_index: u32,
         ciphertext: String,
     ) -> Result<()> {
+        self.validate_nostr_direct_publish(wallet_name, session_id, to_index, &ciphertext)?;
         let Some(runtime) = self.nostr_runtime.as_mut() else {
             anyhow::bail!("join a Nostr room before publishing signing share");
         };
@@ -1024,6 +1026,7 @@ impl App {
         raw_tx: String,
         network: String,
     ) -> Result<()> {
+        self.validate_nostr_broadcast_publish(wallet_name, session_id, &txid, &raw_tx, &network)?;
         let Some(runtime) = self.nostr_runtime.as_mut() else {
             anyhow::bail!("join a Nostr room before publishing transaction broadcast");
         };
@@ -1282,6 +1285,63 @@ impl App {
             && payload.n_parties == self.nostr_n_parties
             && payload.scheme == frostdao::nostr::ThresholdScheme::Tss
             && payload.rank.is_none()
+    }
+
+    fn validate_nostr_direct_publish(
+        &self,
+        wallet_name: &str,
+        session_id: &str,
+        to_index: u32,
+        ciphertext: &str,
+    ) -> Result<()> {
+        if wallet_name.trim().is_empty() {
+            anyhow::bail!("wallet name is required");
+        }
+        if session_id.trim().is_empty() {
+            anyhow::bail!("signing session is required");
+        }
+        if to_index == 0 || to_index > self.nostr_n_parties {
+            anyhow::bail!("recipient party must be inside the active room");
+        }
+        if to_index == self.nostr_my_index {
+            anyhow::bail!("direct signing messages must target another party");
+        }
+        if ciphertext.trim().is_empty() {
+            anyhow::bail!("encrypted payload is required");
+        }
+        Ok(())
+    }
+
+    fn validate_nostr_broadcast_publish(
+        &self,
+        wallet_name: &str,
+        session_id: &str,
+        txid: &str,
+        raw_tx: &str,
+        network: &str,
+    ) -> Result<()> {
+        if wallet_name.trim().is_empty() {
+            anyhow::bail!("wallet name is required");
+        }
+        if session_id.trim().is_empty() {
+            anyhow::bail!("signing session is required");
+        }
+        if txid.trim().is_empty() {
+            anyhow::bail!("transaction id is required");
+        }
+        if raw_tx.trim().is_empty() {
+            anyhow::bail!("raw transaction hex is required");
+        }
+        if network != self.network.display_name() {
+            anyhow::bail!("broadcast network must match the selected TUI network");
+        }
+        let tx_bytes = hex::decode(raw_tx.trim()).map_err(|err| anyhow::anyhow!("{err}"))?;
+        let tx = bitcoin::consensus::deserialize::<bitcoin::Transaction>(&tx_bytes)
+            .map_err(|err| anyhow::anyhow!("{err}"))?;
+        if tx.compute_txid().to_string() != txid {
+            anyhow::bail!("broadcast txid does not match raw transaction");
+        }
+        Ok(())
     }
 
     fn accept_nostr_party_ciphertext(
@@ -1724,6 +1784,7 @@ mod tests {
     #[test]
     fn tui_nostr_signing_publishes_runtime_messages() {
         let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Testnet3;
         app.nostr_room_id = format!("tui-signing-runtime-test-{}", std::process::id());
         app.nostr_my_index = 1;
         app.nostr_threshold = 2;
@@ -1806,16 +1867,17 @@ mod tests {
         assert_eq!(app.audit_events[3].event, "nostr_signing_share");
         assert_eq!(app.audit_events[3].fields["to_index"], 2);
         assert!(app.audit_events[3].fields.get("ciphertext").is_none());
+        let broadcast_event = valid_broadcast_event_with_value(2_000);
         app.publish_nostr_tx_broadcast(
             "wallet-test",
             "session-test",
-            "txid-test".to_string(),
-            "raw-transaction-hex".to_string(),
-            "testnet".to_string(),
+            broadcast_event.txid.clone(),
+            broadcast_event.raw_tx.clone(),
+            broadcast_event.network.clone(),
         )
         .unwrap();
         assert_eq!(app.audit_events[4].event, "nostr_tx_broadcast");
-        assert_eq!(app.audit_events[4].fields["txid"], "txid-test");
+        assert_eq!(app.audit_events[4].fields["txid"], broadcast_event.txid);
         assert!(app.audit_events[4].fields.get("raw_tx").is_none());
         assert_eq!(
             app.nostr_runtime
@@ -1823,6 +1885,76 @@ mod tests {
                 .unwrap()
                 .demo_room_len(&app.nostr_room_id),
             Some(6)
+        );
+
+        let _ = std::fs::remove_file(&cache_path);
+    }
+
+    #[test]
+    fn tui_nostr_signing_rejects_malformed_outbound_messages() {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Testnet3;
+        app.nostr_room_id = format!("tui-outbound-validation-test-{}", std::process::id());
+        app.nostr_my_index = 1;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 2;
+        let cache_path = app.nostr_replay_cache_path();
+        let _ = std::fs::remove_file(&cache_path);
+
+        app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
+
+        assert!(app
+            .publish_nostr_signing_nonce("wallet-test", "session-test", 0, "cipher".to_string())
+            .unwrap_err()
+            .to_string()
+            .contains("recipient party"));
+        assert!(app
+            .publish_nostr_signing_nonce("wallet-test", "session-test", 1, "cipher".to_string())
+            .unwrap_err()
+            .to_string()
+            .contains("another party"));
+        assert!(app
+            .publish_nostr_signing_share("wallet-test", "", 2, "cipher".to_string())
+            .unwrap_err()
+            .to_string()
+            .contains("signing session"));
+        assert!(app
+            .publish_nostr_signing_share("wallet-test", "session-test", 2, "   ".to_string())
+            .unwrap_err()
+            .to_string()
+            .contains("encrypted payload"));
+
+        let broadcast = valid_broadcast_event_with_value(2_001);
+        assert!(app
+            .publish_nostr_tx_broadcast(
+                "wallet-test",
+                "session-test",
+                broadcast.txid.clone(),
+                broadcast.raw_tx.clone(),
+                "Mainnet".to_string(),
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("selected TUI network"));
+        assert!(app
+            .publish_nostr_tx_broadcast(
+                "wallet-test",
+                "session-test",
+                "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+                broadcast.raw_tx,
+                broadcast.network,
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("txid does not match"));
+
+        assert!(app.audit_events.is_empty());
+        assert_eq!(
+            app.nostr_runtime
+                .as_ref()
+                .unwrap()
+                .demo_room_len(&app.nostr_room_id),
+            Some(1)
         );
 
         let _ = std::fs::remove_file(&cache_path);
