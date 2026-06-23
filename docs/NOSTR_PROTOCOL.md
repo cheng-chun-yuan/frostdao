@@ -187,7 +187,7 @@ Recovery reconstructs one party share. It must not produce the full wallet secre
 
 ## Compatibility
 
-The Rust Nostr module still parses legacy payloads used by earlier frontend code:
+The Rust Nostr module still parses legacy payloads used by earlier room code:
 
 - `keygen_round1`
 - `keygen_round2_encrypted`

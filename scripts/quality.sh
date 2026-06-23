@@ -3,7 +3,7 @@
 # Usage:
 #   ./scripts/quality.sh
 #   ./scripts/quality.sh --full
-#   ./scripts/quality.sh --with-docs --with-wasm
+#   ./scripts/quality.sh --with-docs
 
 set -euo pipefail
 
@@ -14,7 +14,6 @@ cd "$PROJECT_ROOT"
 
 RUN_BUILD=0
 RUN_DOCS=0
-RUN_WASM=0
 
 for arg in "$@"; do
     case "$arg" in
@@ -24,9 +23,6 @@ for arg in "$@"; do
             ;;
         --with-docs)
             RUN_DOCS=1
-            ;;
-        --with-wasm)
-            RUN_WASM=1
             ;;
         -h|--help)
             sed -n '1,8p' "$0"
@@ -62,14 +58,6 @@ fi
 
 if [[ "$RUN_DOCS" -eq 1 ]]; then
     run_step "Building Rust docs" env RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
-fi
-
-if [[ "$RUN_WASM" -eq 1 ]]; then
-    if ! command -v wasm-pack >/dev/null 2>&1; then
-        echo "wasm-pack is required for --with-wasm" >&2
-        exit 1
-    fi
-    run_step "Building WASM package" wasm-pack build --target web --out-dir frontend/pkg
 fi
 
 echo ""

@@ -1,6 +1,6 @@
 //! Nostr event types for DKG and signing protocols
 //!
-//! These types match the frontend protocol (frontend/js/rooms.js)
+//! These types define the FrostDAO relay message protocol.
 
 use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};

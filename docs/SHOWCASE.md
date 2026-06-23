@@ -51,18 +51,6 @@ Build the CLI:
 ./scripts/build.sh --release
 ```
 
-Build the browser package:
-
-```bash
-./scripts/wasm-build.sh
-```
-
-Serve the static frontend:
-
-```bash
-./scripts/serve-frontend.sh
-```
-
 ## Code Tour
 
 | Path | Purpose |
@@ -76,7 +64,6 @@ Serve the static frontend:
 | `src/crypto/nip44.rs` | Encrypted party-to-party payload support |
 | `src/btc/transaction.rs` | Bitcoin transaction construction and broadcast |
 | `src/tui/` | Terminal application state, screens, and components |
-| `frontend/` | Static browser demo and WASM integration |
 | `tests/` | Unit and integration coverage for crypto, DKG, signing, resharing, and encryption |
 
 ## Verification Coverage

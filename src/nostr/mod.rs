@@ -1,7 +1,7 @@
 //! Nostr module for relay-based DKG and signing coordination
 //!
 //! Provides:
-//! - Event types matching the frontend protocol
+//! - FrostDAO relay message event types
 //! - Client wrapper for relay connection
 //! - Room-based subscription and publishing
 

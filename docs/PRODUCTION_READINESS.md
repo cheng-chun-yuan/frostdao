@@ -11,12 +11,6 @@ Run before every release candidate:
 ./scripts/quality.sh --full
 ```
 
-Run when touching browser or WASM behavior:
-
-```bash
-./scripts/quality.sh --with-wasm
-```
-
 Run before any relay-backed release candidate, once against an operator-controlled local relay and once against an independent public relay:
 
 ```bash

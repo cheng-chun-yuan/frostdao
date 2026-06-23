@@ -663,7 +663,7 @@ pub fn round1_core(
     out.push_str("🔐 E2E Encryption (NIP-44):\n");
     out.push_str("   Your secret coefficient (a₀) for E2E encryption:\n");
     out.push_str(&format!("   {}\n", secret_coefficient_hex));
-    out.push_str("   ⚠️  KEEP THIS SECRET! Use it in the frontend to enable secure sharing.\n");
+    out.push_str("   ⚠️  KEEP THIS SECRET! Use it only in your local encrypted-share workflow.\n");
     out.push_str("   📁 Also saved to: secret_coefficient.txt\n\n");
 
     out.push_str("➜ Paste the result JSON into the webpage\n");
