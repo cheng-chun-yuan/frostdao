@@ -539,9 +539,9 @@ impl App {
         .with_tss();
 
         runtime.publish(message)?;
+        self.clear_nostr_room_session_state();
         self.nostr_runtime = Some(runtime);
         self.nostr_connected = true;
-        self.nostr_participants.clear();
         self.poll_nostr_room_runtime()?;
         Ok(())
     }
@@ -567,7 +567,7 @@ impl App {
     pub fn leave_nostr_room_runtime(&mut self) {
         self.nostr_runtime = None;
         self.nostr_connected = false;
-        self.nostr_participants.clear();
+        self.clear_nostr_room_session_state();
     }
 
     /// Replay-cache path for the current room and party.
@@ -1273,6 +1273,16 @@ impl App {
         }
     }
 
+    fn clear_nostr_room_session_state(&mut self) {
+        self.nostr_participants.clear();
+        self.nostr_pending_proposals.clear();
+        self.nostr_received_nonces.clear();
+        self.nostr_received_shares.clear();
+        self.nostr_broadcasts.clear();
+        self.nostr_keygen_state = NostrKeygenState::ModeSelect;
+        self.nostr_sign_state = NostrSignState::SelectWallet;
+    }
+
     fn accept_nostr_room_join(
         &self,
         message: &frostdao::nostr::NostrProtocolMessage,
@@ -1510,7 +1520,7 @@ fn mainnet_nostr_enabled() -> bool {
 #[cfg(test)]
 mod tests {
     use super::App;
-    use crate::tui::state::{NetworkSelection, NostrSignState};
+    use crate::tui::state::{NetworkSelection, NostrKeygenState, NostrSignState, TxProposal};
     use bitcoin::absolute::LockTime;
     use bitcoin::secp256k1::{Keypair, Secp256k1, SecretKey};
     use bitcoin::transaction::Version;
@@ -1672,20 +1682,85 @@ mod tests {
         let cache_path = app.nostr_replay_cache_path();
         let _ = std::fs::remove_file(&cache_path);
 
+        app.nostr_participants.insert(9, "stale-party".to_string());
+        app.nostr_pending_proposals
+            .insert("stale-session".to_string(), TxProposal::default());
+        app.nostr_received_nonces.insert(
+            "stale-session".to_string(),
+            std::collections::HashMap::new(),
+        );
+        app.nostr_received_shares.insert(
+            "stale-session".to_string(),
+            std::collections::HashMap::new(),
+        );
+        app.nostr_broadcasts.insert(
+            "stale-session".to_string(),
+            frostdao::nostr::TxBroadcastEvent {
+                txid: "stale-txid".to_string(),
+                raw_tx: "stale-raw-tx".to_string(),
+                network: "Testnet3".to_string(),
+            },
+        );
+        app.nostr_keygen_state = NostrKeygenState::Finalizing;
+        app.nostr_sign_state = NostrSignState::Complete {
+            txid: "stale-txid".to_string(),
+        };
+
         app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
         assert!(app.nostr_connected);
         assert!(app.nostr_runtime.is_some());
         assert_eq!(app.nostr_transport_label(), "demo");
         assert_eq!(app.nostr_participants.get(&1).unwrap(), "tui-party-1");
+        assert!(!app.nostr_participants.contains_key(&9));
+        assert!(app.nostr_pending_proposals.is_empty());
+        assert!(app.nostr_received_nonces.is_empty());
+        assert!(app.nostr_received_shares.is_empty());
+        assert!(app.nostr_broadcasts.is_empty());
+        assert!(matches!(
+            app.nostr_keygen_state,
+            NostrKeygenState::ModeSelect
+        ));
+        assert!(matches!(app.nostr_sign_state, NostrSignState::SelectWallet));
         assert!(cache_path.exists());
 
         app.simulate_nostr_participant_join(2).unwrap();
         assert_eq!(app.nostr_participants.get(&2).unwrap(), "npub-demo-2");
+        app.nostr_pending_proposals
+            .insert("active-session".to_string(), TxProposal::default());
+        app.nostr_received_nonces.insert(
+            "active-session".to_string(),
+            std::collections::HashMap::new(),
+        );
+        app.nostr_received_shares.insert(
+            "active-session".to_string(),
+            std::collections::HashMap::new(),
+        );
+        app.nostr_broadcasts.insert(
+            "active-session".to_string(),
+            frostdao::nostr::TxBroadcastEvent {
+                txid: "active-txid".to_string(),
+                raw_tx: "active-raw-tx".to_string(),
+                network: "Testnet3".to_string(),
+            },
+        );
+        app.nostr_keygen_state = NostrKeygenState::Finalizing;
+        app.nostr_sign_state = NostrSignState::Complete {
+            txid: "active-txid".to_string(),
+        };
 
         app.leave_nostr_room_runtime();
         assert!(!app.nostr_connected);
         assert!(app.nostr_runtime.is_none());
         assert!(app.nostr_participants.is_empty());
+        assert!(app.nostr_pending_proposals.is_empty());
+        assert!(app.nostr_received_nonces.is_empty());
+        assert!(app.nostr_received_shares.is_empty());
+        assert!(app.nostr_broadcasts.is_empty());
+        assert!(matches!(
+            app.nostr_keygen_state,
+            NostrKeygenState::ModeSelect
+        ));
+        assert!(matches!(app.nostr_sign_state, NostrSignState::SelectWallet));
 
         let _ = std::fs::remove_file(&cache_path);
     }
