@@ -50,6 +50,7 @@ run_step() {
 echo "FrostDAO Quality Gate"
 echo "===================="
 
+run_step "Running doctor checks" ./scripts/doctor.sh
 run_step "Checking formatting" cargo fmt --all -- --check
 run_step "Running clippy" cargo clippy --all-targets --all-features -- -D warnings
 run_step "Running tests" cargo test

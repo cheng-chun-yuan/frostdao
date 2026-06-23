@@ -92,6 +92,7 @@ frostdao/
 ## Quality
 
 ```bash
+./scripts/doctor.sh
 ./scripts/quality.sh
 ./scripts/quality.sh --full
 ```

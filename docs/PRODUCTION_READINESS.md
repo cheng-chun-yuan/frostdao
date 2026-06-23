@@ -7,6 +7,7 @@ This document defines the release bar for FrostDAO multi-device use. The current
 Run before every release candidate:
 
 ```bash
+./scripts/doctor.sh
 ./scripts/quality.sh --full
 ```
 
@@ -16,7 +17,7 @@ Run when touching browser or WASM behavior:
 ./scripts/quality.sh --with-wasm
 ```
 
-The full gate checks formatting, strict Clippy, all tests, release build, and rustdoc warnings.
+The doctor check verifies documentation links, stale command/keymap strings, CLI/docs command drift, script executable bits, and agent-payment draft semantics. The full gate runs doctor first, then checks formatting, strict Clippy, all tests, debug build, and rustdoc warnings.
 
 ## Security Invariants
 
@@ -32,7 +33,7 @@ The full gate checks formatting, strict Clippy, all tests, release build, and ru
 
 ## Release Runbook
 
-1. Start from a clean test profile and run `./scripts/quality.sh --full`.
+1. Start from a clean test profile and run `./scripts/doctor.sh`, then `./scripts/quality.sh --full`.
 2. Create a 2-of-3 TSS wallet with CLI commands from [User Flow](USER_FLOW.md).
 3. Derive at least two addresses and verify they remain deterministic across devices.
 4. Generate and verify a backup mnemonic for each party.
