@@ -2542,6 +2542,7 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                 app.nostr_sign_state,
                 NostrSignState::WaitingForConsent { .. }
                     | NostrSignState::ViewProposals { .. }
+                    | NostrSignState::WaitingForExecution { .. }
                     | NostrSignState::CollectingShares { .. }
             ) {
                 if let Err(e) = app.poll_nostr_room_runtime() {

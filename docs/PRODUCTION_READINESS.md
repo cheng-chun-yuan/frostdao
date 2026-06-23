@@ -56,7 +56,7 @@ The doctor check verifies documentation links, stale command/keymap strings, CLI
 - Wire the guarded TUI room runtime into live relay keygen, signing, reshare, and recovery ceremonies.
 - Run the opt-in relay smoke test against at least one local relay and one public relay for every release candidate.
 - Complete public relay-backed TUI room transport testing for non-demo rooms.
-- Complete public relay-backed signing nonce/share collection and transaction broadcast paths for non-demo rooms.
+- Wire real cryptographic signing share generation, combination, and testnet transaction broadcast into the relay-backed TUI signing path.
 - Extend structured audit logs that exclude secret material to every live relay ceremony path.
 - Complete an external cryptography/security review for FROST, HTSS, NIP-44 use, reshare, and recovery.
 - Default to testnet/signet until the user deliberately enables mainnet.

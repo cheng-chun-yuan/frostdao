@@ -137,6 +137,8 @@ pub struct App {
     pub nostr_received_nonces: HashMap<String, HashMap<u32, String>>,
     /// Encrypted signing shares received through the room runtime, keyed by session and party
     pub nostr_received_shares: HashMap<String, HashMap<u32, String>>,
+    /// Transaction broadcasts received through the room runtime, keyed by session
+    pub nostr_broadcasts: HashMap<String, frostdao::nostr::TxBroadcastEvent>,
     /// Hardened room runtime for TUI relay flows
     pub nostr_runtime: Option<TuiNostrRuntime>,
 
@@ -191,6 +193,7 @@ impl App {
             nostr_pending_proposals: HashMap::new(),
             nostr_received_nonces: HashMap::new(),
             nostr_received_shares: HashMap::new(),
+            nostr_broadcasts: HashMap::new(),
             nostr_runtime: None,
             nostr_keygen_state: NostrKeygenState::ModeSelect,
             nostr_sign_state: NostrSignState::SelectWallet,
@@ -623,6 +626,27 @@ impl App {
                         }
                     }
                 }
+                frostdao::nostr::NostrMessageKind::TxBroadcast => {
+                    let payload: frostdao::nostr::TxBroadcastEvent = message.payload_as()?;
+                    let session_id = message
+                        .session
+                        .clone()
+                        .unwrap_or_else(|| "unknown".to_string());
+                    self.nostr_broadcasts
+                        .insert(session_id.clone(), payload.clone());
+                    if matches!(
+                        &self.nostr_sign_state,
+                        NostrSignState::WaitingForExecution {
+                            session_id: active_session,
+                            ..
+                        } | NostrSignState::CollectingShares {
+                            session_id: active_session,
+                            ..
+                        } if *active_session == session_id
+                    ) {
+                        self.nostr_sign_state = NostrSignState::Complete { txid: payload.txid };
+                    }
+                }
                 _ => {}
             }
         }
@@ -801,6 +825,48 @@ impl App {
                 .with_field("session_id", session_id)
                 .with_field("party_index", self.nostr_my_index)
                 .with_field("to_index", to_index),
+        );
+        Ok(())
+    }
+
+    /// Publish a transaction broadcast announcement through the active runtime.
+    #[allow(dead_code)]
+    pub fn publish_nostr_tx_broadcast(
+        &mut self,
+        wallet_name: &str,
+        session_id: &str,
+        txid: String,
+        raw_tx: String,
+        network: String,
+    ) -> Result<()> {
+        let Some(runtime) = self.nostr_runtime.as_mut() else {
+            anyhow::bail!("join a Nostr room before publishing transaction broadcast");
+        };
+
+        let payload = frostdao::nostr::TxBroadcastEvent {
+            txid: txid.clone(),
+            raw_tx,
+            network: network.clone(),
+        };
+        let message = frostdao::nostr::NostrProtocolMessage::new(
+            self.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxBroadcast,
+            self.nostr_my_index,
+            &payload,
+        )?
+        .with_wallet(wallet_name)
+        .with_session(session_id)
+        .with_tss();
+
+        runtime.publish(message)?;
+        self.append_nostr_audit_event(
+            frostdao::audit::AuditEvent::new("nostr_tx_broadcast", wallet_name, "published")
+                .with_field("room", self.nostr_room_id.clone())
+                .with_field("transport", self.nostr_transport_label())
+                .with_field("session_id", session_id)
+                .with_field("party_index", self.nostr_my_index)
+                .with_field("network", network)
+                .with_field("txid", txid),
         );
         Ok(())
     }
@@ -1163,12 +1229,23 @@ mod tests {
         assert_eq!(app.audit_events[3].event, "nostr_signing_share");
         assert_eq!(app.audit_events[3].fields["to_index"], 2);
         assert!(app.audit_events[3].fields.get("ciphertext").is_none());
+        app.publish_nostr_tx_broadcast(
+            "wallet-test",
+            "session-test",
+            "txid-test".to_string(),
+            "raw-transaction-hex".to_string(),
+            "testnet".to_string(),
+        )
+        .unwrap();
+        assert_eq!(app.audit_events[4].event, "nostr_tx_broadcast");
+        assert_eq!(app.audit_events[4].fields["txid"], "txid-test");
+        assert!(app.audit_events[4].fields.get("raw_tx").is_none());
         assert_eq!(
             app.nostr_runtime
                 .as_ref()
                 .unwrap()
                 .demo_room_len(&app.nostr_room_id),
-            Some(5)
+            Some(6)
         );
 
         let _ = std::fs::remove_file(&cache_path);
@@ -1346,6 +1423,36 @@ mod tests {
         } else {
             panic!("expected CollectingShares");
         }
+
+        let broadcast_event = frostdao::nostr::TxBroadcastEvent {
+            txid: "txid-remote".to_string(),
+            raw_tx: "raw-remote-transaction".to_string(),
+            network: "testnet".to_string(),
+        };
+        let broadcast_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxBroadcast,
+            2,
+            &broadcast_event,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-remote")
+        .with_tss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(broadcast_message)
+            .unwrap();
+        app.poll_nostr_room_runtime().unwrap();
+        assert_eq!(
+            app.nostr_broadcasts.get("session-remote").unwrap().txid,
+            "txid-remote"
+        );
+        assert!(matches!(
+            &app.nostr_sign_state,
+            NostrSignState::Complete { txid } if txid == "txid-remote"
+        ));
 
         let _ = std::fs::remove_file(&cache_path);
     }
