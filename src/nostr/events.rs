@@ -608,10 +608,14 @@ pub fn parse_signing_event(content: &str) -> Option<NostrSigningEvent> {
                 message.payload_as().ok().map(NostrSigningEvent::Consent)
             }
             NostrMessageKind::SigningNonceEncrypted => {
-                message.payload_as().ok().map(NostrSigningEvent::Nonce)
+                let event: SigningNonceEvent = message.payload_as().ok()?;
+                encrypted_signing_nonce_matches_envelope(&message, &event)
+                    .then_some(NostrSigningEvent::Nonce(event))
             }
             NostrMessageKind::SigningShareEncrypted => {
-                message.payload_as().ok().map(NostrSigningEvent::Share)
+                let event: SigningShareEvent = message.payload_as().ok()?;
+                encrypted_signing_share_matches_envelope(&message, &event)
+                    .then_some(NostrSigningEvent::Share(event))
             }
             NostrMessageKind::TxBroadcast => {
                 message.payload_as().ok().map(NostrSigningEvent::Broadcast)
@@ -634,6 +638,20 @@ pub fn parse_signing_event(content: &str) -> Option<NostrSigningEvent> {
         }
         _ => None,
     }
+}
+
+fn encrypted_signing_nonce_matches_envelope(
+    message: &NostrProtocolMessage,
+    event: &SigningNonceEvent,
+) -> bool {
+    event.party_index == message.from && message.to == Some(event.to_index)
+}
+
+fn encrypted_signing_share_matches_envelope(
+    message: &NostrProtocolMessage,
+    event: &SigningShareEvent,
+) -> bool {
+    event.party_index == message.from && message.to == Some(event.to_index)
 }
 
 pub fn parse_reshare_event(content: &str) -> Option<NostrReshareEvent> {
@@ -778,6 +796,90 @@ mod tests {
             parse_signing_event(&encoded),
             Some(NostrSigningEvent::Share(_))
         ));
+    }
+
+    #[test]
+    fn parses_signing_events_with_bound_envelope_identity() {
+        let nonce = SigningNonceEvent::new(1, 2, "nonce-ciphertext".to_string());
+        let nonce_message =
+            NostrProtocolMessage::new("room-a", NostrMessageKind::SigningNonceEncrypted, 1, &nonce)
+                .unwrap()
+                .to_party(2)
+                .unwrap();
+        let encoded_nonce = serde_json::to_string(&nonce_message).unwrap();
+        assert!(matches!(
+            parse_signing_event(&encoded_nonce),
+            Some(NostrSigningEvent::Nonce(_))
+        ));
+
+        let share = SigningShareEvent::new(1, 2, "share-ciphertext".to_string());
+        let share_message =
+            NostrProtocolMessage::new("room-a", NostrMessageKind::SigningShareEncrypted, 1, &share)
+                .unwrap()
+                .to_party(2)
+                .unwrap();
+        let encoded_share = serde_json::to_string(&share_message).unwrap();
+        assert!(matches!(
+            parse_signing_event(&encoded_share),
+            Some(NostrSigningEvent::Share(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_signing_events_with_mismatched_envelope_identity() {
+        let mismatched_nonce = SigningNonceEvent::new(3, 2, "nonce-ciphertext".to_string());
+        let mismatched_nonce_message = NostrProtocolMessage::new(
+            "room-a",
+            NostrMessageKind::SigningNonceEncrypted,
+            1,
+            &mismatched_nonce,
+        )
+        .unwrap()
+        .to_party(2)
+        .unwrap();
+        let encoded_mismatched_nonce = serde_json::to_string(&mismatched_nonce_message).unwrap();
+        assert!(parse_signing_event(&encoded_mismatched_nonce).is_none());
+
+        let wrong_recipient_nonce = SigningNonceEvent::new(1, 3, "nonce-ciphertext".to_string());
+        let wrong_recipient_nonce_message = NostrProtocolMessage::new(
+            "room-a",
+            NostrMessageKind::SigningNonceEncrypted,
+            1,
+            &wrong_recipient_nonce,
+        )
+        .unwrap()
+        .to_party(2)
+        .unwrap();
+        let encoded_wrong_recipient_nonce =
+            serde_json::to_string(&wrong_recipient_nonce_message).unwrap();
+        assert!(parse_signing_event(&encoded_wrong_recipient_nonce).is_none());
+
+        let mismatched_share = SigningShareEvent::new(3, 2, "share-ciphertext".to_string());
+        let mismatched_share_message = NostrProtocolMessage::new(
+            "room-a",
+            NostrMessageKind::SigningShareEncrypted,
+            1,
+            &mismatched_share,
+        )
+        .unwrap()
+        .to_party(2)
+        .unwrap();
+        let encoded_mismatched_share = serde_json::to_string(&mismatched_share_message).unwrap();
+        assert!(parse_signing_event(&encoded_mismatched_share).is_none());
+
+        let wrong_recipient_share = SigningShareEvent::new(1, 3, "share-ciphertext".to_string());
+        let wrong_recipient_share_message = NostrProtocolMessage::new(
+            "room-a",
+            NostrMessageKind::SigningShareEncrypted,
+            1,
+            &wrong_recipient_share,
+        )
+        .unwrap()
+        .to_party(2)
+        .unwrap();
+        let encoded_wrong_recipient_share =
+            serde_json::to_string(&wrong_recipient_share_message).unwrap();
+        assert!(parse_signing_event(&encoded_wrong_recipient_share).is_none());
     }
 
     #[test]
