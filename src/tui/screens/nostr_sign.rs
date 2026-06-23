@@ -418,19 +418,46 @@ fn render_consent_list(
     frame.render_widget(list, area);
 }
 
-fn render_proposals_list(frame: &mut Frame, _app: &App, area: Rect) {
-    // Placeholder - would show list of pending proposals from Nostr
-    let items = vec![
-        ListItem::new(Line::from(Span::styled(
-            "No pending proposals",
-            Style::default().fg(Color::DarkGray),
-        ))),
-        ListItem::new(Line::from("")),
-        ListItem::new(Line::from(Span::styled(
-            "Proposals will appear here when broadcast by other parties",
-            Style::default().fg(Color::DarkGray),
-        ))),
-    ];
+fn render_proposals_list(frame: &mut Frame, app: &App, area: Rect) {
+    let mut proposals = app
+        .nostr_pending_proposals
+        .values()
+        .filter(|proposal| proposal.proposer_index != app.nostr_my_index)
+        .collect::<Vec<_>>();
+    proposals.sort_by_key(|proposal| proposal.timestamp);
+
+    let items = if proposals.is_empty() {
+        vec![
+            ListItem::new(Line::from(Span::styled(
+                "No pending proposals",
+                Style::default().fg(Color::DarkGray),
+            ))),
+            ListItem::new(Line::from("")),
+            ListItem::new(Line::from(Span::styled(
+                "Proposals appear here after runtime relay polling accepts them.",
+                Style::default().fg(Color::DarkGray),
+            ))),
+        ]
+    } else {
+        proposals
+            .into_iter()
+            .map(|proposal| {
+                ListItem::new(Line::from(vec![
+                    Span::styled(
+                        format!("Party {} ", proposal.proposer_index),
+                        Style::default().fg(Color::Cyan),
+                    ),
+                    Span::raw(format!("{} sats -> ", proposal.amount_sats)),
+                    Span::styled(&proposal.to_address, Style::default().fg(Color::Yellow)),
+                    Span::raw("  "),
+                    Span::styled(
+                        &proposal.review.sighash_fingerprint,
+                        Style::default().fg(Color::Magenta),
+                    ),
+                ]))
+            })
+            .collect()
+    };
 
     let list = List::new(items).block(
         Block::default()

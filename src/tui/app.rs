@@ -131,6 +131,8 @@ pub struct App {
     pub nostr_room_phase: NostrRoomPhase,
     /// Participants who have joined (party_index -> pubkey/name)
     pub nostr_participants: HashMap<u32, String>,
+    /// Pending transaction proposals received through the room runtime
+    pub nostr_pending_proposals: HashMap<String, TxProposal>,
     /// Hardened room runtime for TUI relay flows
     pub nostr_runtime: Option<TuiNostrRuntime>,
 
@@ -182,6 +184,7 @@ impl App {
             nostr_room_focus: NostrRoomField::RoomId,
             nostr_room_phase: NostrRoomPhase::Configure,
             nostr_participants: HashMap::new(),
+            nostr_pending_proposals: HashMap::new(),
             nostr_runtime: None,
             nostr_keygen_state: NostrKeygenState::ModeSelect,
             nostr_sign_state: NostrSignState::SelectWallet,
@@ -536,10 +539,53 @@ impl App {
         let count = messages.len();
 
         for message in messages {
-            if message.kind == frostdao::nostr::NostrMessageKind::RoomJoin {
-                let payload: frostdao::nostr::RoomJoinPayload = message.payload_as()?;
-                self.nostr_participants
-                    .insert(payload.party_index, payload.nostr_pubkey);
+            match message.kind {
+                frostdao::nostr::NostrMessageKind::RoomJoin => {
+                    let payload: frostdao::nostr::RoomJoinPayload = message.payload_as()?;
+                    self.nostr_participants
+                        .insert(payload.party_index, payload.nostr_pubkey);
+                }
+                frostdao::nostr::NostrMessageKind::TxProposal
+                    if message.from != self.nostr_my_index =>
+                {
+                    let payload: frostdao::nostr::TxProposalEvent = message.payload_as()?;
+                    let session_id = message.session.clone().unwrap_or_else(|| {
+                        format!("proposal-{}-{}", payload.proposer_index, payload.timestamp)
+                    });
+                    self.nostr_pending_proposals.insert(
+                        session_id.clone(),
+                        TxProposal {
+                            session_id,
+                            proposer_index: payload.proposer_index,
+                            to_address: payload.to_address,
+                            amount_sats: payload.amount_sats,
+                            fee_rate: payload.fee_rate,
+                            sighash: payload.sighash,
+                            review: payload.review,
+                            description: payload.description,
+                            timestamp: payload.timestamp,
+                        },
+                    );
+                }
+                frostdao::nostr::NostrMessageKind::TxConsent => {
+                    let payload: frostdao::nostr::TxConsentEvent = message.payload_as()?;
+                    if payload.consent {
+                        if let NostrSignState::WaitingForConsent {
+                            session_id,
+                            consents,
+                            ..
+                        } = &mut self.nostr_sign_state
+                        {
+                            if *session_id == payload.proposal_session {
+                                consents.insert(
+                                    message.from,
+                                    payload.reviewed_sighash_fingerprint.clone(),
+                                );
+                            }
+                        }
+                    }
+                }
+                _ => {}
             }
         }
 
@@ -889,7 +935,7 @@ fn mainnet_nostr_enabled() -> bool {
 #[cfg(test)]
 mod tests {
     use super::App;
-    use crate::tui::state::NetworkSelection;
+    use crate::tui::state::{NetworkSelection, NostrSignState};
 
     #[test]
     fn tui_nostr_room_uses_runtime_and_replay_cache() {
@@ -998,5 +1044,95 @@ mod tests {
             .join_nostr_room_runtime_with_relays(vec!["wss://relay.example.invalid".to_string()])
             .unwrap_err();
         assert!(err.to_string().contains("mainnet relay rooms require"));
+    }
+
+    #[test]
+    fn tui_nostr_poll_ingests_proposals_and_consents() {
+        let mut app = App::new().unwrap();
+        app.nostr_room_id = format!("tui-ingest-runtime-test-{}", std::process::id());
+        app.nostr_my_index = 1;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 2;
+        let cache_path = app.nostr_replay_cache_path();
+        let _ = std::fs::remove_file(&cache_path);
+
+        app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
+
+        let proposal_event = frostdao::nostr::TxProposalEvent {
+            proposer_index: 2,
+            to_address: "tb1qrecipient".to_string(),
+            amount_sats: 25_000,
+            fee_rate: 8,
+            sighash: "remote-sighash".to_string(),
+            review: frostdao::nostr::TxReviewPayload {
+                network: "testnet".to_string(),
+                source_path: "m/86'/1'/0'/0/1".to_string(),
+                from_address: "tb1qremote".to_string(),
+                to_address: "tb1qrecipient".to_string(),
+                amount_sats: 25_000,
+                fee_rate_sats_vb: 8,
+                sighash_fingerprint: "remote123".to_string(),
+            },
+            description: "remote proposal".to_string(),
+            timestamp: 1_700_000_010,
+        };
+        let proposal_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxProposal,
+            2,
+            &proposal_event,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-remote")
+        .with_tss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(proposal_message)
+            .unwrap();
+
+        app.poll_nostr_room_runtime().unwrap();
+        let pending = app.nostr_pending_proposals.get("session-remote").unwrap();
+        assert_eq!(pending.proposer_index, 2);
+        assert_eq!(pending.amount_sats, 25_000);
+        assert_eq!(pending.review.sighash_fingerprint, "remote123");
+
+        app.nostr_sign_state = NostrSignState::WaitingForConsent {
+            wallet_name: "wallet-test".to_string(),
+            session_id: "session-remote".to_string(),
+            proposal: pending.clone(),
+            consents: std::collections::HashMap::new(),
+        };
+        let consent_event = frostdao::nostr::TxConsentEvent {
+            proposal_session: "session-remote".to_string(),
+            consent: true,
+            reviewed_sighash_fingerprint: "remote123".to_string(),
+            reason: None,
+        };
+        let consent_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxConsent,
+            2,
+            &consent_event,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-remote")
+        .with_tss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(consent_message)
+            .unwrap();
+
+        app.poll_nostr_room_runtime().unwrap();
+        if let NostrSignState::WaitingForConsent { consents, .. } = &app.nostr_sign_state {
+            assert_eq!(consents.get(&2).unwrap(), "remote123");
+        } else {
+            panic!("expected WaitingForConsent");
+        }
+
+        let _ = std::fs::remove_file(&cache_path);
     }
 }

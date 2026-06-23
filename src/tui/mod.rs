@@ -2627,11 +2627,22 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                     }
                 }
                 NostrSignState::ViewProposals { wallet_name } => {
-                    // TODO: Select from list of proposals
-                    // For now, create a placeholder proposal
-                    let proposal = crate::tui::state::TxProposal::default();
+                    let wallet_name = wallet_name.clone();
+                    if let Err(e) = app.poll_nostr_room_runtime() {
+                        app.message = Some(format!("Nostr poll error: {}", e));
+                        return;
+                    }
+                    let Some(proposal) = app
+                        .nostr_pending_proposals
+                        .values()
+                        .find(|proposal| proposal.proposer_index != app.nostr_my_index)
+                        .cloned()
+                    else {
+                        app.set_message("No pending proposals received");
+                        return;
+                    };
                     app.nostr_sign_state = NostrSignState::ReviewProposal {
-                        wallet_name: wallet_name.clone(),
+                        wallet_name,
                         proposal,
                     };
                 }
