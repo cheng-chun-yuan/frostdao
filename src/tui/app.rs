@@ -133,6 +133,10 @@ pub struct App {
     pub nostr_participants: HashMap<u32, String>,
     /// Pending transaction proposals received through the room runtime
     pub nostr_pending_proposals: HashMap<String, TxProposal>,
+    /// Encrypted signing nonces received through the room runtime, keyed by session and party
+    pub nostr_received_nonces: HashMap<String, HashMap<u32, String>>,
+    /// Encrypted signing shares received through the room runtime, keyed by session and party
+    pub nostr_received_shares: HashMap<String, HashMap<u32, String>>,
     /// Hardened room runtime for TUI relay flows
     pub nostr_runtime: Option<TuiNostrRuntime>,
 
@@ -185,6 +189,8 @@ impl App {
             nostr_room_phase: NostrRoomPhase::Configure,
             nostr_participants: HashMap::new(),
             nostr_pending_proposals: HashMap::new(),
+            nostr_received_nonces: HashMap::new(),
+            nostr_received_shares: HashMap::new(),
             nostr_runtime: None,
             nostr_keygen_state: NostrKeygenState::ModeSelect,
             nostr_sign_state: NostrSignState::SelectWallet,
@@ -585,6 +591,38 @@ impl App {
                         }
                     }
                 }
+                frostdao::nostr::NostrMessageKind::SigningNonceEncrypted => {
+                    let payload: frostdao::nostr::SigningNonceEvent = message.payload_as()?;
+                    let session_id = message
+                        .session
+                        .clone()
+                        .unwrap_or_else(|| "unknown".to_string());
+                    self.nostr_received_nonces
+                        .entry(session_id)
+                        .or_default()
+                        .insert(payload.party_index, payload.ciphertext);
+                }
+                frostdao::nostr::NostrMessageKind::SigningShareEncrypted => {
+                    let payload: frostdao::nostr::SigningShareEvent = message.payload_as()?;
+                    let session_id = message
+                        .session
+                        .clone()
+                        .unwrap_or_else(|| "unknown".to_string());
+                    self.nostr_received_shares
+                        .entry(session_id.clone())
+                        .or_default()
+                        .insert(payload.party_index, payload.ciphertext.clone());
+                    if let NostrSignState::CollectingShares {
+                        session_id: active_session,
+                        received_shares,
+                        ..
+                    } = &mut self.nostr_sign_state
+                    {
+                        if *active_session == session_id {
+                            received_shares.insert(payload.party_index, payload.ciphertext);
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -687,6 +725,82 @@ impl App {
                 "sighash_fingerprint",
                 proposal.review.sighash_fingerprint.clone(),
             ),
+        );
+        Ok(())
+    }
+
+    /// Publish an encrypted signing nonce to another party through the active runtime.
+    #[allow(dead_code)]
+    pub fn publish_nostr_signing_nonce(
+        &mut self,
+        wallet_name: &str,
+        session_id: &str,
+        to_index: u32,
+        ciphertext: String,
+    ) -> Result<()> {
+        let Some(runtime) = self.nostr_runtime.as_mut() else {
+            anyhow::bail!("join a Nostr room before publishing signing nonce");
+        };
+
+        let payload =
+            frostdao::nostr::SigningNonceEvent::new(self.nostr_my_index, to_index, ciphertext);
+        let message = frostdao::nostr::NostrProtocolMessage::new(
+            self.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::SigningNonceEncrypted,
+            self.nostr_my_index,
+            &payload,
+        )?
+        .with_wallet(wallet_name)
+        .with_session(session_id)
+        .with_tss()
+        .to_party(to_index)?;
+
+        runtime.publish(message)?;
+        self.append_nostr_audit_event(
+            frostdao::audit::AuditEvent::new("nostr_signing_nonce", wallet_name, "published")
+                .with_field("room", self.nostr_room_id.clone())
+                .with_field("transport", self.nostr_transport_label())
+                .with_field("session_id", session_id)
+                .with_field("party_index", self.nostr_my_index)
+                .with_field("to_index", to_index),
+        );
+        Ok(())
+    }
+
+    /// Publish an encrypted signing share to another party through the active runtime.
+    #[allow(dead_code)]
+    pub fn publish_nostr_signing_share(
+        &mut self,
+        wallet_name: &str,
+        session_id: &str,
+        to_index: u32,
+        ciphertext: String,
+    ) -> Result<()> {
+        let Some(runtime) = self.nostr_runtime.as_mut() else {
+            anyhow::bail!("join a Nostr room before publishing signing share");
+        };
+
+        let payload =
+            frostdao::nostr::SigningShareEvent::new(self.nostr_my_index, to_index, ciphertext);
+        let message = frostdao::nostr::NostrProtocolMessage::new(
+            self.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::SigningShareEncrypted,
+            self.nostr_my_index,
+            &payload,
+        )?
+        .with_wallet(wallet_name)
+        .with_session(session_id)
+        .with_tss()
+        .to_party(to_index)?;
+
+        runtime.publish(message)?;
+        self.append_nostr_audit_event(
+            frostdao::audit::AuditEvent::new("nostr_signing_share", wallet_name, "published")
+                .with_field("room", self.nostr_room_id.clone())
+                .with_field("transport", self.nostr_transport_label())
+                .with_field("session_id", session_id)
+                .with_field("party_index", self.nostr_my_index)
+                .with_field("to_index", to_index),
         );
         Ok(())
     }
@@ -1028,6 +1142,35 @@ mod tests {
             Some(3)
         );
 
+        app.publish_nostr_signing_nonce(
+            "wallet-test",
+            "session-test",
+            2,
+            "encrypted-nonce".to_string(),
+        )
+        .unwrap();
+        assert_eq!(app.audit_events[2].event, "nostr_signing_nonce");
+        assert_eq!(app.audit_events[2].fields["to_index"], 2);
+        assert!(app.audit_events[2].fields.get("ciphertext").is_none());
+
+        app.publish_nostr_signing_share(
+            "wallet-test",
+            "session-test",
+            2,
+            "encrypted-share".to_string(),
+        )
+        .unwrap();
+        assert_eq!(app.audit_events[3].event, "nostr_signing_share");
+        assert_eq!(app.audit_events[3].fields["to_index"], 2);
+        assert!(app.audit_events[3].fields.get("ciphertext").is_none());
+        assert_eq!(
+            app.nostr_runtime
+                .as_ref()
+                .unwrap()
+                .demo_room_len(&app.nostr_room_id),
+            Some(5)
+        );
+
         let _ = std::fs::remove_file(&cache_path);
     }
 
@@ -1131,6 +1274,77 @@ mod tests {
             assert_eq!(consents.get(&2).unwrap(), "remote123");
         } else {
             panic!("expected WaitingForConsent");
+        }
+
+        let nonce_event =
+            frostdao::nostr::SigningNonceEvent::new(2, 1, "encrypted-nonce".to_string());
+        let nonce_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::SigningNonceEncrypted,
+            2,
+            &nonce_event,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-remote")
+        .with_tss()
+        .to_party(1)
+        .unwrap();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(nonce_message)
+            .unwrap();
+        app.poll_nostr_room_runtime().unwrap();
+        assert_eq!(
+            app.nostr_received_nonces
+                .get("session-remote")
+                .unwrap()
+                .get(&2)
+                .unwrap(),
+            "encrypted-nonce"
+        );
+
+        app.nostr_sign_state = NostrSignState::CollectingShares {
+            wallet_name: "wallet-test".to_string(),
+            session_id: "session-remote".to_string(),
+            received_shares: std::collections::HashMap::new(),
+        };
+        let share_event =
+            frostdao::nostr::SigningShareEvent::new(2, 1, "encrypted-share".to_string());
+        let share_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::SigningShareEncrypted,
+            2,
+            &share_event,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-remote")
+        .with_tss()
+        .to_party(1)
+        .unwrap();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(share_message)
+            .unwrap();
+        app.poll_nostr_room_runtime().unwrap();
+        assert_eq!(
+            app.nostr_received_shares
+                .get("session-remote")
+                .unwrap()
+                .get(&2)
+                .unwrap(),
+            "encrypted-share"
+        );
+        if let NostrSignState::CollectingShares {
+            received_shares, ..
+        } = &app.nostr_sign_state
+        {
+            assert_eq!(received_shares.get(&2).unwrap(), "encrypted-share");
+        } else {
+            panic!("expected CollectingShares");
         }
 
         let _ = std::fs::remove_file(&cache_path);

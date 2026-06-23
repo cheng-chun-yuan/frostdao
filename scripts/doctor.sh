@@ -374,15 +374,18 @@ def check_audit_logging():
         ("src/protocol/dkg_tx.rs", protocol, "AuditEvent::new(\"frost_auto_sign\""),
         ("src/tui/app.rs", app, "AuditEvent::new(\"nostr_tx_proposal\""),
         ("src/tui/app.rs", app, "nostr_tx_consent"),
+        ("src/tui/app.rs", app, "nostr_signing_nonce"),
+        ("src/tui/app.rs", app, "nostr_signing_share"),
         ("src/tui/app.rs", app, "append_nostr_audit_event"),
         ("src/tui/app.rs", app, "fields.get(\"sighash\").is_none()"),
+        ("src/tui/app.rs", app, "fields.get(\"ciphertext\").is_none()"),
         ("docs/RUN_GUIDE.md", run_guide, "TUI Nostr proposal/consent flows append metadata-only audit events"),
         ("docs/SECURITY_MODEL.md", security, "Audit events must not include mnemonics"),
         ("docs/SECURITY_MODEL.md", security, "FROSTDAO_AUDIT_LOG"),
     ]
     missing = [f"{path}: {marker}" for path, content, marker in required if marker not in content]
 
-    forbidden = ["secret_share", "signature_share", "raw_tx", "mnemonic", "nonce"]
+    forbidden = ["secret_share", "signature_share", "raw_tx", "mnemonic", "nonce", "ciphertext"]
     audit_body = audit.replace("audit_event_appends_jsonl_without_secret_fields", "")
     leaked = [
         term
@@ -414,7 +417,11 @@ def check_nostr_transaction_review():
         ("src/nostr/events.rs", events, "tx_consent_carries_reviewed_fingerprint"),
         ("src/tui/app.rs", app, "publish_nostr_tx_proposal"),
         ("src/tui/app.rs", app, "publish_nostr_tx_consent"),
+        ("src/tui/app.rs", app, "publish_nostr_signing_nonce"),
+        ("src/tui/app.rs", app, "publish_nostr_signing_share"),
         ("src/tui/app.rs", app, "nostr_pending_proposals"),
+        ("src/tui/app.rs", app, "nostr_received_nonces"),
+        ("src/tui/app.rs", app, "nostr_received_shares"),
         ("src/tui/app.rs", app, "tui_nostr_signing_publishes_runtime_messages"),
         ("src/tui/app.rs", app, "tui_nostr_poll_ingests_proposals_and_consents"),
         ("src/tui/mod.rs", tui, "press y to consent"),
@@ -424,6 +431,7 @@ def check_nostr_transaction_review():
         ("src/tui/screens/nostr_sign.rs", screen, "nostr_pending_proposals"),
         ("docs/RUN_GUIDE.md", run_guide, "publish versioned `tx_proposal` and `tx_consent` messages"),
         ("docs/RUN_GUIDE.md", run_guide, "Runtime polling also ingests incoming `tx_proposal` messages"),
+        ("docs/RUN_GUIDE.md", run_guide, "Encrypted `signing_nonce_encrypted` and `signing_share_encrypted` messages"),
         ("docs/NOSTR_PROTOCOL.md", docs, "`tx_proposal` must include a `review` object"),
         ("docs/TUI_KEYMAP.md", keymap, "Consent after reviewing proposal fingerprint"),
     ]

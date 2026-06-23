@@ -2538,6 +2538,17 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
             }
         }
         KeyCode::Enter => {
+            if matches!(
+                app.nostr_sign_state,
+                NostrSignState::WaitingForConsent { .. }
+                    | NostrSignState::ViewProposals { .. }
+                    | NostrSignState::CollectingShares { .. }
+            ) {
+                if let Err(e) = app.poll_nostr_room_runtime() {
+                    app.message = Some(format!("Nostr poll error: {}", e));
+                    return;
+                }
+            }
             match &app.nostr_sign_state {
                 NostrSignState::SelectWallet => {
                     // Select wallet and go to role selection
@@ -2628,10 +2639,6 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                 }
                 NostrSignState::ViewProposals { wallet_name } => {
                     let wallet_name = wallet_name.clone();
-                    if let Err(e) = app.poll_nostr_room_runtime() {
-                        app.message = Some(format!("Nostr poll error: {}", e));
-                        return;
-                    }
                     let Some(proposal) = app
                         .nostr_pending_proposals
                         .values()
