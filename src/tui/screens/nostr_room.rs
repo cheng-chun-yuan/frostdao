@@ -108,13 +108,19 @@ fn render_configure(frame: &mut Frame, app: &App, area: Rect) {
         Style::default().fg(Color::Yellow)
     };
     let status_text = if app.nostr_connected {
-        "● Connected"
+        "● Runtime guard active"
     } else {
         "○ Not connected"
     };
     let status = Paragraph::new(Line::from(vec![
         Span::styled("Status: ", Style::default().fg(Color::Gray)),
         Span::styled(status_text, status_style),
+        Span::raw("  "),
+        Span::styled("Cache: ", Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            app.nostr_replay_cache_path().display().to_string(),
+            Style::default().fg(Color::DarkGray),
+        ),
     ]));
     frame.render_widget(status, chunks[6]);
 

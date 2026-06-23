@@ -267,7 +267,9 @@ def check_agent_payment_semantics():
 
 def check_replay_cache_persistence():
     source = read(Path("src/nostr/transport.rs"))
+    app = read(Path("src/tui/app.rs"))
     docs = read(Path("docs/NOSTR_PROTOCOL.md"))
+    run_guide = read(Path("docs/RUN_GUIDE.md"))
     required = [
         "pub struct FileReplayCache",
         "pub struct NostrRoomRuntime",
@@ -276,9 +278,18 @@ def check_replay_cache_persistence():
         "room_runtime_enforces_room_sender_and_persists_replay_cache",
     ]
     missing = [item for item in required if item not in source]
+    app_required = [
+        "pub nostr_runtime",
+        "join_nostr_room_runtime",
+        "nostr_replay_cache_path",
+        "tui_nostr_room_uses_runtime_and_replay_cache",
+    ]
+    missing.extend([f"src/tui/app.rs: {item}" for item in app_required if item not in app])
     for marker in ["NostrRoomRuntime", "FileReplayCache"]:
         if marker not in docs:
             missing.append(f"NOSTR_PROTOCOL {marker} documentation")
+    if "TUI room screen creates a `NostrRoomRuntime`" not in run_guide:
+        missing.append("RUN_GUIDE TUI NostrRoomRuntime documentation")
 
     if missing:
         doctor.fail(f"persisted replay cache markers missing: {', '.join(missing)}")

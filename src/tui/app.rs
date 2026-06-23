@@ -4,6 +4,7 @@ use anyhow::Result;
 use bitcoin::{Address, XOnlyPublicKey};
 use ratatui::widgets::ListState;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 #[cfg(feature = "miniscript-policy")]
 use crate::tui::screens::PolicyPreviewFormData;
@@ -11,6 +12,7 @@ use crate::tui::screens::{KeygenFormData, ReshareFormData, SendFormData};
 use crate::tui::state::{
     AppState, NetworkSelection, NostrKeygenState, NostrRoomField, NostrRoomPhase, NostrSignState,
 };
+use frostdao::nostr::RoomMessageTransport;
 use frostdao::protocol::keygen::{list_wallets, WalletSummary};
 use frostdao::storage::{FileStorage, Storage};
 
@@ -77,6 +79,9 @@ pub struct App {
     pub nostr_room_phase: NostrRoomPhase,
     /// Participants who have joined (party_index -> pubkey/name)
     pub nostr_participants: HashMap<u32, String>,
+    /// Hardened room runtime for TUI relay flows
+    pub nostr_runtime:
+        Option<frostdao::nostr::NostrRoomRuntime<frostdao::nostr::InMemoryRoomTransport>>,
 
     // Nostr DKG/signing state
     /// Current keygen state
@@ -123,6 +128,7 @@ impl App {
             nostr_room_focus: NostrRoomField::RoomId,
             nostr_room_phase: NostrRoomPhase::Configure,
             nostr_participants: HashMap::new(),
+            nostr_runtime: None,
             nostr_keygen_state: NostrKeygenState::ModeSelect,
             nostr_sign_state: NostrSignState::SelectWallet,
             nostr_to_address: String::new(),
@@ -360,6 +366,114 @@ impl App {
         }
     }
 
+    /// Join the configured Nostr room using the hardened runtime wrapper.
+    pub fn join_nostr_room_runtime(&mut self) -> Result<()> {
+        let transport = frostdao::nostr::InMemoryRoomTransport::new();
+        let cache_path = self.nostr_replay_cache_path();
+        let mut runtime = frostdao::nostr::NostrRoomRuntime::load(
+            self.nostr_room_id.clone(),
+            self.nostr_my_index,
+            transport,
+            cache_path,
+        )?;
+
+        let payload = frostdao::nostr::RoomJoinPayload {
+            party_index: self.nostr_my_index,
+            nostr_pubkey: format!("tui-party-{}", self.nostr_my_index),
+            threshold: self.nostr_threshold,
+            n_parties: self.nostr_n_parties,
+            scheme: frostdao::nostr::ThresholdScheme::Tss,
+            rank: None,
+        };
+        let message = frostdao::nostr::NostrProtocolMessage::new(
+            self.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::RoomJoin,
+            self.nostr_my_index,
+            &payload,
+        )?
+        .with_tss();
+
+        runtime.publish(message)?;
+        self.nostr_runtime = Some(runtime);
+        self.nostr_connected = true;
+        self.nostr_participants.clear();
+        self.poll_nostr_room_runtime()?;
+        Ok(())
+    }
+
+    /// Leave the current TUI Nostr room.
+    pub fn leave_nostr_room_runtime(&mut self) {
+        self.nostr_runtime = None;
+        self.nostr_connected = false;
+        self.nostr_participants.clear();
+    }
+
+    /// Replay-cache path for the current room and party.
+    pub fn nostr_replay_cache_path(&self) -> PathBuf {
+        let safe_room: String = self
+            .nostr_room_id
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || matches!(c, '-' | '_') {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect();
+
+        PathBuf::from(".frost_state")
+            .join("nostr_replay")
+            .join(format!("{}-party-{}.json", safe_room, self.nostr_my_index))
+    }
+
+    /// Receive validated room messages through the replay cache.
+    pub fn poll_nostr_room_runtime(&mut self) -> Result<usize> {
+        let now = unix_timestamp_secs();
+        let messages = match self.nostr_runtime.as_mut() {
+            Some(runtime) => runtime.receive(now)?,
+            None => return Ok(0),
+        };
+        let count = messages.len();
+
+        for message in messages {
+            if message.kind == frostdao::nostr::NostrMessageKind::RoomJoin {
+                let payload: frostdao::nostr::RoomJoinPayload = message.payload_as()?;
+                self.nostr_participants
+                    .insert(payload.party_index, payload.nostr_pubkey);
+            }
+        }
+
+        Ok(count)
+    }
+
+    /// Publish a demo participant join into the active room transport.
+    pub fn simulate_nostr_participant_join(&mut self, party_index: u32) -> Result<()> {
+        let Some(runtime) = self.nostr_runtime.as_mut() else {
+            anyhow::bail!("join a room before simulating participants");
+        };
+
+        let payload = frostdao::nostr::RoomJoinPayload {
+            party_index,
+            nostr_pubkey: format!("npub-demo-{}", party_index),
+            threshold: self.nostr_threshold,
+            n_parties: self.nostr_n_parties,
+            scheme: frostdao::nostr::ThresholdScheme::Tss,
+            rank: None,
+        };
+        let message = frostdao::nostr::NostrProtocolMessage::new(
+            self.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::RoomJoin,
+            party_index,
+            &payload,
+        )?
+        .with_tss();
+
+        runtime.transport_mut().publish(message)?;
+        self.poll_nostr_room_runtime()?;
+        Ok(())
+    }
+
     /// Toggle to next network in chain selector
     pub fn next_network(&mut self) {
         self.chain_selector_index = (self.chain_selector_index + 1) % 3;
@@ -534,5 +648,44 @@ impl App {
                 }
             }
         }
+    }
+}
+
+fn unix_timestamp_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::App;
+
+    #[test]
+    fn tui_nostr_room_uses_runtime_and_replay_cache() {
+        let mut app = App::new().unwrap();
+        app.nostr_room_id = format!("tui-runtime-test-{}", std::process::id());
+        app.nostr_my_index = 1;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 2;
+        let cache_path = app.nostr_replay_cache_path();
+        let _ = std::fs::remove_file(&cache_path);
+
+        app.join_nostr_room_runtime().unwrap();
+        assert!(app.nostr_connected);
+        assert!(app.nostr_runtime.is_some());
+        assert_eq!(app.nostr_participants.get(&1).unwrap(), "tui-party-1");
+        assert!(cache_path.exists());
+
+        app.simulate_nostr_participant_join(2).unwrap();
+        assert_eq!(app.nostr_participants.get(&2).unwrap(), "npub-demo-2");
+
+        app.leave_nostr_room_runtime();
+        assert!(!app.nostr_connected);
+        assert!(app.nostr_runtime.is_none());
+        assert!(app.nostr_participants.is_empty());
+
+        let _ = std::fs::remove_file(&cache_path);
     }
 }

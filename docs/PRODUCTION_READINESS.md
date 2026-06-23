@@ -46,9 +46,9 @@ The doctor check verifies documentation links, stale command/keymap strings, CLI
 
 ## Required Before Mainnet
 
-- Wire the hardened Nostr envelope into the full interactive TUI room runtime.
+- Wire the guarded TUI room runtime into live relay keygen, signing, reshare, and recovery ceremonies.
 - Add relay integration tests against at least one local relay and one public relay.
-- Wire `NostrRoomRuntime` into every live TUI relay ceremony path.
+- Replace deterministic in-memory TUI room transport with public relay transport for non-demo rooms.
 - Wire review-enforced Nostr proposal/consent payloads into every live relay broadcast path.
 - Extend structured audit logs that exclude secret material to every live relay ceremony path.
 - Complete an external cryptography/security review for FROST, HTSS, NIP-44 use, reshare, and recovery.

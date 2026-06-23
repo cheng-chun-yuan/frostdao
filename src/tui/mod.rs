@@ -2305,17 +2305,19 @@ fn handle_nostr_room_configure(app: &mut App, key: KeyEvent) {
                 return;
             }
 
-            // Connect and join room
-            app.nostr_connected = true;
-            app.nostr_participants.clear();
-            // Add self as participant
-            app.nostr_participants
-                .insert(app.nostr_my_index, format!("self-{}", app.nostr_my_index));
-            app.nostr_room_phase = NostrRoomPhase::WaitingForParticipants;
-            app.set_message(&format!(
-                "Joined room '{}' as Party {}",
-                app.nostr_room_id, app.nostr_my_index
-            ));
+            match app.join_nostr_room_runtime() {
+                Ok(()) => {
+                    app.nostr_room_phase = NostrRoomPhase::WaitingForParticipants;
+                    app.message = Some(format!(
+                        "Joined room '{}' as Party {} with replay guard",
+                        app.nostr_room_id, app.nostr_my_index
+                    ));
+                }
+                Err(e) => {
+                    app.message = Some(format!("Nostr room error: {}", e));
+                    return;
+                }
+            }
 
             // Check if already have all participants (demo: simulate others joining)
             check_participants_ready(app);
@@ -2393,8 +2395,7 @@ fn handle_nostr_room_waiting(app: &mut App, key: KeyEvent) {
         KeyCode::Esc => {
             // Leave room, go back to configure
             app.nostr_room_phase = NostrRoomPhase::Configure;
-            app.nostr_participants.clear();
-            app.nostr_connected = false;
+            app.leave_nostr_room_runtime();
             app.set_message("Left room");
         }
         KeyCode::Char(' ') => {
@@ -2410,8 +2411,7 @@ fn handle_nostr_room_ready(app: &mut App, key: KeyEvent) {
         KeyCode::Esc => {
             // Leave room
             app.nostr_room_phase = NostrRoomPhase::Configure;
-            app.nostr_participants.clear();
-            app.nostr_connected = false;
+            app.leave_nostr_room_runtime();
             app.set_message("Left room");
         }
         KeyCode::Char('k') | KeyCode::Char('K') => {
@@ -2440,10 +2440,16 @@ fn check_participants_ready(app: &mut App) {
 fn simulate_participant_join(app: &mut App) {
     // Find next missing participant
     for i in 1..=app.nostr_n_parties {
-        if let std::collections::hash_map::Entry::Vacant(entry) = app.nostr_participants.entry(i) {
-            entry.insert(format!("npub-demo-{}", i));
-            app.set_message(&format!("Party {} joined!", i));
-            check_participants_ready(app);
+        if !app.nostr_participants.contains_key(&i) {
+            match app.simulate_nostr_participant_join(i) {
+                Ok(()) => {
+                    app.message = Some(format!("Party {} joined through runtime", i));
+                    check_participants_ready(app);
+                }
+                Err(e) => {
+                    app.message = Some(format!("Nostr runtime error: {}", e));
+                }
+            }
             return;
         }
     }

@@ -262,6 +262,8 @@ The current Nostr protocol foundation is documented in [Nostr Protocol](NOSTR_PR
 - recovery messages
 - message replay, recipient, room, timestamp, and expiry checks
 
+The TUI room screen creates a `NostrRoomRuntime` when joining a room. The current TUI runtime uses deterministic in-memory transport for local testnet/demo flows, while still validating versioned envelopes and persisting replay-cache IDs under `.frost_state/nostr_replay/`.
+
 Sensitive payloads must be NIP-44 encrypted before relay publishing. The relay should only see public status messages and ciphertext.
 
 ## 12. Useful Commands
@@ -276,4 +278,4 @@ frostdao <command> --help
 
 ## Current Production Note
 
-The CLI flows, protocol types, deterministic in-memory Nostr transport, and quality gate are implemented and tested. Before mainnet production use, finish the live TUI relay runtime and relay integration testing listed in [Production Readiness](PRODUCTION_READINESS.md).
+The CLI flows, protocol types, guarded TUI Nostr room runtime, deterministic in-memory Nostr transport, and quality gate are implemented and tested. Before mainnet production use, finish public relay TUI wiring and relay integration testing listed in [Production Readiness](PRODUCTION_READINESS.md).
