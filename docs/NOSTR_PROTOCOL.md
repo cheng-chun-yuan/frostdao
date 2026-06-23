@@ -85,7 +85,7 @@ Receivers should reject messages when:
 - `message_id` was already accepted in the local replay cache.
 - `from` or `to` is party index 0.
 
-For long-running ceremonies, use `NostrRoomRuntime` with `FileReplayCache` to persist accepted `message_id` values between process restarts. The file contains only message IDs, not payloads or secret material. TUI room joins and leaves clear volatile participants, proposals, nonce/share inboxes, broadcast announcements, and active ceremony states; the replay cache remains separate.
+For long-running ceremonies, use `NostrRoomRuntime` with `FileReplayCache` to persist accepted `message_id` values between process restarts. The file contains only message IDs, not payloads or secret material. TUI room joins and leaves clear volatile participants, proposals, nonce/share inboxes, broadcast announcements, and active ceremony states; the replay cache remains separate. Release-candidate relay smoke tests must cover both public room messages and direct per-recipient encrypted signing envelopes.
 
 The default envelope TTL is 1 hour. Long-running ceremonies should create fresh messages instead of extending stale ones.
 

@@ -72,6 +72,7 @@ frostdao tui
 | [Protocols](docs/PROTOCOLS.md) | Current TSS, HTSS, DKG, signing, derivation, reshare, and recovery overview |
 | [Nostr Protocol](docs/NOSTR_PROTOCOL.md) | Relay message protocol for DKG, signing, and resharing |
 | [Miniscript](docs/MINISCRIPT.md) | Optional Taproot policy and agent payment draft support |
+| [ROAST And Hardware](docs/ROAST_HARDWARE.md) | Robust coordinator and hardware/PSBT integration direction |
 | [Security Model](docs/SECURITY_MODEL.md) | Security invariants, threat model, and mainnet cautions |
 | [Production Readiness](docs/PRODUCTION_READINESS.md) | Release gates, runbooks, and mainnet criteria |
 | [User Flow](docs/USER_FLOW.md) | Multi-device UX flow for TSS, HTSS, signing, reshare, and recovery |

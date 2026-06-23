@@ -5,7 +5,7 @@
 
 use frostdao::nostr::{
     NostrMessageKind, NostrProtocolMessage, NostrRoomRuntime, RelayRoomTransport, RoomJoinPayload,
-    ThresholdScheme,
+    SigningNonceEvent, ThresholdScheme,
 };
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -44,8 +44,8 @@ fn relay_room_transport_round_trips_public_room_join() {
     party_1.publish(message).unwrap();
 
     let timeout = smoke_timeout();
-    let deadline = Instant::now() + timeout;
     let mut accepted = false;
+    let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
         let messages = party_2.receive(unix_timestamp_secs()).unwrap();
         accepted = messages.iter().any(|message| {
@@ -57,6 +57,41 @@ fn relay_room_transport_round_trips_public_room_join() {
         std::thread::sleep(Duration::from_millis(500));
     }
 
+    let nonce = SigningNonceEvent::new(1, 2, "relay-smoke-ciphertext".to_string());
+    let direct_message = NostrProtocolMessage::new(
+        room.clone(),
+        NostrMessageKind::SigningNonceEncrypted,
+        1,
+        &nonce,
+    )
+    .unwrap()
+    .with_tss()
+    .with_session("relay-smoke-session")
+    .to_party(2)
+    .unwrap();
+    party_1.publish(direct_message).unwrap();
+
+    let mut direct_accepted = false;
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        let messages = party_2.receive(unix_timestamp_secs()).unwrap();
+        direct_accepted = messages.iter().any(|message| {
+            message.kind == NostrMessageKind::SigningNonceEncrypted
+                && message.from == 1
+                && message.to == Some(2)
+                && message.session.as_deref() == Some("relay-smoke-session")
+        });
+        if direct_accepted {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+
+    let party_1_messages = party_1.receive(unix_timestamp_secs()).unwrap();
+    let party_1_accepted_own_direct = party_1_messages
+        .iter()
+        .any(|message| message.kind == NostrMessageKind::SigningNonceEncrypted);
+
     party_1.transport().disconnect();
     party_2.transport().disconnect();
     let _ = std::fs::remove_dir_all(&dir);
@@ -65,6 +100,15 @@ fn relay_room_transport_round_trips_public_room_join() {
         accepted,
         "party 2 did not receive party 1 room_join within {:?} through {:?}",
         timeout, relay_urls
+    );
+    assert!(
+        direct_accepted,
+        "party 2 did not receive party 1 direct signing_nonce_encrypted within {:?} through {:?}",
+        timeout, relay_urls
+    );
+    assert!(
+        !party_1_accepted_own_direct,
+        "party 1 accepted a direct message addressed to party 2"
     );
 }
 
