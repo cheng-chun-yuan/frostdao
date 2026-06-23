@@ -106,12 +106,16 @@ struct StoredBitcoinKey {
 // Helper Functions
 // ============================================================================
 
-fn get_api_base(network: Network) -> &'static str {
+fn get_api_base(network: Network) -> Result<&'static str> {
     match network {
-        Network::Bitcoin => MEMPOOL_MAINNET_API,
-        Network::Testnet => MEMPOOL_TESTNET_API,
-        Network::Signet => MEMPOOL_SIGNET_API,
-        _ => MEMPOOL_TESTNET_API,
+        Network::Bitcoin => Ok(MEMPOOL_MAINNET_API),
+        Network::Testnet => Ok(MEMPOOL_TESTNET_API),
+        Network::Signet => Ok(MEMPOOL_SIGNET_API),
+        Network::Regtest => anyhow::bail!("regtest does not have a mempool.space API endpoint"),
+        other => anyhow::bail!(
+            "unsupported Bitcoin network '{}' for mempool.space API",
+            network_name(other)
+        ),
     }
 }
 
@@ -220,7 +224,7 @@ fn sign_bip340(
 /// Fetch UTXOs for an address
 pub fn fetch_utxos(address: &str, network: Network) -> Result<Vec<UtxoResponse>> {
     let client = Client::new();
-    let api_base = get_api_base(network);
+    let api_base = get_api_base(network)?;
     let url = format!("{}/address/{}/utxo", api_base, address);
 
     let response = client
@@ -241,7 +245,7 @@ pub fn fetch_utxos(address: &str, network: Network) -> Result<Vec<UtxoResponse>>
 /// Fetch recommended fees
 pub fn fetch_fee_estimates(network: Network) -> Result<FeeEstimate> {
     let client = Client::new();
-    let api_base = get_api_base(network);
+    let api_base = get_api_base(network)?;
     let url = format!("{}/v1/fees/recommended", api_base);
 
     let response = client
@@ -267,7 +271,7 @@ pub fn fetch_fee_estimates(network: Network) -> Result<FeeEstimate> {
 /// Broadcast a transaction
 pub fn broadcast_transaction(raw_tx_hex: &str, network: Network) -> Result<String> {
     let client = Client::new();
-    let api_base = get_api_base(network);
+    let api_base = get_api_base(network)?;
     let url = format!("{}/tx", api_base);
 
     let response = client
@@ -809,5 +813,15 @@ mod tests {
             mempool_explorer_tx_url(Network::Regtest, txid),
             "regtest:txid-test"
         );
+    }
+
+    #[test]
+    fn mempool_api_base_rejects_unsupported_networks() {
+        assert_eq!(get_api_base(Network::Bitcoin).unwrap(), MEMPOOL_MAINNET_API);
+        assert_eq!(get_api_base(Network::Testnet).unwrap(), MEMPOOL_TESTNET_API);
+        assert_eq!(get_api_base(Network::Signet).unwrap(), MEMPOOL_SIGNET_API);
+
+        let err = get_api_base(Network::Regtest).unwrap_err();
+        assert!(err.to_string().contains("regtest does not have"));
     }
 }

@@ -374,6 +374,8 @@ def check_transaction_review():
         ("src/protocol/dkg_tx.rs", protocol, "mempool_explorer_tx_url(network, txid)"),
         ("src/btc/transaction.rs", transaction, "pub(crate) fn mempool_explorer_tx_url"),
         ("src/btc/transaction.rs", transaction, "mempool_explorer_url_matches_network"),
+        ("src/btc/transaction.rs", transaction, "regtest does not have a mempool.space API endpoint"),
+        ("src/btc/transaction.rs", transaction, "mempool_api_base_rejects_unsupported_networks"),
         ("src/tui/state.rs", tui_state, "ReviewTransaction"),
         ("src/tui/mod.rs", tui_keys, "KeyCode::Char('y')"),
         ("src/main.rs", main_rs, "parse_dkg_network"),
