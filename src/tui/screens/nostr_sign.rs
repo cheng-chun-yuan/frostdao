@@ -443,7 +443,13 @@ fn render_proposals_list(frame: &mut Frame, app: &App, area: Rect) {
     let mut proposals = app
         .nostr_pending_proposals
         .values()
-        .filter(|proposal| proposal.proposer_index != app.nostr_my_index)
+        .filter(|proposal| {
+            matches!(
+                &app.nostr_sign_state,
+                NostrSignState::ViewProposals { wallet_name }
+                    if proposal.wallet_name == *wallet_name
+            ) && proposal.proposer_index != app.nostr_my_index
+        })
         .collect::<Vec<_>>();
     proposals.sort_by_key(|proposal| proposal.timestamp);
 

@@ -561,10 +561,14 @@ impl App {
                     let Some(session_id) = nonempty_message_session(&message) else {
                         continue;
                     };
+                    let Some(wallet_name) = nonempty_message_wallet(&message) else {
+                        continue;
+                    };
                     self.nostr_pending_proposals.insert(
                         session_id.clone(),
                         TxProposal {
                             session_id,
+                            wallet_name,
                             proposer_index: payload.proposer_index,
                             to_address: payload.to_address,
                             amount_sats: payload.amount_sats,
@@ -581,17 +585,23 @@ impl App {
                     let Some(session_id) = nonempty_message_session(&message) else {
                         continue;
                     };
+                    let Some(message_wallet) = nonempty_message_wallet(&message) else {
+                        continue;
+                    };
                     if session_id != payload.proposal_session {
                         continue;
                     }
                     if payload.consent {
                         if let NostrSignState::WaitingForConsent {
+                            wallet_name,
                             session_id,
                             consents,
                             ..
                         } = &mut self.nostr_sign_state
                         {
-                            if *session_id == payload.proposal_session {
+                            if *wallet_name == message_wallet
+                                && *session_id == payload.proposal_session
+                            {
                                 consents.insert(
                                     message.from,
                                     payload.reviewed_sighash_fingerprint.clone(),
@@ -1108,6 +1118,15 @@ fn nonempty_message_session(message: &frostdao::nostr::NostrProtocolMessage) -> 
         .map(str::to_string)
 }
 
+fn nonempty_message_wallet(message: &frostdao::nostr::NostrProtocolMessage) -> Option<String> {
+    message
+        .wallet
+        .as_deref()
+        .map(str::trim)
+        .filter(|wallet| !wallet.is_empty())
+        .map(str::to_string)
+}
+
 fn nostr_relay_urls_from_env() -> Vec<String> {
     std::env::var(TUI_NOSTR_RELAYS_ENV)
         .ok()
@@ -1173,6 +1192,7 @@ mod tests {
         app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
         let proposal = crate::tui::state::TxProposal {
             session_id: "session-test".to_string(),
+            wallet_name: "wallet-test".to_string(),
             proposer_index: 1,
             to_address: "tb1qrecipient".to_string(),
             amount_sats: 50_000,
@@ -1293,8 +1313,77 @@ mod tests {
 
         app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
 
+        let proposal_event = frostdao::nostr::TxProposalEvent {
+            proposer_index: 2,
+            to_address: "tb1qrecipient".to_string(),
+            amount_sats: 25_000,
+            fee_rate: 8,
+            sighash: "remote-sighash".to_string(),
+            review: frostdao::nostr::TxReviewPayload {
+                network: "testnet".to_string(),
+                source_path: "m/86'/1'/0'/0/1".to_string(),
+                from_address: "tb1qremote".to_string(),
+                to_address: "tb1qrecipient".to_string(),
+                amount_sats: 25_000,
+                fee_rate_sats_vb: 8,
+                sighash_fingerprint: "remote123".to_string(),
+            },
+            description: "remote proposal".to_string(),
+            timestamp: 1_700_000_010,
+        };
+        let walletless_proposal = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxProposal,
+            2,
+            &proposal_event,
+        )
+        .unwrap()
+        .with_session("session-walletless")
+        .with_tss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(walletless_proposal)
+            .unwrap();
+        let mut other_wallet_proposal_event = proposal_event.clone();
+        other_wallet_proposal_event.timestamp += 1;
+        let other_wallet_proposal = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxProposal,
+            2,
+            &other_wallet_proposal_event,
+        )
+        .unwrap()
+        .with_wallet("wallet-other")
+        .with_session("session-other-wallet")
+        .with_tss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(other_wallet_proposal)
+            .unwrap();
+        app.poll_nostr_room_runtime().unwrap();
+        assert!(!app
+            .nostr_pending_proposals
+            .contains_key("session-walletless"));
+        assert_eq!(
+            app.nostr_pending_proposals
+                .get("session-other-wallet")
+                .unwrap()
+                .wallet_name,
+            "wallet-other"
+        );
+        assert_eq!(
+            app.nostr_pending_proposals
+                .values()
+                .filter(|proposal| proposal.wallet_name == "wallet-test")
+                .count(),
+            0
+        );
+
         let proposal = crate::tui::state::TxProposal {
             session_id: "session-expected".to_string(),
+            wallet_name: "wallet-test".to_string(),
             proposer_index: 2,
             to_address: "tb1qrecipient".to_string(),
             amount_sats: 25_000,
@@ -1354,6 +1443,21 @@ mod tests {
             .as_mut()
             .unwrap()
             .publish_demo_message(mismatched_consent)
+            .unwrap();
+        let wrong_wallet_consent = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxConsent,
+            2,
+            &consent_event,
+        )
+        .unwrap()
+        .with_wallet("wallet-other")
+        .with_session("session-expected")
+        .with_tss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(wrong_wallet_consent)
             .unwrap();
         app.poll_nostr_room_runtime().unwrap();
         if let NostrSignState::WaitingForConsent { consents, .. } = &app.nostr_sign_state {

@@ -523,6 +523,8 @@ pub enum NostrSignState {
 pub struct TxProposal {
     /// Unique session ID
     pub session_id: String,
+    /// Wallet this proposal belongs to
+    pub wallet_name: String,
     /// Proposer's party index
     pub proposer_index: u32,
     /// Recipient address

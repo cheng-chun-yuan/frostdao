@@ -2587,6 +2587,7 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                         .unwrap_or_else(|| "unknown".to_string());
                     let proposal = crate::tui::state::TxProposal {
                         session_id: session_id.clone(),
+                        wallet_name: wallet_name.clone(),
                         proposer_index: app.nostr_my_index,
                         to_address: to_address.clone(),
                         amount_sats,
@@ -2644,7 +2645,10 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                     let Some(proposal) = app
                         .nostr_pending_proposals
                         .values()
-                        .find(|proposal| proposal.proposer_index != app.nostr_my_index)
+                        .find(|proposal| {
+                            proposal.wallet_name == wallet_name
+                                && proposal.proposer_index != app.nostr_my_index
+                        })
                         .cloned()
                     else {
                         app.set_message("No pending proposals received");
