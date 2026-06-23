@@ -17,7 +17,7 @@ Before a release or serious demo:
 
 This runs formatting checks, strict Clippy, tests, a debug build, and rustdoc warnings.
 
-Transaction build, broadcast, and local auto-sign flows append metadata-only audit events to `.frost_state/audit.jsonl`. Set `FROSTDAO_AUDIT_LOG=/path/to/audit.jsonl` to move the log for demos or CI runs.
+Transaction build, broadcast, local auto-sign, and TUI Nostr proposal/consent flows append metadata-only audit events to `.frost_state/audit.jsonl`. Set `FROSTDAO_AUDIT_LOG=/path/to/audit.jsonl` to move the log for demos or CI runs.
 
 ## 2. Open The TUI
 

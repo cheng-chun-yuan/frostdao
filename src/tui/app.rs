@@ -145,6 +145,9 @@ pub struct App {
     pub nostr_to_address: String,
     /// Amount in satoshis
     pub nostr_amount_sats: u64,
+
+    #[cfg(test)]
+    pub audit_events: Vec<frostdao::audit::AuditEvent>,
 }
 
 impl App {
@@ -184,6 +187,8 @@ impl App {
             nostr_sign_state: NostrSignState::SelectWallet,
             nostr_to_address: String::new(),
             nostr_amount_sats: 0,
+            #[cfg(test)]
+            audit_events: Vec::new(),
         })
     }
 
@@ -571,7 +576,25 @@ impl App {
         .with_session(proposal.session_id.clone())
         .with_tss();
 
-        runtime.publish(message)
+        runtime.publish(message)?;
+        self.append_nostr_audit_event(
+            frostdao::audit::AuditEvent::new("nostr_tx_proposal", wallet_name, "published")
+                .with_field("room", self.nostr_room_id.clone())
+                .with_field("transport", self.nostr_transport_label())
+                .with_field("session_id", proposal.session_id.clone())
+                .with_field("party_index", self.nostr_my_index)
+                .with_field("network", proposal.review.network.clone())
+                .with_field("source_path", proposal.review.source_path.clone())
+                .with_field("from_address", proposal.review.from_address.clone())
+                .with_field("to_address", proposal.to_address.clone())
+                .with_field("amount_sats", proposal.amount_sats)
+                .with_field("fee_rate_sats_vb", proposal.fee_rate)
+                .with_field(
+                    "sighash_fingerprint",
+                    proposal.review.sighash_fingerprint.clone(),
+                ),
+        );
+        Ok(())
     }
 
     /// Publish reviewed consent through the active room runtime.
@@ -602,7 +625,24 @@ impl App {
         .with_session(proposal.session_id.clone())
         .with_tss();
 
-        runtime.publish(message)
+        runtime.publish(message)?;
+        self.append_nostr_audit_event(
+            frostdao::audit::AuditEvent::new(
+                "nostr_tx_consent",
+                wallet_name,
+                if consent { "consented" } else { "rejected" },
+            )
+            .with_field("room", self.nostr_room_id.clone())
+            .with_field("transport", self.nostr_transport_label())
+            .with_field("session_id", proposal.session_id.clone())
+            .with_field("party_index", self.nostr_my_index)
+            .with_field("network", proposal.review.network.clone())
+            .with_field(
+                "sighash_fingerprint",
+                proposal.review.sighash_fingerprint.clone(),
+            ),
+        );
+        Ok(())
     }
 
     /// Publish a demo participant join into the active room transport.
@@ -807,6 +847,17 @@ impl App {
             }
         }
     }
+
+    fn append_nostr_audit_event(&mut self, event: frostdao::audit::AuditEvent) {
+        #[cfg(test)]
+        {
+            self.audit_events.push(event);
+        }
+        #[cfg(not(test))]
+        {
+            let _ = frostdao::audit::append(&event);
+        }
+    }
 }
 
 fn unix_timestamp_secs() -> u64 {
@@ -901,6 +952,14 @@ mod tests {
 
         app.publish_nostr_tx_proposal("wallet-test", &proposal)
             .unwrap();
+        assert_eq!(app.audit_events[0].event, "nostr_tx_proposal");
+        assert_eq!(app.audit_events[0].wallet, "wallet-test");
+        assert_eq!(app.audit_events[0].fields["session_id"], "session-test");
+        assert_eq!(
+            app.audit_events[0].fields["sighash_fingerprint"],
+            "abc12345"
+        );
+        assert!(app.audit_events[0].fields.get("sighash").is_none());
         assert_eq!(
             app.nostr_runtime
                 .as_ref()
@@ -911,6 +970,10 @@ mod tests {
 
         app.publish_nostr_tx_consent("wallet-test", &proposal, true, None)
             .unwrap();
+        assert_eq!(app.audit_events[1].event, "nostr_tx_consent");
+        assert_eq!(app.audit_events[1].status, "consented");
+        assert_eq!(app.audit_events[1].fields["session_id"], "session-test");
+        assert!(app.audit_events[1].fields.get("sighash").is_none());
         assert_eq!(
             app.nostr_runtime
                 .as_ref()

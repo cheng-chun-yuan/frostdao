@@ -362,6 +362,8 @@ def check_transaction_review():
 def check_audit_logging():
     audit = read(Path("src/audit.rs"))
     protocol = read(Path("src/protocol/dkg_tx.rs"))
+    app = read(Path("src/tui/app.rs"))
+    run_guide = read(Path("docs/RUN_GUIDE.md"))
     security = read(Path("docs/SECURITY_MODEL.md"))
     required = [
         ("src/audit.rs", audit, "pub struct AuditEvent"),
@@ -370,6 +372,11 @@ def check_audit_logging():
         ("src/protocol/dkg_tx.rs", protocol, "AuditEvent::new(\"dkg_build_tx\""),
         ("src/protocol/dkg_tx.rs", protocol, "AuditEvent::new(\"dkg_broadcast\""),
         ("src/protocol/dkg_tx.rs", protocol, "AuditEvent::new(\"frost_auto_sign\""),
+        ("src/tui/app.rs", app, "AuditEvent::new(\"nostr_tx_proposal\""),
+        ("src/tui/app.rs", app, "nostr_tx_consent"),
+        ("src/tui/app.rs", app, "append_nostr_audit_event"),
+        ("src/tui/app.rs", app, "fields.get(\"sighash\").is_none()"),
+        ("docs/RUN_GUIDE.md", run_guide, "TUI Nostr proposal/consent flows append metadata-only audit events"),
         ("docs/SECURITY_MODEL.md", security, "Audit events must not include mnemonics"),
         ("docs/SECURITY_MODEL.md", security, "FROSTDAO_AUDIT_LOG"),
     ]
@@ -377,7 +384,13 @@ def check_audit_logging():
 
     forbidden = ["secret_share", "signature_share", "raw_tx", "mnemonic", "nonce"]
     audit_body = audit.replace("audit_event_appends_jsonl_without_secret_fields", "")
-    leaked = [term for term in forbidden if f'with_field("{term}"' in protocol or f'pub {term}' in audit_body]
+    leaked = [
+        term
+        for term in forbidden
+        if f'with_field("{term}"' in protocol
+        or f'with_field("{term}"' in app
+        or f'pub {term}' in audit_body
+    ]
 
     if missing:
         doctor.fail(f"audit logging markers missing: {', '.join(missing)}")
