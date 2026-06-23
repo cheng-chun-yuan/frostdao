@@ -20,4 +20,6 @@ pub use events::{
     ThresholdScheme, TxBroadcastEvent, TxConsentEvent, TxProposalEvent, TxReviewPayload,
     DEFAULT_MESSAGE_TTL_SECS, FROSTDAO_APP, FROSTDAO_NOSTR_PROTOCOL_VERSION, MAX_CLOCK_SKEW_SECS,
 };
-pub use transport::{FileReplayCache, InMemoryRoomTransport, RoomMessageTransport};
+pub use transport::{
+    FileReplayCache, InMemoryRoomTransport, NostrRoomRuntime, RoomMessageTransport,
+};

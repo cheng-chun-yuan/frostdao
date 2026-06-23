@@ -270,17 +270,20 @@ def check_replay_cache_persistence():
     docs = read(Path("docs/NOSTR_PROTOCOL.md"))
     required = [
         "pub struct FileReplayCache",
+        "pub struct NostrRoomRuntime",
         "accept_and_save",
         "file_replay_cache_survives_restart",
+        "room_runtime_enforces_room_sender_and_persists_replay_cache",
     ]
     missing = [item for item in required if item not in source]
-    if "FileReplayCache" not in docs:
-        missing.append("NOSTR_PROTOCOL FileReplayCache documentation")
+    for marker in ["NostrRoomRuntime", "FileReplayCache"]:
+        if marker not in docs:
+            missing.append(f"NOSTR_PROTOCOL {marker} documentation")
 
     if missing:
         doctor.fail(f"persisted replay cache markers missing: {', '.join(missing)}")
     else:
-        doctor.ok("persisted replay cache primitive is present and documented")
+        doctor.ok("persisted replay cache runtime is present and documented")
 
 
 def check_transaction_review():

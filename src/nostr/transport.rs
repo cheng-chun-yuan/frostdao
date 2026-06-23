@@ -4,7 +4,7 @@
 //! room transport contract plus an in-memory implementation for deterministic
 //! multi-device tests.
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -134,6 +134,82 @@ fn tmp_path_for(path: &Path) -> PathBuf {
     tmp_path
 }
 
+#[derive(Debug, Clone)]
+pub struct NostrRoomRuntime<T> {
+    room: String,
+    my_party_index: u32,
+    transport: T,
+    replay_cache: FileReplayCache,
+}
+
+impl<T: RoomMessageTransport> NostrRoomRuntime<T> {
+    pub fn load(
+        room: impl Into<String>,
+        my_party_index: u32,
+        transport: T,
+        replay_cache_path: impl Into<PathBuf>,
+    ) -> Result<Self> {
+        let room = room.into();
+        if room.trim().is_empty() {
+            bail!("room cannot be empty");
+        }
+        if my_party_index == 0 {
+            bail!("party index must be nonzero");
+        }
+
+        Ok(Self {
+            room,
+            my_party_index,
+            transport,
+            replay_cache: FileReplayCache::load(replay_cache_path)?,
+        })
+    }
+
+    pub fn publish(&mut self, message: NostrProtocolMessage) -> Result<()> {
+        if message.room != self.room {
+            bail!(
+                "message belongs to room '{}', expected '{}'",
+                message.room,
+                self.room
+            );
+        }
+        if message.from != self.my_party_index {
+            bail!(
+                "message sender {} does not match local party {}",
+                message.from,
+                self.my_party_index
+            );
+        }
+
+        self.transport.publish(message)
+    }
+
+    pub fn receive(&mut self, now: u64) -> Result<Vec<NostrProtocolMessage>> {
+        let messages = self.transport.receive_for_party(
+            &self.room,
+            self.my_party_index,
+            now,
+            self.replay_cache.cache_mut(),
+        );
+        if !messages.is_empty() {
+            self.replay_cache.save()?;
+        }
+        Ok(messages)
+    }
+
+    pub fn transport(&self) -> &T {
+        &self.transport
+    }
+
+    pub fn transport_mut(&mut self) -> &mut T {
+        &mut self.transport
+    }
+
+    pub fn replay_cache(&self) -> &FileReplayCache {
+        &self.replay_cache
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -249,6 +325,56 @@ mod tests {
         assert!(reloaded_cache
             .accept_and_save(&message, "room-a", 2, 110)
             .is_err());
+
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn room_runtime_enforces_room_sender_and_persists_replay_cache() {
+        let dir = std::env::temp_dir().join(format!(
+            "frostdao-runtime-cache-test-{}",
+            std::process::id()
+        ));
+        let path = dir.join("room-a-party-1.json");
+        let _ = std::fs::remove_file(&path);
+
+        let join = RoomJoinPayload {
+            party_index: 1,
+            nostr_pubkey: "npub-test".to_string(),
+            threshold: 2,
+            n_parties: 3,
+            scheme: ThresholdScheme::Tss,
+            rank: None,
+        };
+        let own_message =
+            NostrProtocolMessage::new_at("room-a", NostrMessageKind::RoomJoin, 1, &join, 100)
+                .unwrap()
+                .with_tss();
+        let wrong_room =
+            NostrProtocolMessage::new_at("room-b", NostrMessageKind::RoomJoin, 1, &join, 100)
+                .unwrap()
+                .with_tss();
+        let wrong_sender =
+            NostrProtocolMessage::new_at("room-a", NostrMessageKind::RoomJoin, 2, &join, 100)
+                .unwrap()
+                .with_tss();
+
+        let mut runtime =
+            NostrRoomRuntime::load("room-a", 1, InMemoryRoomTransport::new(), &path).unwrap();
+        assert!(runtime.publish(wrong_room).is_err());
+        assert!(runtime.publish(wrong_sender).is_err());
+        runtime.publish(own_message).unwrap();
+
+        let transport = runtime.transport().clone();
+        let mut first_restart = NostrRoomRuntime::load("room-a", 1, transport, &path).unwrap();
+        assert_eq!(first_restart.receive(110).unwrap().len(), 1);
+        assert_eq!(first_restart.replay_cache().cache().len(), 1);
+
+        let transport = first_restart.transport().clone();
+        let mut second_restart = NostrRoomRuntime::load("room-a", 1, transport, &path).unwrap();
+        assert_eq!(second_restart.receive(110).unwrap().len(), 0);
+        assert_eq!(second_restart.replay_cache().cache().len(), 1);
 
         let _ = std::fs::remove_file(&path);
         let _ = std::fs::remove_dir(&dir);
