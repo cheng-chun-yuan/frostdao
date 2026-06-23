@@ -59,7 +59,7 @@ The doctor check verifies documentation links, stale command/keymap strings, CLI
 - Wire real cryptographic signing share generation, combination, and testnet transaction broadcast into the relay-backed TUI signing path.
 - Extend structured audit logs that exclude secret material to every live relay ceremony path.
 - Complete an external cryptography/security review for FROST, HTSS, NIP-44 use, reshare, and recovery.
-- Default to testnet/signet until the user deliberately enables mainnet.
+- Default to testnet/signet until the user deliberately enables mainnet; DKG transaction build and broadcast require `FROSTDAO_ENABLE_MAINNET_BITCOIN=1` for mainnet.
 
 ## Operational Defaults
 

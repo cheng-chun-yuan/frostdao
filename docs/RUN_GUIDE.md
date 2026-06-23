@@ -164,6 +164,8 @@ frostdao dkg-broadcast \
   --network testnet
 ```
 
+DKG transaction build and broadcast commands accept only `testnet`, `testnet3`, `signet`, or `mainnet`. Testnet remains the default. Mainnet DKG transaction commands are blocked unless `FROSTDAO_ENABLE_MAINNET_BITCOIN=1` is set for that command.
+
 Never reuse a signing session nonce.
 
 In the TUI send flow, `Enter` prepares the transaction review screen. Press `y` only after the review fields match what every signer expects.

@@ -9,6 +9,8 @@ use frostdao::storage::Storage; // For HD commands
 // TUI is CLI-only, not part of lib
 mod tui;
 
+const MAINNET_BITCOIN_ENV: &str = "FROSTDAO_ENABLE_MAINNET_BITCOIN";
+
 #[derive(Parser)]
 #[command(name = "frostdao")]
 #[command(about = "FrostDAO - FROST threshold signatures for Bitcoin", long_about = None)]
@@ -559,6 +561,34 @@ fn load_backup_inputs(
     Ok((metadata, share_bytes, group_info))
 }
 
+fn parse_dkg_network(network: &str) -> Result<bitcoin::Network> {
+    match network {
+        "testnet" | "testnet3" => Ok(bitcoin::Network::Testnet),
+        "signet" => Ok(bitcoin::Network::Signet),
+        "mainnet" | "bitcoin" => Ok(bitcoin::Network::Bitcoin),
+        other => anyhow::bail!(
+            "unknown network '{}'; use testnet, signet, or mainnet",
+            other
+        ),
+    }
+}
+
+fn mainnet_bitcoin_enabled_value(value: Option<&str>) -> bool {
+    matches!(value, Some("1" | "true" | "TRUE" | "yes" | "YES"))
+}
+
+fn ensure_mainnet_bitcoin_enabled(network: bitcoin::Network) -> Result<()> {
+    if network == bitcoin::Network::Bitcoin
+        && !mainnet_bitcoin_enabled_value(std::env::var(MAINNET_BITCOIN_ENV).ok().as_deref())
+    {
+        anyhow::bail!(
+            "mainnet DKG transaction commands require {}=1; use testnet or signet by default",
+            MAINNET_BITCOIN_ENV
+        );
+    }
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -823,11 +853,8 @@ fn main() -> Result<()> {
             fee_rate,
             network,
         } => {
-            let net = match network.as_str() {
-                "mainnet" => bitcoin::Network::Bitcoin,
-                "signet" => bitcoin::Network::Signet,
-                _ => bitcoin::Network::Testnet,
-            };
+            let net = parse_dkg_network(&network)?;
+            ensure_mainnet_bitcoin_enabled(net)?;
             dkg_tx::build_unsigned_tx(&name, &to, amount, fee_rate, net)?;
         }
         Commands::DkgNonce { name, session } => {
@@ -848,14 +875,47 @@ fn main() -> Result<()> {
             data,
             network,
         } => {
-            let net = match network.as_str() {
-                "mainnet" => bitcoin::Network::Bitcoin,
-                "signet" => bitcoin::Network::Signet,
-                _ => bitcoin::Network::Testnet,
-            };
+            let net = parse_dkg_network(&network)?;
+            ensure_mainnet_bitcoin_enabled(net)?;
             dkg_tx::dkg_broadcast(&name, &session, &unsigned_tx, &data, net)?;
         }
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dkg_network_parser_is_explicit() {
+        assert_eq!(
+            parse_dkg_network("testnet").unwrap(),
+            bitcoin::Network::Testnet
+        );
+        assert_eq!(
+            parse_dkg_network("testnet3").unwrap(),
+            bitcoin::Network::Testnet
+        );
+        assert_eq!(
+            parse_dkg_network("signet").unwrap(),
+            bitcoin::Network::Signet
+        );
+        assert_eq!(
+            parse_dkg_network("mainnet").unwrap(),
+            bitcoin::Network::Bitcoin
+        );
+        assert!(parse_dkg_network("typo-net").is_err());
+    }
+
+    #[test]
+    fn mainnet_bitcoin_opt_in_is_deliberate() {
+        assert!(!mainnet_bitcoin_enabled_value(None));
+        assert!(!mainnet_bitcoin_enabled_value(Some("0")));
+        assert!(!mainnet_bitcoin_enabled_value(Some("false")));
+        assert!(mainnet_bitcoin_enabled_value(Some("1")));
+        assert!(mainnet_bitcoin_enabled_value(Some("true")));
+        assert!(mainnet_bitcoin_enabled_value(Some("yes")));
+    }
 }

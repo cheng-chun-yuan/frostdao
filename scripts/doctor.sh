@@ -344,6 +344,7 @@ def check_transaction_review():
     protocol = read(Path("src/protocol/dkg_tx.rs"))
     tui_state = read(Path("src/tui/state.rs"))
     tui_keys = read(Path("src/tui/mod.rs"))
+    main_rs = read(Path("src/main.rs"))
     docs = read(Path("docs/RUN_GUIDE.md"))
     required = [
         ("src/protocol/dkg_tx.rs", protocol, "pub struct TransactionReview"),
@@ -351,7 +352,11 @@ def check_transaction_review():
         ("src/protocol/dkg_tx.rs", protocol, "fee_rate_sats_vb"),
         ("src/tui/state.rs", tui_state, "ReviewTransaction"),
         ("src/tui/mod.rs", tui_keys, "KeyCode::Char('y')"),
+        ("src/main.rs", main_rs, "parse_dkg_network"),
+        ("src/main.rs", main_rs, "FROSTDAO_ENABLE_MAINNET_BITCOIN"),
+        ("src/main.rs", main_rs, "mainnet DKG transaction commands require"),
         ("docs/RUN_GUIDE.md", docs, "compare the returned `review` fields"),
+        ("docs/RUN_GUIDE.md", docs, "FROSTDAO_ENABLE_MAINNET_BITCOIN=1"),
     ]
     missing = [f"{path}: {marker}" for path, content, marker in required if marker not in content]
 
