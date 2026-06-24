@@ -10,7 +10,7 @@ use ratatui::{
 };
 
 use crate::tui::app::{balance_cache_key, wallet_address_for_network, App};
-use crate::tui::state::{WalletAction, WalletDetailsState};
+use crate::tui::state::{NetworkSelection, WalletAction, WalletDetailsState};
 use crate::tui::COPY_KEY_LABEL;
 
 /// Render the wallet details screen
@@ -183,6 +183,8 @@ fn render_wallet_info(frame: &mut Frame, app: &App, wallet_name: &str, area: Rec
         }
 
         lines.push(Line::from(""));
+        lines.extend(wallet_network_context_lines(app.network));
+        lines.push(Line::from(""));
 
         // Address
         if let Some(addr) = wallet_address_for_network(wallet, app.network) {
@@ -267,6 +269,38 @@ fn render_wallet_info(frame: &mut Frame, app: &App, wallet_name: &str, area: Rec
         .wrap(Wrap { trim: false });
 
     frame.render_widget(details, area);
+}
+
+fn wallet_network_context_lines(network: NetworkSelection) -> Vec<Line<'static>> {
+    let policy_color = match network {
+        NetworkSelection::Regtest => Color::Cyan,
+        NetworkSelection::Mainnet => Color::Red,
+        _ => Color::Yellow,
+    };
+
+    vec![
+        Line::from(vec![
+            Span::styled("Network: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                network.display_name(),
+                Style::default()
+                    .fg(policy_color)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(Span::styled(
+            format!("Policy: {}", network.policy_hint()),
+            Style::default().fg(policy_color),
+        )),
+        Line::from(Span::styled(
+            format!("Address scope: {}", network.address_scope_hint()),
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(Span::styled(
+            format!("UTXO API: {}", network.utxo_api_hint()),
+            Style::default().fg(policy_color),
+        )),
+    ]
 }
 
 fn qr_open_hint_line() -> Line<'static> {
@@ -459,6 +493,7 @@ fn render_action_menu(frame: &mut Frame, state: &WalletDetailsState, area: Rect)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     fn line_to_string(line: Line<'_>) -> String {
         line.spans
@@ -483,6 +518,31 @@ mod tests {
         assert!(rendered.contains("Network: Regtest"));
         assert!(rendered.contains("bcrt1qexample"));
         assert!(rendered.contains("Press q or Esc to close"));
+    }
+
+    #[test]
+    fn wallet_network_context_lines_show_mainnet_policy_and_api() {
+        let rendered = lines_to_string(wallet_network_context_lines(NetworkSelection::Mainnet));
+
+        assert!(rendered.contains("Network: Mainnet"));
+        assert!(rendered.contains("MAINNET real funds"));
+        assert!(rendered.contains("Bitcoin mainnet root address"));
+        assert!(rendered.contains("UTXO API: https://mempool.space/api"));
+    }
+
+    #[test]
+    #[serial]
+    fn wallet_network_context_lines_show_regtest_requirement() {
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
+
+        let rendered = lines_to_string(wallet_network_context_lines(NetworkSelection::Regtest));
+
+        assert!(rendered.contains("Network: Regtest"));
+        assert!(rendered.contains("regtest uses local Esplora/mempool API"));
+        assert!(rendered.contains("local regtest root address with bcrt prefix"));
+        assert!(rendered.contains("UTXO API: regtest needs a local Esplora/mempool API endpoint"));
+
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
     }
 
     fn lines_to_string(lines: Vec<Line<'_>>) -> String {

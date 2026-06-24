@@ -52,6 +52,8 @@ Core command shortcuts are case-insensitive (for example, `c` and `C` are treate
 | `v` | Show QR code |
 | `Esc` | Back |
 
+Wallet Details shows the active network, policy, address scope, and `UTXO API` before the wallet address, so balance fetch and send readiness use the same network facts as Home and Chain Select.
+
 Delete confirmation:
 
 | Key | Action |

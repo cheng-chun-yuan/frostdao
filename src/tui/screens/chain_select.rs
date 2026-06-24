@@ -184,6 +184,7 @@ fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     fn lines_to_string(lines: Vec<Line<'_>>) -> String {
         lines
@@ -209,13 +210,18 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn chain_select_policy_lines_explain_regtest_local_node() {
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
+
         let rendered = lines_to_string(chain_select_policy_lines(NetworkSelection::Regtest));
 
         assert!(rendered.contains("regtest uses local Esplora/mempool API"));
         assert!(rendered.contains("FROSTDAO_REGTEST_MEMPOOL_API"));
         assert!(rendered.contains("local regtest root address with bcrt prefix"));
         assert!(rendered.contains("UTXO API: regtest needs a local Esplora/mempool API endpoint"));
+
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
     }
 
     #[test]
