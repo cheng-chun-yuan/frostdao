@@ -717,6 +717,8 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
                 .map(str::to_string);
             if let Some(addr) = addr_to_copy {
                 app.copy_to_clipboard(&addr);
+            } else {
+                app.set_message("No address available to copy for this wallet");
             }
         }
         code if is_refresh_key(&code) => {
@@ -2165,6 +2167,8 @@ fn handle_address_list_keys(app: &mut App, code: KeyCode) {
             };
             if let Some(addr) = addr_to_copy {
                 app.copy_to_clipboard(&addr);
+            } else {
+                app.set_message("No address selected to copy");
             }
         }
         code if is_refresh_key(&code) => {
@@ -3208,6 +3212,8 @@ mod tests {
     use super::*;
     use crate::tui::state::{NetworkSelection, TxProposal};
     use crossterm::event::KeyModifiers;
+    use frostdao::protocol::keygen::WalletSummary;
+    use std::collections::BTreeMap;
 
     fn line_to_string(line: &Line<'_>) -> String {
         line.spans
@@ -3253,6 +3259,20 @@ mod tests {
         }
     }
 
+    fn wallet_summary_no_address(name: &str) -> WalletSummary {
+        WalletSummary {
+            name: name.to_string(),
+            threshold: Some(2),
+            total_parties: Some(3),
+            hierarchical: Some(false),
+            address: None,
+            address_testnet: None,
+            address_mainnet: None,
+            signing_requirement: None,
+            party_ranks: Some(BTreeMap::new()),
+        }
+    }
+
     #[test]
     fn home_help_bar_exposes_balance_refresh_shortcut() {
         let app = App::new().unwrap();
@@ -3284,6 +3304,26 @@ mod tests {
     }
 
     #[test]
+    fn wallet_details_copy_reports_missing_address() {
+        let mut app = App::new().unwrap();
+        app.wallets = vec![wallet_summary_no_address("treasury")];
+        app.state = AppState::WalletDetails(WalletDetailsState {
+            wallet_name: "treasury".to_string(),
+            selected_action: 0,
+            confirm_delete: false,
+            delete_confirmation_input: String::new(),
+            show_qr: false,
+        });
+
+        handle_wallet_details_keys(&mut app, KeyCode::Char('c'));
+
+        assert_eq!(
+            app.message.as_deref(),
+            Some("No address available to copy for this wallet")
+        );
+    }
+
+    #[test]
     fn address_list_help_bar_includes_refresh_shortcut() {
         let mut app = App::new().unwrap();
         app.state = AppState::AddressList(AddressListState {
@@ -3302,6 +3342,24 @@ mod tests {
         assert!(help.contains("a:Add"));
         assert!(help.contains("x:Remove"));
         assert!(!help.contains("r:Balance"));
+    }
+
+    #[test]
+    fn address_list_copy_reports_no_selection() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::AddressList(AddressListState {
+            wallet_name: "treasury".to_string(),
+            network: NetworkSelection::Testnet4,
+            addresses: Vec::new(),
+            selected: 0,
+            error: None,
+            hd_enabled: true,
+            balance_cache: std::collections::HashMap::new(),
+        });
+
+        handle_address_list_keys(&mut app, KeyCode::Char('c'));
+
+        assert_eq!(app.message.as_deref(), Some("No address selected to copy"));
     }
 
     #[test]
