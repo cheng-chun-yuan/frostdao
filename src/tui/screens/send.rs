@@ -1820,11 +1820,7 @@ fn render_review_transaction(
         ]));
     }
 
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "This local flow signs first; broadcast may still fail or require manual relay.",
-        Style::default().fg(Color::Yellow),
-    )));
+    lines.extend(local_review_guard_lines());
 
     let review = Paragraph::new(lines)
         .wrap(Wrap { trim: false })
@@ -1839,6 +1835,30 @@ fn render_review_transaction(
     let help = Paragraph::new("y: Confirm and sign | Esc: Back to edit")
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[3]);
+}
+
+fn local_review_guard_lines() -> Vec<Line<'static>> {
+    vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            "Before signing, compare source path, source address, destination, amount, fee, and signers on every device.",
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(vec![
+            Span::styled("Only press ", Style::default().fg(Color::DarkGray)),
+            Span::styled("y", Style::default().fg(Color::Yellow)),
+            Span::styled(
+                " when every signer sees the same review.",
+                Style::default().fg(Color::DarkGray),
+            ),
+        ]),
+        Line::from(Span::styled(
+            "This local flow signs first; broadcast may still fail or require manual relay.",
+            Style::default().fg(Color::Yellow),
+        )),
+    ]
 }
 
 fn render_utxos_panel(frame: &mut Frame, form: &SendFormData, area: Rect) {
@@ -2468,6 +2488,21 @@ mod tests {
             review_control_statement(&form),
             "MPC threshold shares sign the root key-path address"
         );
+    }
+
+    #[test]
+    fn local_review_guard_requires_cross_device_comparison() {
+        let rendered = lines_to_string(local_review_guard_lines());
+
+        assert!(rendered.contains("Before signing"));
+        assert!(rendered.contains("source path"));
+        assert!(rendered.contains("source address"));
+        assert!(rendered.contains("destination"));
+        assert!(rendered.contains("amount"));
+        assert!(rendered.contains("fee"));
+        assert!(rendered.contains("signers"));
+        assert!(rendered.contains("on every device"));
+        assert!(rendered.contains("Only press y when every signer sees the same review"));
     }
 
     #[test]
