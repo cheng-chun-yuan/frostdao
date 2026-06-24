@@ -22,10 +22,10 @@ use crossterm::{
 };
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph},
     Frame, Terminal,
 };
 use std::io;
@@ -81,6 +81,18 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut A
 
         if let Event::Key(key) = event::read()? {
             if key.kind == KeyEventKind::Press {
+                if key.code == KeyCode::F(1) {
+                    app.show_global_help = true;
+                    continue;
+                }
+
+                if app.show_global_help {
+                    if matches!(key.code, KeyCode::Esc | KeyCode::F(1)) {
+                        app.show_global_help = false;
+                    }
+                    continue;
+                }
+
                 // Global quit
                 if matches!(key.code, KeyCode::Char('q')) && matches!(app.state, AppState::Home) {
                     return Ok(());
@@ -2937,6 +2949,10 @@ fn ui(frame: &mut Frame, app: &App) {
 
     // Help bar
     render_help_bar(frame, app, chunks[2]);
+
+    if app.show_global_help {
+        render_global_help_overlay(frame);
+    }
 }
 
 fn render_title(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
@@ -3004,6 +3020,115 @@ fn render_help_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     frame.render_widget(help, area);
 }
 
+fn render_global_help_overlay(frame: &mut Frame) {
+    let popup_area = centered_popup_rect(76, 86, frame.area());
+
+    frame.render_widget(Clear, popup_area);
+
+    let help = Paragraph::new(global_help_lines())
+        .style(Style::default().fg(Color::Gray))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("FrostDAO Help (F1, Esc)"),
+        )
+        .wrap(ratatui::widgets::Wrap { trim: true });
+
+    frame.render_widget(help, popup_area);
+}
+
+fn centered_popup_rect(
+    width_percent: u16,
+    height_percent: u16,
+    area: ratatui::layout::Rect,
+) -> Rect {
+    let horizontal = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - width_percent) / 2),
+            Constraint::Percentage(width_percent),
+            Constraint::Percentage((100 - width_percent) / 2),
+        ])
+        .split(area);
+    let body = if horizontal.len() == 3 {
+        horizontal[1]
+    } else {
+        area
+    };
+    let vertical = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - height_percent) / 2),
+            Constraint::Percentage(height_percent),
+            Constraint::Percentage((100 - height_percent) / 2),
+        ])
+        .split(body);
+    if vertical.len() == 3 {
+        vertical[1]
+    } else {
+        area
+    }
+}
+
+fn global_help_lines() -> Vec<Line<'static>> {
+    let mut lines = vec![
+        Line::from(Span::styled(
+            "Global",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from("F1:Show help | Esc:Close | q:Quit (Home only)"),
+        Line::from(""),
+        Line::from("Home"),
+        Line::from(
+            "j/k/↑/↓:Navigate | Enter:Select | g:New wallet | n:Network | h:Reshare | s:Send",
+        ),
+        Line::from("o:Nostr | a:Address list | m:Mnemonic backup | c/C:Copy address"),
+        Line::from("b/r/F5 (Refresh):Refresh balances | R:Reload wallets"),
+        Line::from(""),
+        Line::from("Wallet Details"),
+        Line::from("j/k/↑/↓:Select action | Enter:Continue | v:QR"),
+        Line::from("c/C:Copy selected address | b/r/F5 (Refresh):Refresh selected"),
+        Line::from(""),
+        Line::from("Address List"),
+        Line::from("j/k/↑/↓:Navigate | a:Add | x:Remove | c/C:Copy | b/r/F5 (Refresh):Refresh"),
+    ];
+
+    lines.push(Line::from("Keygen / Reshare / Send"));
+    lines.push(Line::from(
+        "Tab:Next field | Enter:Continue | Esc:Back/Cancel",
+    ));
+    lines.push(Line::from("↑/↓/j/k/1/2:Select | p/P:Paste | ␠:Toggle"));
+    lines.push(Line::from(
+        "c/C:Copy outputs/JSON | Ctrl+u:Clear form (text fields)",
+    ));
+    lines.push(Line::from(""));
+    lines.push(Line::from("Nostr"));
+    lines.push(Line::from(
+        "n:Room config | k:Keygen (local only in test mode) | s:Sign",
+    ));
+    lines.push(Line::from(
+        "p:Propose | y/ r: Consent/Reject | v:Copy share",
+    ));
+
+    #[cfg(feature = "miniscript-policy")]
+    {
+        lines.push(Line::from(""));
+        lines.push(Line::from("Policy Preview"));
+        lines.push(Line::from("Tab:Next field | Enter:Init draft | Esc:Back"));
+        lines.push(Line::from("[/]:Select template | c/C:Copy draft"));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from("Networks supported"));
+    lines.push(Line::from(
+        "Testnet4/Testnet3/Signet use remote mempool; Regtest uses FROSTDAO_REGTEST_MEMPOOL_API; Mainnet requires explicit opt-in.",
+    ));
+
+    lines
+}
+
 fn help_bar_text(app: &App) -> String {
     if let Some(msg) = &app.message {
         return msg.clone();
@@ -3060,12 +3185,12 @@ fn help_bar_text(app: &App) -> String {
 fn home_help_bar_text() -> String {
     #[cfg(feature = "miniscript-policy")]
     {
-        "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | b/r:Balance | c/C:Copy | q:Quit"
+        "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | b/r:Balance | c/C:Copy | q:Quit | F1:Help"
             .to_string()
     }
     #[cfg(not(feature = "miniscript-policy"))]
     {
-        "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | b/r:Balance | c/C:Copy | q:Quit"
+        "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | b/r:Balance | c/C:Copy | q:Quit | F1:Help"
             .to_string()
     }
 }
@@ -3075,6 +3200,22 @@ mod tests {
     use super::*;
     use crate::tui::state::{NetworkSelection, TxProposal};
     use crossterm::event::KeyModifiers;
+
+    fn line_to_string(line: &Line<'_>) -> String {
+        line.spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect::<Vec<_>>()
+            .join("")
+    }
+
+    fn lines_to_string(lines: &[Line<'_>]) -> String {
+        lines
+            .iter()
+            .map(line_to_string)
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
 
     fn enter_key() -> KeyEvent {
         KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)
@@ -3113,6 +3254,18 @@ mod tests {
         assert!(help.contains("b/r:Balance"));
         assert!(help.contains("Enter:Select"));
         assert!(help.contains("c/C:Copy"));
+    }
+
+    #[test]
+    fn global_help_overlay_lists_network_and_core_actions() {
+        let rendered = lines_to_string(&global_help_lines());
+        assert!(rendered.contains("Networks supported"));
+        assert!(rendered.contains("Networks supported"));
+        assert!(rendered.contains("Testnet4/Testnet3/Signet"));
+        assert!(rendered.contains("FROSTDAO_REGTEST_MEMPOOL_API"));
+        assert!(rendered.contains("Global"));
+        assert!(rendered.contains("Home"));
+        assert!(rendered.contains("Wallet Details"));
     }
 
     #[test]

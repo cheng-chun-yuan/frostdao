@@ -124,6 +124,9 @@ pub struct App {
     /// Status message
     pub message: Option<String>,
 
+    /// Show global help overlay (F1).
+    pub show_global_help: bool,
+
     /// Loading state
     pub loading: bool,
 
@@ -215,6 +218,7 @@ impl App {
             balance_cache: HashMap::new(),
             network: NetworkSelection::default(),
             message: None,
+            show_global_help: false,
             loading: false,
             chain_selector_index: 0,
             keygen_form: KeygenFormData::new(),
