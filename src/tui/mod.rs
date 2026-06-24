@@ -1927,6 +1927,14 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 });
             }
             code if is_shortcut_key(&code, 'y') => {
+                if app.network == state::NetworkSelection::Mainnet {
+                    app.send_form.error_message = Some(
+                        "Mainnet send is blocked in the TUI; use CLI with explicit mainnet opt-in after offline review"
+                            .to_string(),
+                    );
+                    return;
+                }
+
                 let to_addr = app.send_form.to_address.value().to_string();
                 let amount: u64 = app.send_form.amount.value().parse().unwrap_or(0);
                 let selected_parties = app.send_form.get_selected_indices();
@@ -4565,6 +4573,34 @@ mod tests {
             AppState::Send(SendState::ReviewTransaction { .. })
         ));
         assert!(app.send_form.error_message.is_none());
+    }
+
+    #[test]
+    fn send_review_blocks_mainnet_local_sign_and_broadcast() {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Mainnet;
+        app.state = AppState::Send(SendState::ReviewTransaction {
+            wallet_name: "wallet-test".to_string(),
+        });
+        app.send_form.to_address.set_value("bc1qrecipient");
+        app.send_form.amount.set_value("1000");
+        app.send_form.selected_parties = vec![true];
+
+        handle_send_keys(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE),
+        );
+
+        assert!(matches!(
+            app.state,
+            AppState::Send(SendState::ReviewTransaction { .. })
+        ));
+        assert!(app
+            .send_form
+            .error_message
+            .as_deref()
+            .unwrap_or("")
+            .contains("Mainnet send is blocked in the TUI"));
     }
 
     #[test]

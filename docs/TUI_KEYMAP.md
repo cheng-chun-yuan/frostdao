@@ -152,7 +152,7 @@ Reshare boundaries:
 | Script config | `Tab` | Move script option field |
 | Script config | `m` | Toggle relative timelock mode |
 | Transaction details | `Tab`, `Shift-Tab` | Move address/amount fields |
-| Transaction review | `y` | Confirm only after every signer sees the same review, then locally sign and attempt broadcast |
+| Transaction review | `y` | Confirm only after every signer sees the same review, then locally sign and attempt broadcast on test chains |
 | Sighash | `c` / `C` | Copy sighash |
 | Nonce output | `c` / `C` | Copy nonce JSON |
 | Signature share | `c` / `C` | Copy signature share JSON |
@@ -162,8 +162,10 @@ Reshare boundaries:
 
 The transaction review labels the local-only boundary: share material stays on
 this device, and only the signed raw transaction or TXID leaves the signing
-flow. Pressing `y` signs locally and attempts the selected network API; if
-broadcast fails, use `c`/`C` to copy the raw transaction for manual broadcast.
+flow. Pressing `y` signs locally and attempts the selected network API on test
+chains. Mainnet local sign and broadcast is blocked in the TUI; use CLI commands
+with explicit mainnet opt-in after offline review. If broadcast fails, use
+`c`/`C` to copy the raw transaction for manual broadcast.
 
 ## Address List
 
