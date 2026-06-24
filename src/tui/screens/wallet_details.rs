@@ -11,7 +11,7 @@ use ratatui::{
 
 use crate::tui::app::{balance_cache_key, wallet_address_for_network, App};
 use crate::tui::state::{WalletAction, WalletDetailsState};
-use crate::tui::{COPY_KEY_LABEL, REFRESH_KEY_LABEL};
+use crate::tui::COPY_KEY_LABEL;
 
 /// Render the wallet details screen
 pub fn render_wallet_details(frame: &mut Frame, app: &App, state: &WalletDetailsState, area: Rect) {
@@ -239,7 +239,7 @@ fn render_wallet_info(frame: &mut Frame, app: &App, wallet_name: &str, area: Rec
             lines.push(Line::from(vec![
                 Span::styled("Balance: ", Style::default().fg(Color::Gray)),
                 Span::styled(
-                    format!("Press {REFRESH_KEY_LABEL} to fetch"),
+                    app.balance_fetch_hint(),
                     Style::default().fg(Color::DarkGray),
                 ),
             ]));

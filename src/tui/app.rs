@@ -15,6 +15,7 @@ use crate::tui::state::{
     AppState, NetworkSelection, NostrKeygenState, NostrRoomField, NostrRoomPhase, NostrSignState,
     NostrTxField, TxProposal,
 };
+use crate::tui::REFRESH_KEY_LABEL;
 use frostdao::nostr::RoomMessageTransport;
 use frostdao::protocol::keygen::{get_state_dir, list_wallets, WalletSummary};
 use frostdao::protocol::{
@@ -513,19 +514,15 @@ impl App {
         self.send_form.utxos.clear();
         self.send_form.recent_txs.clear();
 
-        let api_base = match self.network.mempool_api_base() {
-            Ok(api_base) => api_base,
-            Err(e) => {
-                set_fetch_error(
-                    self,
-                    &format!(
-                        "Cannot fetch UTXOs on {}: {}",
-                        self.network.display_name(),
-                        e
-                    ),
-                );
+        let api_base = match self.utxo_source_unavailable_message() {
+            Some(message) => {
+                set_fetch_error(self, &message);
                 return;
             }
+            None => self
+                .network
+                .mempool_api_base()
+                .expect("UTXO API should be available"),
         };
         let client = reqwest::blocking::Client::new();
 
@@ -1401,6 +1398,25 @@ impl App {
         self.nostr_connected = false;
         self.nostr_room_phase = NostrRoomPhase::Configure;
         self.clear_nostr_room_session_state();
+    }
+
+    /// Helper message for UTXO-dependent actions when the current network has no fetch source.
+    pub(crate) fn utxo_source_unavailable_message(&self) -> Option<String> {
+        self.network.mempool_api_base().err().map(|err| {
+            format!(
+                "Cannot fetch UTXOs on {}: {}",
+                self.network.display_name(),
+                err
+            )
+        })
+    }
+
+    /// Balance fetch hint shown in wallet list/details views.
+    pub(crate) fn balance_fetch_hint(&self) -> String {
+        match self.utxo_source_unavailable_message() {
+            Some(error) => error,
+            None => format!("Press {REFRESH_KEY_LABEL} to fetch"),
+        }
     }
 
     /// Set status message

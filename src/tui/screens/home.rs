@@ -12,8 +12,6 @@ use crate::tui::app::{balance_cache_key, wallet_address_for_network, App};
 use crate::tui::state::NetworkSelection;
 use crate::tui::{COPY_KEY_LABEL, REFRESH_KEY_LABEL};
 
-const BALANCE_FETCH_HINT: &str = "Press b/r/F5 to fetch";
-
 /// Render the home screen
 pub fn render_home(frame: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::default()
@@ -188,7 +186,7 @@ fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
                 ),
             ]));
         } else {
-            lines.push(balance_fetch_hint_line());
+            lines.push(balance_fetch_hint_line(app));
         }
 
         lines
@@ -315,16 +313,20 @@ fn network_safety_lines(network: NetworkSelection) -> Vec<Line<'static>> {
     ]
 }
 
-fn balance_fetch_hint_line() -> Line<'static> {
+fn balance_fetch_hint_line(app: &App) -> Line<'static> {
     Line::from(vec![
         Span::styled("Balance: ", Style::default().fg(Color::Gray)),
-        Span::styled(BALANCE_FETCH_HINT, Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            app.balance_fetch_hint(),
+            Style::default().fg(Color::DarkGray),
+        ),
     ])
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     fn lines_to_string(lines: Vec<Line<'_>>) -> String {
         lines
@@ -359,10 +361,27 @@ mod tests {
 
     #[test]
     fn balance_fetch_hint_matches_home_refresh_shortcut() {
-        let rendered = lines_to_string(vec![balance_fetch_hint_line()]);
+        let app = App::new().unwrap();
+        let rendered = lines_to_string(vec![balance_fetch_hint_line(&app)]);
 
         assert!(rendered.contains(&format!("Press {REFRESH_KEY_LABEL} to fetch")));
         assert!(rendered.contains(REFRESH_KEY_LABEL));
         assert!(!rendered.contains("Press Enter to fetch"));
+    }
+
+    #[test]
+    #[serial]
+    fn balance_fetch_hint_for_regtest_includes_env_requirement() {
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
+
+        let mut app = App::new().unwrap();
+        app.network = crate::tui::state::NetworkSelection::Regtest;
+
+        let rendered = lines_to_string(vec![balance_fetch_hint_line(&app)]);
+
+        assert!(rendered.contains("local Esplora/mempool API"));
+        assert!(rendered.contains(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV));
+
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
     }
 }

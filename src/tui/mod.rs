@@ -164,7 +164,11 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
         }
         KeyCode::Char('s') => {
             if app.selected_wallet().is_some() {
-                app.state = AppState::Send(state::SendState::default());
+                if let Some(message) = app.utxo_source_unavailable_message() {
+                    app.set_message(&message);
+                } else {
+                    app.state = AppState::Send(state::SendState::default());
+                }
             } else {
                 app.set_message("Select a wallet first to send");
             }
@@ -607,24 +611,29 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
             match selected_action {
                 WalletAction::Send => {
                     // Go to send flow with wallet pre-selected
-                    app.send_form = screens::SendFormData::new();
-                    // Find wallet index
-                    if let Some(idx) = app.wallets.iter().position(|w| w.name == wallet_name) {
-                        app.send_form.wallet_index = idx;
-                        // Load party info
-                        if let Some(wallet) = app.wallets.get(idx) {
-                            app.send_form.threshold = wallet.threshold.unwrap_or(2);
-                            app.send_form.total_parties = wallet.total_parties.unwrap_or(3);
-                            app.send_form.selected_parties =
-                                vec![true; wallet.total_parties.unwrap_or(3) as usize];
-                            // Load HTSS info
-                            app.send_form.hierarchical = wallet.hierarchical.unwrap_or(false);
-                            app.send_form.signing_requirement = wallet.signing_requirement.clone();
-                            app.send_form.party_ranks =
-                                wallet.party_ranks.clone().unwrap_or_default();
+                    if let Some(message) = app.utxo_source_unavailable_message() {
+                        app.set_message(&message);
+                    } else {
+                        app.send_form = screens::SendFormData::new();
+                        // Find wallet index
+                        if let Some(idx) = app.wallets.iter().position(|w| w.name == wallet_name) {
+                            app.send_form.wallet_index = idx;
+                            // Load party info
+                            if let Some(wallet) = app.wallets.get(idx) {
+                                app.send_form.threshold = wallet.threshold.unwrap_or(2);
+                                app.send_form.total_parties = wallet.total_parties.unwrap_or(3);
+                                app.send_form.selected_parties =
+                                    vec![true; wallet.total_parties.unwrap_or(3) as usize];
+                                // Load HTSS info
+                                app.send_form.hierarchical = wallet.hierarchical.unwrap_or(false);
+                                app.send_form.signing_requirement =
+                                    wallet.signing_requirement.clone();
+                                app.send_form.party_ranks =
+                                    wallet.party_ranks.clone().unwrap_or_default();
+                            }
                         }
+                        app.state = AppState::Send(SendState::SelectSigners { wallet_name });
                     }
-                    app.state = AppState::Send(SendState::SelectSigners { wallet_name });
                 }
                 WalletAction::ViewAddresses => {
                     app.state = AppState::AddressList(AddressListState {
@@ -1627,6 +1636,12 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
             }
             KeyCode::Enter => {
                 app.send_form.error_message = None;
+
+                if let Some(message) = app.utxo_source_unavailable_message() {
+                    app.set_message(&message);
+                    app.send_form.error_message = Some(message);
+                    return;
+                }
 
                 // Get the source address to fetch UTXOs
                 let source_address = if app.send_form.use_hd_address {
@@ -3231,6 +3246,7 @@ mod tests {
     use crate::tui::state::{NetworkSelection, TxProposal};
     use crossterm::event::KeyModifiers;
     use frostdao::protocol::keygen::WalletSummary;
+    use serial_test::serial;
     use std::collections::BTreeMap;
 
     fn line_to_string(line: &Line<'_>) -> String {
@@ -3319,6 +3335,64 @@ mod tests {
         assert!(help.contains("b/r/F5 (Refresh):Balance"));
         assert!(help.contains("v:QR"));
         assert!(!help.contains("r:Balance"));
+    }
+
+    #[test]
+    #[serial]
+    fn home_send_action_blocks_without_utxo_source() {
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
+
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Regtest;
+        app.wallets = vec![wallet_summary_no_address("treasury")];
+        app.wallet_list_state.select(Some(0));
+
+        handle_home_keys(&mut app, KeyCode::Char('s'));
+
+        match app.state {
+            AppState::Home => {}
+            _ => panic!("expected AppState::Home"),
+        }
+        assert!(app
+            .message
+            .as_deref()
+            .unwrap_or("")
+            .contains("Cannot fetch UTXOs on Regtest"));
+
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
+    }
+
+    #[test]
+    #[serial]
+    fn wallet_details_send_action_blocks_without_utxo_source() {
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
+
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Regtest;
+        app.wallets = vec![wallet_summary_no_address("treasury")];
+        app.state = AppState::WalletDetails(WalletDetailsState {
+            wallet_name: "treasury".to_string(),
+            selected_action: 0,
+            confirm_delete: false,
+            delete_confirmation_input: String::new(),
+            show_qr: false,
+        });
+
+        handle_wallet_details_keys(&mut app, KeyCode::Enter);
+
+        assert!(matches!(
+            app.state,
+            AppState::WalletDetails(WalletDetailsState {
+                wallet_name, ..
+            }) if wallet_name == "treasury"
+        ));
+        assert!(app
+            .message
+            .as_deref()
+            .unwrap_or("")
+            .contains("Cannot fetch UTXOs on Regtest"));
+
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
     }
 
     #[test]
@@ -3804,5 +3878,35 @@ mod tests {
             AppState::Send(SendState::ReviewTransaction { .. })
         ));
         assert!(app.send_form.error_message.is_none());
+    }
+
+    #[test]
+    #[serial]
+    fn send_select_address_blocks_without_utxo_source() {
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
+
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Regtest;
+        app.wallets = vec![wallet_summary_no_address("treasury")];
+        app.send_form.wallet_index = 0;
+
+        app.state = AppState::Send(SendState::SelectAddress {
+            wallet_name: "treasury".to_string(),
+        });
+
+        handle_send_keys(&mut app, enter_key());
+
+        assert!(matches!(
+            app.state,
+            AppState::Send(SendState::SelectAddress { wallet_name }) if wallet_name == "treasury"
+        ));
+        assert!(app
+            .send_form
+            .error_message
+            .as_deref()
+            .unwrap_or("")
+            .contains("Cannot fetch UTXOs on Regtest"));
+
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
     }
 }
