@@ -24,7 +24,12 @@ pub fn render_wallet_details(frame: &mut Frame, app: &App, state: &WalletDetails
 
     // Render confirmation dialog overlay if deleting
     if state.confirm_delete {
-        render_delete_confirmation(frame, &state.wallet_name, area);
+        render_delete_confirmation(
+            frame,
+            &state.wallet_name,
+            &state.delete_confirmation_input,
+            area,
+        );
     }
 
     // Render QR code popup if showing
@@ -36,12 +41,17 @@ pub fn render_wallet_details(frame: &mut Frame, app: &App, state: &WalletDetails
     }
 }
 
-fn render_delete_confirmation(frame: &mut Frame, wallet_name: &str, area: Rect) {
+fn render_delete_confirmation(
+    frame: &mut Frame,
+    wallet_name: &str,
+    confirmation_input: &str,
+    area: Rect,
+) {
     use ratatui::widgets::Clear;
 
     // Center the dialog
-    let popup_width = 50;
-    let popup_height = 8;
+    let popup_width = 64;
+    let popup_height = 11;
     let popup_area = Rect {
         x: area.x + (area.width.saturating_sub(popup_width)) / 2,
         y: area.y + (area.height.saturating_sub(popup_height)) / 2,
@@ -52,30 +62,7 @@ fn render_delete_confirmation(frame: &mut Frame, wallet_name: &str, area: Rect) 
     // Clear the area behind the popup
     frame.render_widget(Clear, popup_area);
 
-    let content = vec![
-        Line::from(""),
-        Line::from(vec![Span::styled(
-            "⚠️  DELETE WALLET?",
-            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
-        )]),
-        Line::from(""),
-        Line::from(vec![
-            Span::raw("This will permanently delete "),
-            Span::styled(
-                wallet_name,
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("Y", Style::default().fg(Color::Green)),
-            Span::raw(" = Yes, delete  |  "),
-            Span::styled("N", Style::default().fg(Color::Red)),
-            Span::raw(" = No, cancel"),
-        ]),
-    ];
+    let content = delete_confirmation_lines(wallet_name, confirmation_input);
 
     let dialog = Paragraph::new(content)
         .block(
@@ -85,9 +72,61 @@ fn render_delete_confirmation(frame: &mut Frame, wallet_name: &str, area: Rect) 
                 .title(" Confirm Delete ")
                 .style(Style::default().bg(Color::Black)),
         )
-        .alignment(ratatui::layout::Alignment::Center);
+        .alignment(ratatui::layout::Alignment::Center)
+        .wrap(Wrap { trim: false });
 
     frame.render_widget(dialog, popup_area);
+}
+
+fn delete_confirmation_lines(wallet_name: &str, confirmation_input: &str) -> Vec<Line<'static>> {
+    vec![
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "⚠️  DELETE WALLET?",
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(""),
+        Line::from(vec![
+            Span::raw("This will permanently delete "),
+            Span::styled(
+                wallet_name.to_string(),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from("This permanently removes local wallet files."),
+        Line::from(""),
+        Line::from(vec![
+            Span::raw("Type "),
+            Span::styled(
+                wallet_name.to_string(),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" exactly, then press Enter."),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("Input: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                confirmation_input.to_string(),
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("Enter", Style::default().fg(Color::Red)),
+            Span::raw(" = Delete  |  "),
+            Span::styled("Backspace", Style::default().fg(Color::Yellow)),
+            Span::raw(" = Edit  |  "),
+            Span::styled("Esc", Style::default().fg(Color::Green)),
+            Span::raw(" = Cancel"),
+        ]),
+    ]
 }
 
 fn render_wallet_info(frame: &mut Frame, app: &App, wallet_name: &str, area: Rect) {
@@ -420,5 +459,31 @@ mod tests {
 
         assert_eq!(rendered, "Press v for QR code");
         assert!(!rendered.contains("Press q for QR code"));
+    }
+
+    fn lines_to_string(lines: Vec<Line<'_>>) -> String {
+        lines
+            .into_iter()
+            .map(|line| {
+                line.spans
+                    .into_iter()
+                    .map(|span| span.content.into_owned())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn delete_confirmation_requires_typed_wallet_name() {
+        let rendered = lines_to_string(delete_confirmation_lines("treasury", "treas"));
+
+        assert!(rendered.contains("Type treasury exactly"));
+        assert!(rendered.contains("Input: treas"));
+        assert!(rendered.contains("Enter = Delete"));
+        assert!(rendered.contains("Backspace = Edit"));
+        assert!(rendered.contains("Esc = Cancel"));
+        assert!(!rendered.contains("Y = Yes"));
+        assert!(!rendered.contains("N = No"));
     }
 }

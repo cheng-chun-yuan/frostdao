@@ -152,6 +152,8 @@ pub struct WalletDetailsState {
     pub selected_action: usize,
     /// Confirm delete mode
     pub confirm_delete: bool,
+    /// Wallet name typed by the operator to confirm deletion
+    pub delete_confirmation_input: String,
     /// Show QR code popup
     pub show_qr: bool,
 }

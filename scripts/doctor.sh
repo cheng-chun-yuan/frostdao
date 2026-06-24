@@ -470,6 +470,29 @@ def check_mnemonic_backup_ux():
         doctor.ok("mnemonic backup UX keeps share scope and clipboard risk visible")
 
 
+def check_wallet_delete_ux():
+    screen = read(Path("src/tui/screens/wallet_details.rs"))
+    state = read(Path("src/tui/state.rs"))
+    tui = read(Path("src/tui/mod.rs"))
+    keymap = read(Path("docs/TUI_KEYMAP.md"))
+    required = [
+        ("src/tui/state.rs", state, "delete_confirmation_input"),
+        ("src/tui/screens/wallet_details.rs", screen, "delete_confirmation_requires_typed_wallet_name"),
+        ("src/tui/screens/wallet_details.rs", screen, "Type treasury exactly"),
+        ("src/tui/screens/wallet_details.rs", screen, "Y = Yes"),
+        ("src/tui/mod.rs", tui, "wallet_delete_confirmation_does_not_accept_single_y"),
+        ("src/tui/mod.rs", tui, "Type the wallet name exactly to delete"),
+        ("docs/TUI_KEYMAP.md", keymap, "Type wallet name"),
+        ("docs/TUI_KEYMAP.md", keymap, "Delete only after the typed name matches"),
+    ]
+    missing = [f"{path}: {marker}" for path, content, marker in required if marker not in content]
+
+    if missing:
+        doctor.fail(f"wallet delete UX markers missing: {', '.join(missing)}")
+    else:
+        doctor.ok("wallet delete UX requires typed wallet-name confirmation")
+
+
 def check_audit_logging():
     audit = read(Path("src/audit.rs"))
     protocol = read(Path("src/protocol/dkg_tx.rs"))
@@ -642,6 +665,7 @@ check_agent_payment_semantics()
 check_replay_cache_persistence()
 check_transaction_review()
 check_mnemonic_backup_ux()
+check_wallet_delete_ux()
 check_audit_logging()
 check_nostr_transaction_review()
 

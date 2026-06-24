@@ -112,6 +112,7 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
                     wallet_name: wallet.name.clone(),
                     selected_action: 0,
                     confirm_delete: false,
+                    delete_confirmation_input: String::new(),
                     show_qr: false,
                 });
             } else {
@@ -514,9 +515,24 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
     // Handle confirm delete mode
     if state.confirm_delete {
         match code {
-            KeyCode::Char('y') | KeyCode::Char('Y') => {
-                // Actually delete the wallet
+            KeyCode::Esc => {
+                if let AppState::WalletDetails(ref mut s) = app.state {
+                    s.confirm_delete = false;
+                    s.delete_confirmation_input.clear();
+                }
+            }
+            KeyCode::Backspace => {
+                if let AppState::WalletDetails(ref mut s) = app.state {
+                    s.delete_confirmation_input.pop();
+                }
+            }
+            KeyCode::Enter => {
                 let wallet_name = state.wallet_name.clone();
+                if state.delete_confirmation_input != wallet_name {
+                    app.set_message("Type the wallet name exactly to delete");
+                    return;
+                }
+
                 let state_dir = keygen::get_state_dir(&wallet_name);
                 match std::fs::remove_dir_all(&state_dir) {
                     Ok(_) => {
@@ -532,10 +548,9 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
                     }
                 }
             }
-            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
-                // Cancel delete
+            KeyCode::Char(ch) => {
                 if let AppState::WalletDetails(ref mut s) = app.state {
-                    s.confirm_delete = false;
+                    s.delete_confirmation_input.push(ch);
                 }
             }
             _ => {}
@@ -669,6 +684,7 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
                     // Show confirmation dialog
                     if let AppState::WalletDetails(ref mut s) = app.state {
                         s.confirm_delete = true;
+                        s.delete_confirmation_input.clear();
                     }
                 }
             }
@@ -2944,8 +2960,12 @@ fn help_bar_text(app: &App) -> String {
 
     match &app.state {
         AppState::Home => home_help_bar_text(),
-        AppState::WalletDetails(_) => {
-            "↑/↓:Navigate | Enter:Select | b:Balance | c:Copy | v:QR | Esc:Back".to_string()
+        AppState::WalletDetails(state) => {
+            if state.confirm_delete {
+                "Type wallet name | Enter:Delete | Backspace:Edit | Esc:Cancel".to_string()
+            } else {
+                "↑/↓:Navigate | Enter:Select | b:Balance | c:Copy | v:QR | Esc:Back".to_string()
+            }
         }
         AppState::ChainSelect => "↑/↓:Select | Enter:Confirm | Esc:Cancel".to_string(),
         AppState::Keygen(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
@@ -3036,6 +3056,71 @@ mod tests {
         app.message = Some("Balance updated for treasury".to_string());
 
         assert_eq!(help_bar_text(&app), "Balance updated for treasury");
+    }
+
+    #[test]
+    fn wallet_delete_confirmation_help_requires_typing_wallet_name() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::WalletDetails(WalletDetailsState {
+            wallet_name: "treasury".to_string(),
+            selected_action: 0,
+            confirm_delete: true,
+            delete_confirmation_input: String::new(),
+            show_qr: false,
+        });
+
+        let help = help_bar_text(&app);
+
+        assert!(help.contains("Type wallet name"));
+        assert!(help.contains("Enter:Delete"));
+        assert!(help.contains("Backspace:Edit"));
+        assert!(help.contains("Esc:Cancel"));
+    }
+
+    #[test]
+    fn wallet_delete_confirmation_does_not_accept_single_y() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::WalletDetails(WalletDetailsState {
+            wallet_name: "treasury".to_string(),
+            selected_action: 0,
+            confirm_delete: true,
+            delete_confirmation_input: String::new(),
+            show_qr: false,
+        });
+
+        handle_wallet_details_keys(&mut app, KeyCode::Char('y'));
+
+        let AppState::WalletDetails(state) = &app.state else {
+            panic!("single y should not leave wallet details");
+        };
+        assert!(state.confirm_delete);
+        assert_eq!(state.delete_confirmation_input, "y");
+    }
+
+    #[test]
+    fn wallet_delete_confirmation_rejects_partial_name() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::WalletDetails(WalletDetailsState {
+            wallet_name: "treasury".to_string(),
+            selected_action: 0,
+            confirm_delete: true,
+            delete_confirmation_input: "treas".to_string(),
+            show_qr: false,
+        });
+
+        handle_wallet_details_keys(&mut app, KeyCode::Enter);
+
+        assert_eq!(
+            app.message.as_deref(),
+            Some("Type the wallet name exactly to delete")
+        );
+        assert!(matches!(
+            app.state,
+            AppState::WalletDetails(WalletDetailsState {
+                confirm_delete: true,
+                ..
+            })
+        ));
     }
 
     #[test]

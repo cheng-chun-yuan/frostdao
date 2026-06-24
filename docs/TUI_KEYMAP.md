@@ -49,8 +49,15 @@ Avoid function keys for required actions. Use lowercase shortcuts in help text. 
 | `c` | Copy wallet address |
 | `v` | Show QR code |
 | `Esc` | Back |
-| `y` | Confirm delete, only in delete confirmation |
-| `n`, `Esc` | Cancel delete confirmation |
+
+Delete confirmation:
+
+| Key | Action |
+|-----|--------|
+| Type wallet name | Arm deletion only when it exactly matches the selected wallet |
+| `Enter` | Delete only after the typed name matches |
+| `Backspace` | Edit typed confirmation |
+| `Esc` | Cancel delete confirmation |
 
 ## Chain Select
 
