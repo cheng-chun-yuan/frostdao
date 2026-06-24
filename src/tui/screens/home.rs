@@ -271,6 +271,10 @@ fn render_shortcuts(frame: &mut Frame, has_wallet: bool, area: Rect) {
             Span::styled(COPY_KEY_LABEL, Style::default().fg(Color::Yellow)),
             Span::raw(" Copy addr"),
         ]));
+        shortcuts.push(Line::from(Span::styled(
+            "Press b/r/F5 to fetch balances",
+            Style::default().fg(Color::Gray),
+        )));
     }
 
     let shortcuts_widget = Paragraph::new(shortcuts)
