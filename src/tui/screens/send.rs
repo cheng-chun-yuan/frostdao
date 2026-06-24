@@ -352,6 +352,60 @@ impl SendFormData {
             .collect()
     }
 
+    pub fn htss_metadata_error(&self) -> Option<&'static str> {
+        if !self.hierarchical {
+            return None;
+        }
+
+        if self.party_ranks.is_empty() {
+            return Some("HTSS metadata incomplete: missing party rank map");
+        }
+
+        if self.signing_requirement.is_none() {
+            return Some("HTSS metadata incomplete: missing signing requirement");
+        }
+
+        None
+    }
+
+    pub fn signer_selection_error(&self) -> Option<String> {
+        let selected = self.selected_count();
+        if selected != self.threshold as usize {
+            return Some(format!(
+                "Must select exactly {} signers (selected {})",
+                self.threshold, selected
+            ));
+        }
+
+        if let Some(error) = self.htss_metadata_error() {
+            return Some(error.to_string());
+        }
+
+        if self.hierarchical {
+            let mut ranks = Vec::new();
+            for party_index in self.get_selected_indices() {
+                let rank = match self.party_ranks.get(&party_index) {
+                    Some(rank) => *rank,
+                    None => {
+                        return Some(format!(
+                            "HTSS metadata incomplete: missing rank for party {}",
+                            party_index
+                        ));
+                    }
+                };
+                ranks.push(rank);
+            }
+
+            if let Err(error) =
+                frostdao::crypto::birkhoff::validate_signer_set(&ranks, self.threshold)
+            {
+                return Some(format!("HTSS signer set invalid: {}", error));
+            }
+        }
+
+        None
+    }
+
     /// Get the selected derivation path (if HD mode is enabled)
     pub fn get_derivation_path(&self) -> Option<(u32, u32)> {
         if self.use_hd_address && self.hd_enabled {
@@ -659,7 +713,9 @@ fn render_select_signers(frame: &mut Frame, form: &SendFormData, area: Rect) {
     frame.render_widget(party_list, chunks[1]);
 
     // Selection status - show signing requirement for HTSS
-    let status = if form.hierarchical && form.signing_requirement.is_some() {
+    let status = if let Some(error) = form.htss_metadata_error() {
+        render_htss_metadata_status(error)
+    } else if form.hierarchical {
         render_htss_status(form)
     } else {
         render_tss_status(form)
@@ -861,11 +917,22 @@ fn render_tss_status(form: &SendFormData) -> Paragraph<'static> {
     ])])
 }
 
+fn render_htss_metadata_status(error: &str) -> Paragraph<'static> {
+    Paragraph::new(vec![Line::from(vec![
+        Span::styled("HTSS blocked: ", Style::default().fg(Color::Red)),
+        Span::styled(error.to_string(), Style::default().fg(Color::Yellow)),
+    ])])
+}
+
 /// Render status for HTSS (show per-rank requirements)
 /// Uses cumulative validation: lower ranks can substitute for higher ranks
 /// Total selected must equal exactly the threshold (sum of requirements)
 fn render_htss_status(form: &SendFormData) -> Paragraph<'static> {
-    let signing_req = form.signing_requirement.as_ref().unwrap();
+    let Some(signing_req) = form.signing_requirement.as_ref() else {
+        return render_htss_metadata_status(
+            "HTSS metadata incomplete: missing signing requirement",
+        );
+    };
 
     // Calculate selected count per rank
     let mut selected_per_rank: std::collections::BTreeMap<u32, usize> =
@@ -2401,6 +2468,63 @@ mod tests {
             review_control_statement(&form),
             "MPC threshold shares sign the root key-path address"
         );
+    }
+
+    #[test]
+    fn signer_selection_blocks_incomplete_htss_metadata() {
+        let mut form = SendFormData::new();
+        form.hierarchical = true;
+        form.threshold = 2;
+        form.total_parties = 3;
+        form.selected_parties = vec![true, true, false];
+
+        let error = form.signer_selection_error().unwrap();
+
+        assert!(error.contains("HTSS metadata incomplete"));
+        assert!(error.contains("party rank map"));
+    }
+
+    #[test]
+    fn signer_selection_blocks_missing_htss_requirement() {
+        let mut form = SendFormData::new();
+        form.hierarchical = true;
+        form.threshold = 2;
+        form.total_parties = 3;
+        form.selected_parties = vec![true, true, false];
+        form.party_ranks = [(1, 0), (2, 1), (3, 1)].into_iter().collect();
+
+        let error = form.signer_selection_error().unwrap();
+
+        assert!(error.contains("HTSS metadata incomplete"));
+        assert!(error.contains("signing requirement"));
+    }
+
+    #[test]
+    fn signer_selection_blocks_invalid_htss_rank_set_even_when_count_matches() {
+        let mut form = SendFormData::new();
+        form.hierarchical = true;
+        form.threshold = 2;
+        form.total_parties = 3;
+        form.selected_parties = vec![false, true, true];
+        form.party_ranks = [(1, 0), (2, 1), (3, 1)].into_iter().collect();
+        form.signing_requirement = Some(vec![1, 1]);
+
+        let error = form.signer_selection_error().unwrap();
+
+        assert!(error.contains("HTSS signer set invalid"));
+    }
+
+    #[test]
+    fn signer_selection_accepts_valid_htss_rank_set() {
+        let mut form = SendFormData::new();
+        form.hierarchical = true;
+        form.threshold = 2;
+        form.total_parties = 3;
+        form.selected_parties = vec![true, true, false];
+        form.party_ranks = [(1, 0), (2, 1), (3, 1)].into_iter().collect();
+        form.signing_requirement = Some(vec![1, 1]);
+
+        assert!(form.signer_selection_error().is_none());
     }
 
     #[test]

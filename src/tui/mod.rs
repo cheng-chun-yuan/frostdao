@@ -1514,13 +1514,8 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 }
             }
             KeyCode::Enter => {
-                // Check if exactly threshold parties selected
-                let selected = app.send_form.selected_count();
-                if selected != app.send_form.threshold as usize {
-                    app.send_form.error_message = Some(format!(
-                        "Must select exactly {} signers (selected {})",
-                        app.send_form.threshold, selected
-                    ));
+                if let Some(error) = app.send_form.signer_selection_error() {
+                    app.send_form.error_message = Some(error);
                     return;
                 }
                 app.send_form.error_message = None;
