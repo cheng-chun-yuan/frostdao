@@ -1855,11 +1855,12 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 let amount: u64 = app.send_form.amount.value().parse().unwrap_or(0);
 
                 if to_addr.is_empty() {
-                    app.send_form.error_message = Some("Enter destination address".to_string());
+                    app.send_form.error_message =
+                        Some(send_missing_destination_message(app.network));
                     return;
                 }
                 if amount == 0 {
-                    app.send_form.error_message = Some("Enter valid amount".to_string());
+                    app.send_form.error_message = Some(send_invalid_amount_message());
                     return;
                 }
                 if let Some(fetch_error) = app.send_form.utxo_fetch_error.clone() {
@@ -2392,6 +2393,17 @@ fn address_balance_updated_message(
         btc,
         utxo_count
     )
+}
+
+fn send_missing_destination_message(network: state::NetworkSelection) -> String {
+    format!(
+        "Enter a recipient address valid for {} before preparing review",
+        network.display_name()
+    )
+}
+
+fn send_invalid_amount_message() -> String {
+    "Enter an amount in sats greater than 0 before preparing review".to_string()
 }
 
 fn handle_mnemonic_keys(app: &mut App, code: KeyCode) {
@@ -3865,6 +3877,18 @@ mod tests {
     }
 
     #[test]
+    fn send_validation_messages_include_network_and_review_boundary() {
+        assert_eq!(
+            send_missing_destination_message(NetworkSelection::Signet),
+            "Enter a recipient address valid for Signet before preparing review"
+        );
+        assert_eq!(
+            send_invalid_amount_message(),
+            "Enter an amount in sats greater than 0 before preparing review"
+        );
+    }
+
+    #[test]
     #[serial]
     fn address_list_refresh_blocks_when_utxo_source_unavailable() {
         std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
@@ -4625,6 +4649,39 @@ mod tests {
             .as_deref()
             .unwrap_or("")
             .contains("Cannot prepare transaction"));
+    }
+
+    #[test]
+    fn send_enter_details_requires_network_valid_recipient_before_review() {
+        let mut app = app_ready_to_prepare_send();
+        app.network = NetworkSelection::Signet;
+        app.send_form.to_address.set_value("");
+
+        handle_send_keys(&mut app, enter_key());
+
+        assert!(matches!(
+            app.state,
+            AppState::Send(SendState::EnterDetails { .. })
+        ));
+        let message = app.send_form.error_message.as_deref().unwrap_or("");
+        assert!(message.contains("recipient address valid for Signet"));
+        assert!(message.contains("before preparing review"));
+    }
+
+    #[test]
+    fn send_enter_details_requires_positive_sats_amount_before_review() {
+        let mut app = app_ready_to_prepare_send();
+        app.send_form.amount.set_value("0");
+
+        handle_send_keys(&mut app, enter_key());
+
+        assert!(matches!(
+            app.state,
+            AppState::Send(SendState::EnterDetails { .. })
+        ));
+        let message = app.send_form.error_message.as_deref().unwrap_or("");
+        assert!(message.contains("amount in sats greater than 0"));
+        assert!(message.contains("before preparing review"));
     }
 
     #[test]
