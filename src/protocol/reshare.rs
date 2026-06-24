@@ -57,12 +57,7 @@ fn load_optional_group_info(storage: &dyn Storage) -> Result<Option<GroupInfo>> 
 
     serde_json::from_slice::<GroupInfo>(&bytes)
         .map(Some)
-        .or_else(|error| {
-            Err(anyhow::anyhow!(
-                "group_info.json exists but is invalid: {}",
-                error
-            ))
-        })
+        .map_err(|error| anyhow::anyhow!("group_info.json exists but is invalid: {}", error))
 }
 
 /// Output from reshare round 1 (old party generates sub-shares)
@@ -900,37 +895,6 @@ pub fn reshare_local(
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::crypto::helpers::lagrange_coefficient_at_zero;
-
-    #[test]
-    fn test_resharing_math() {
-        // Lagrange coefficients sum to 1
-        let indices = vec![1u32, 2, 3];
-        let one: Scalar<Secret, Zero> = Scalar::from(1u32);
-        let mut sum: Scalar<Secret, Zero> = Scalar::zero();
-        for &idx in &indices {
-            sum = s!(sum + lagrange_coefficient_at_zero(idx, &indices).unwrap());
-        }
-        assert_eq!(sum.to_bytes(), one.to_bytes());
-
-        // Secret reconstruction: f(x) = s + a*x
-        let mut rng = rand::thread_rng();
-        let secret = Scalar::<Secret, NonZero>::random(&mut rng);
-        let coeff = Scalar::<Secret, NonZero>::random(&mut rng);
-        let share1 = s!(secret + { Scalar::<Secret, Zero>::from(1u32) } * coeff);
-        let share2 = s!(secret + { Scalar::<Secret, Zero>::from(2u32) } * coeff);
-
-        let idx12 = vec![1u32, 2];
-        let reconstructed = s!(lagrange_coefficient_at_zero(1, &idx12).unwrap() * share1
-            + lagrange_coefficient_at_zero(2, &idx12).unwrap() * share2);
-        let secret_zero: Scalar<Secret, Zero> = Scalar::from_bytes(secret.to_bytes()).unwrap();
-        assert_eq!(reconstructed.to_bytes(), secret_zero.to_bytes());
-    }
-}
-
 fn verify_reshare_hd_control_continuity(
     source_storage: &dyn Storage,
     target_storage: &dyn Storage,
@@ -971,4 +935,35 @@ fn verify_reshare_hd_control_continuity(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::crypto::helpers::lagrange_coefficient_at_zero;
+
+    #[test]
+    fn test_resharing_math() {
+        // Lagrange coefficients sum to 1
+        let indices = vec![1u32, 2, 3];
+        let one: Scalar<Secret, Zero> = Scalar::from(1u32);
+        let mut sum: Scalar<Secret, Zero> = Scalar::zero();
+        for &idx in &indices {
+            sum = s!(sum + lagrange_coefficient_at_zero(idx, &indices).unwrap());
+        }
+        assert_eq!(sum.to_bytes(), one.to_bytes());
+
+        // Secret reconstruction: f(x) = s + a*x
+        let mut rng = rand::thread_rng();
+        let secret = Scalar::<Secret, NonZero>::random(&mut rng);
+        let coeff = Scalar::<Secret, NonZero>::random(&mut rng);
+        let share1 = s!(secret + { Scalar::<Secret, Zero>::from(1u32) } * coeff);
+        let share2 = s!(secret + { Scalar::<Secret, Zero>::from(2u32) } * coeff);
+
+        let idx12 = vec![1u32, 2];
+        let reconstructed = s!(lagrange_coefficient_at_zero(1, &idx12).unwrap() * share1
+            + lagrange_coefficient_at_zero(2, &idx12).unwrap() * share2);
+        let secret_zero: Scalar<Secret, Zero> = Scalar::from_bytes(secret.to_bytes()).unwrap();
+        assert_eq!(reconstructed.to_bytes(), secret_zero.to_bytes());
+    }
 }
