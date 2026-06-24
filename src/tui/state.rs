@@ -497,7 +497,8 @@ pub enum NostrSignState {
         wallet_name: String,
         session_id: String,
         proposal: TxProposal,
-        consents: std::collections::HashMap<u32, String>, // party -> nonce commitment
+        consents: std::collections::HashMap<u32, String>, // party -> reviewed sighash fingerprint
+        rejections: std::collections::HashMap<u32, String>, // party -> rejection reason
     },
 
     // === Consenter Flow ===

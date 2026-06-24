@@ -702,45 +702,61 @@ impl App {
                     if session_id != payload.proposal_session {
                         continue;
                     }
-                    if payload.consent {
-                        let mut accepted_fingerprint = None;
-                        if let NostrSignState::WaitingForConsent {
-                            wallet_name,
-                            session_id,
-                            proposal,
-                            consents,
-                        } = &mut self.nostr_sign_state
+                    let mut accepted_consent = None;
+                    if let NostrSignState::WaitingForConsent {
+                        wallet_name,
+                        session_id,
+                        proposal,
+                        consents,
+                        rejections,
+                    } = &mut self.nostr_sign_state
+                    {
+                        if *wallet_name == message_wallet
+                            && *session_id == payload.proposal_session
+                            && message.from > 0
+                            && message.from <= self.nostr_n_parties
+                            && message.from != self.nostr_my_index
+                            && payload.reviewed_sighash_fingerprint
+                                == proposal.review.sighash_fingerprint
                         {
-                            if *wallet_name == message_wallet
-                                && *session_id == payload.proposal_session
-                                && message.from > 0
-                                && message.from <= self.nostr_n_parties
-                                && message.from != self.nostr_my_index
-                                && payload.reviewed_sighash_fingerprint
-                                    == proposal.review.sighash_fingerprint
-                            {
-                                accepted_fingerprint =
-                                    Some(payload.reviewed_sighash_fingerprint.clone());
+                            if payload.consent {
+                                rejections.remove(&message.from);
                                 consents.insert(
                                     message.from,
                                     payload.reviewed_sighash_fingerprint.clone(),
                                 );
+                                accepted_consent = Some((
+                                    "accepted",
+                                    payload.reviewed_sighash_fingerprint.clone(),
+                                ));
+                            } else {
+                                consents.remove(&message.from);
+                                let reason = payload
+                                    .reason
+                                    .clone()
+                                    .filter(|reason| !reason.trim().is_empty())
+                                    .unwrap_or_else(|| "Rejected without reason".to_string());
+                                rejections.insert(message.from, reason);
+                                accepted_consent = Some((
+                                    "rejected",
+                                    payload.reviewed_sighash_fingerprint.clone(),
+                                ));
                             }
                         }
-                        if let Some(fingerprint) = accepted_fingerprint {
-                            self.append_nostr_audit_event(
-                                frostdao::audit::AuditEvent::new(
-                                    "nostr_tx_consent_received",
-                                    &message_wallet,
-                                    "accepted",
-                                )
-                                .with_field("room", self.nostr_room_id.clone())
-                                .with_field("transport", self.nostr_transport_label())
-                                .with_field("session_id", session_id)
-                                .with_field("party_index", message.from)
-                                .with_field("sighash_fingerprint", fingerprint),
-                            );
-                        }
+                    }
+                    if let Some((status, fingerprint)) = accepted_consent {
+                        self.append_nostr_audit_event(
+                            frostdao::audit::AuditEvent::new(
+                                "nostr_tx_consent_received",
+                                &message_wallet,
+                                status,
+                            )
+                            .with_field("room", self.nostr_room_id.clone())
+                            .with_field("transport", self.nostr_transport_label())
+                            .with_field("session_id", session_id)
+                            .with_field("party_index", message.from)
+                            .with_field("sighash_fingerprint", fingerprint),
+                        );
                     }
                 }
                 frostdao::nostr::NostrMessageKind::SigningNonceEncrypted => {
@@ -2339,6 +2355,7 @@ mod tests {
             session_id: proposal.session_id.clone(),
             proposal: proposal.clone(),
             consents: std::collections::HashMap::new(),
+            rejections: std::collections::HashMap::new(),
         };
 
         let consent_event = frostdao::nostr::TxConsentEvent {
@@ -2429,8 +2446,14 @@ mod tests {
             .publish_demo_message(out_of_room_consent)
             .unwrap();
         app.poll_nostr_room_runtime().unwrap();
-        if let NostrSignState::WaitingForConsent { consents, .. } = &app.nostr_sign_state {
+        if let NostrSignState::WaitingForConsent {
+            consents,
+            rejections,
+            ..
+        } = &app.nostr_sign_state
+        {
             assert!(consents.is_empty());
+            assert!(rejections.is_empty());
         } else {
             panic!("expected WaitingForConsent");
         }
@@ -2927,6 +2950,7 @@ mod tests {
             session_id: "session-remote".to_string(),
             proposal: pending.clone(),
             consents: std::collections::HashMap::new(),
+            rejections: std::collections::HashMap::new(),
         };
         let consent_event = frostdao::nostr::TxConsentEvent {
             proposal_session: "session-remote".to_string(),
@@ -3170,6 +3194,84 @@ mod tests {
             assert!(event.fields.get("raw_tx").is_none());
             assert!(event.fields.get("sighash").is_none());
         }
+
+        let _ = std::fs::remove_file(&cache_path);
+    }
+
+    #[test]
+    fn tui_nostr_poll_tracks_rejected_proposal_consents() {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Testnet3;
+        app.nostr_room_id = format!("tui-consent-reject-test-{}", std::process::id());
+        app.nostr_my_index = 1;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 3;
+        let cache_path = app.nostr_replay_cache_path();
+        let _ = std::fs::remove_file(&cache_path);
+
+        app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
+        let proposal_event = valid_remote_proposal_event(2);
+        let proposal = crate::tui::state::TxProposal {
+            session_id: "session-rejected".to_string(),
+            wallet_name: "wallet-test".to_string(),
+            proposer_index: 1,
+            to_address: proposal_event.to_address.clone(),
+            amount_sats: proposal_event.amount_sats,
+            fee_rate: proposal_event.fee_rate,
+            sighash: proposal_event.sighash.clone(),
+            review: proposal_event.review.clone(),
+            description: "proposal with rejection".to_string(),
+            timestamp: 1_700_000_010,
+        };
+        app.nostr_sign_state = NostrSignState::WaitingForConsent {
+            wallet_name: "wallet-test".to_string(),
+            session_id: proposal.session_id.clone(),
+            proposal: proposal.clone(),
+            consents: std::collections::HashMap::new(),
+            rejections: std::collections::HashMap::new(),
+        };
+
+        let rejection_event = frostdao::nostr::TxConsentEvent {
+            proposal_session: proposal.session_id.clone(),
+            consent: false,
+            reviewed_sighash_fingerprint: proposal.review.sighash_fingerprint.clone(),
+            reason: Some("amount mismatch".to_string()),
+        };
+        let rejection_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxConsent,
+            2,
+            &rejection_event,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session(proposal.session_id.clone())
+        .with_tss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_demo_message(rejection_message)
+            .unwrap();
+
+        app.poll_nostr_room_runtime().unwrap();
+
+        if let NostrSignState::WaitingForConsent {
+            consents,
+            rejections,
+            ..
+        } = &app.nostr_sign_state
+        {
+            assert!(consents.is_empty());
+            assert_eq!(
+                rejections.get(&2).map(String::as_str),
+                Some("amount mismatch")
+            );
+        } else {
+            panic!("expected WaitingForConsent");
+        }
+        assert_eq!(app.audit_events[0].event, "nostr_tx_consent_received");
+        assert_eq!(app.audit_events[0].status, "rejected");
+        assert_eq!(app.audit_events[0].fields["party_index"], 2);
 
         let _ = std::fs::remove_file(&cache_path);
     }

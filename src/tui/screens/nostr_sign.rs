@@ -80,11 +80,23 @@ fn get_progress(state: &NostrSignState, app: &App) -> (u16, String) {
         NostrSignState::SelectWallet => (0, "Select a wallet...".to_string()),
         NostrSignState::SelectRole { .. } => (5, "Choose: Propose or Consent".to_string()),
         NostrSignState::ConfigureTx { .. } => (10, "Configure transaction...".to_string()),
-        NostrSignState::WaitingForConsent { consents, .. } => {
+        NostrSignState::WaitingForConsent {
+            consents,
+            rejections,
+            ..
+        } => {
             let count = consents.len() + 1; // +1 for proposer
             let total = app.nostr_threshold as usize;
             let pct = 20 + (count * 40 / total.max(1)) as u16;
-            (pct, format!("Consents: {}/{} parties", count, total))
+            (
+                pct,
+                format!(
+                    "Consents: {}/{} | Rejections: {}",
+                    count,
+                    total,
+                    rejections.len()
+                ),
+            )
         }
         NostrSignState::ViewProposals { .. } => (10, "Viewing proposals...".to_string()),
         NostrSignState::ReviewProposal { .. } => (15, "Review proposal details".to_string()),
@@ -135,9 +147,32 @@ fn render_status_info(frame: &mut Frame, app: &App, area: Rect) {
             session_id,
             proposal,
             consents,
+            rejections,
         } => {
             let consent_count = consents.len() + 1;
             let threshold = app.nostr_threshold as usize;
+            let max_possible_consents =
+                (app.nostr_n_parties as usize).saturating_sub(rejections.len());
+            let status_line = if max_possible_consents < threshold {
+                format!(
+                    "Blocked: {} rejection(s) leave only {}/{} possible approvals",
+                    rejections.len(),
+                    max_possible_consents,
+                    threshold
+                )
+            } else {
+                format!(
+                    "Waiting for consents ({}/{}) with {} rejection(s)...",
+                    consent_count,
+                    threshold,
+                    rejections.len()
+                )
+            };
+            let status_color = if max_possible_consents < threshold {
+                Color::Red
+            } else {
+                Color::Yellow
+            };
             vec![
                 Line::from(vec![
                     Span::styled("Wallet: ", Style::default().fg(Color::Gray)),
@@ -175,8 +210,8 @@ fn render_status_info(frame: &mut Frame, app: &App, area: Rect) {
                     ),
                 ]),
                 Line::from(vec![Span::styled(
-                    format!("Waiting for consents ({}/{})...", consent_count, threshold),
-                    Style::default().fg(Color::Yellow),
+                    status_line,
+                    Style::default().fg(status_color),
                 )]),
             ]
         }
@@ -361,8 +396,12 @@ fn render_content(frame: &mut Frame, app: &App, area: Rect) {
         NostrSignState::SelectRole { .. } => {
             render_role_selection(frame, app, area);
         }
-        NostrSignState::WaitingForConsent { consents, .. } => {
-            render_consent_list(frame, app, consents, area);
+        NostrSignState::WaitingForConsent {
+            consents,
+            rejections,
+            ..
+        } => {
+            render_consent_list(frame, app, consents, rejections, area);
         }
         NostrSignState::ViewProposals { .. } => {
             render_proposals_list(frame, app, area);
@@ -430,6 +469,7 @@ fn render_consent_list(
     frame: &mut Frame,
     app: &App,
     consents: &std::collections::HashMap<u32, String>,
+    rejections: &std::collections::HashMap<u32, String>,
     area: Rect,
 ) {
     let threshold = app.nostr_threshold;
@@ -442,9 +482,15 @@ fn render_consent_list(
 
             let status = if has_consent {
                 ("✓ Consented", Color::Green)
+            } else if rejections.contains_key(&idx) {
+                ("✗ Rejected", Color::Red)
             } else {
                 ("○ Pending", Color::DarkGray)
             };
+            let reason = rejections
+                .get(&idx)
+                .map(|reason| format!("  {}", reason))
+                .unwrap_or_default();
 
             let name_style = if is_me {
                 Style::default()
@@ -460,6 +506,7 @@ fn render_consent_list(
                 Span::styled(format!("Party {}{}", idx, role), name_style),
                 Span::raw("  "),
                 Span::styled(status.0, Style::default().fg(status.1)),
+                Span::styled(reason, Style::default().fg(Color::DarkGray)),
             ]))
         })
         .collect();

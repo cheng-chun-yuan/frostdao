@@ -2597,6 +2597,7 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                         session_id,
                         proposal,
                         consents: std::collections::HashMap::new(),
+                        rejections: std::collections::HashMap::new(),
                     };
                     app.set_message(
                         "Proposal published through room runtime; waiting for consents...",
@@ -2607,6 +2608,7 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                     session_id,
                     proposal,
                     consents,
+                    rejections,
                 } => {
                     // Check if we have enough consents (including proposer)
                     if consents.len() + 1 >= app.nostr_threshold as usize {
@@ -2627,6 +2629,12 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                             received_shares: std::collections::HashMap::new(),
                         };
                         app.set_message("Threshold reached! Collecting signature shares...");
+                    } else if app.nostr_n_parties.saturating_sub(rejections.len() as u32)
+                        < app.nostr_threshold
+                    {
+                        app.set_message(
+                            "Proposal cannot reach threshold after recorded rejections",
+                        );
                     } else {
                         app.set_message("Waiting for more consents...");
                     }
