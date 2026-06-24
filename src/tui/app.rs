@@ -1235,8 +1235,25 @@ impl App {
             4 => NetworkSelection::Mainnet,
             _ => NetworkSelection::Testnet4,
         };
+        self.clear_network_volatile_state();
         self.state = AppState::Home;
-        self.message = Some(format!("Switched to {}", self.network.display_name()));
+        self.message = Some(format!(
+            "Switched to {}; cleared pending send and Nostr ceremony state",
+            self.network.display_name()
+        ));
+    }
+
+    fn clear_network_volatile_state(&mut self) {
+        self.send_form = SendFormData::new();
+        self.reshare_form = crate::tui::screens::ReshareFormData::new();
+        #[cfg(feature = "miniscript-policy")]
+        {
+            self.policy_preview_form = crate::tui::screens::PolicyPreviewFormData::new();
+        }
+        self.nostr_runtime = None;
+        self.nostr_connected = false;
+        self.nostr_room_phase = NostrRoomPhase::Configure;
+        self.clear_nostr_room_session_state();
     }
 
     /// Set status message
@@ -1727,8 +1744,10 @@ fn mainnet_nostr_enabled() -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::App;
-    use crate::tui::state::{NetworkSelection, NostrKeygenState, NostrSignState, TxProposal};
+    use super::{App, BalanceInfo};
+    use crate::tui::state::{
+        AppState, NetworkSelection, NostrKeygenState, NostrRoomPhase, NostrSignState, TxProposal,
+    };
     use bitcoin::absolute::LockTime;
     use bitcoin::secp256k1::{Keypair, Secp256k1, SecretKey};
     use bitcoin::transaction::Version;
@@ -1864,6 +1883,83 @@ mod tests {
 
         assert_eq!(app.network, NetworkSelection::Regtest);
         assert_eq!(app.network.to_bitcoin_network(), Network::Regtest);
+    }
+
+    #[test]
+    fn network_switch_clears_volatile_send_and_nostr_state() {
+        let mut app = App::new().unwrap();
+        app.chain_selector_index = 2;
+        app.state = AppState::NostrSign;
+        app.send_form.to_address.set_value("tb1qstale");
+        app.send_form.total_balance = 50_000;
+        app.send_form.error_message = Some("stale send error".to_string());
+        app.nostr_connected = true;
+        app.nostr_room_phase = NostrRoomPhase::Ready;
+        app.nostr_participants.insert(1, "npub-local-1".to_string());
+        app.nostr_pending_proposals.insert(
+            "session-stale".to_string(),
+            TxProposal {
+                session_id: "session-stale".to_string(),
+                wallet_name: "wallet-test".to_string(),
+                proposer_index: 2,
+                to_address: test_address(Network::Testnet),
+                amount_sats: 10_000,
+                fee_rate: 2,
+                sighash: "stale-sighash".to_string(),
+                review: frostdao::nostr::TxReviewPayload {
+                    network: "Testnet3".to_string(),
+                    source_path: "root key-path".to_string(),
+                    from_address: test_address(Network::Testnet),
+                    to_address: test_address(Network::Testnet),
+                    amount_sats: 10_000,
+                    fee_rate_sats_vb: 2,
+                    sighash_fingerprint: "stale-fingerprint".to_string(),
+                },
+                description: "stale proposal".to_string(),
+                timestamp: 1_700_000_000,
+            },
+        );
+
+        app.confirm_network();
+
+        assert_eq!(app.network, NetworkSelection::Signet);
+        assert!(matches!(app.state, AppState::Home));
+        assert_eq!(app.send_form.to_address.value(), "");
+        assert_eq!(app.send_form.total_balance, 0);
+        assert!(app.send_form.error_message.is_none());
+        assert!(!app.nostr_connected);
+        assert!(matches!(app.nostr_room_phase, NostrRoomPhase::Configure));
+        assert!(app.nostr_participants.is_empty());
+        assert!(app.nostr_pending_proposals.is_empty());
+        assert!(matches!(app.nostr_sign_state, NostrSignState::SelectWallet));
+        assert!(app
+            .message
+            .as_deref()
+            .unwrap_or("")
+            .contains("cleared pending send and Nostr ceremony state"));
+    }
+
+    #[test]
+    fn network_switch_preserves_network_scoped_balance_cache() {
+        let mut app = App::new().unwrap();
+        let cache_key = super::balance_cache_key("treasury", NetworkSelection::Testnet3);
+        app.balance_cache.insert(
+            cache_key.clone(),
+            BalanceInfo {
+                balance_sats: 12_345,
+                utxo_count: 2,
+            },
+        );
+        app.chain_selector_index = 4;
+
+        app.confirm_network();
+
+        assert_eq!(app.network, NetworkSelection::Mainnet);
+        assert!(app.balance_cache.contains_key(&cache_key));
+        assert_ne!(
+            cache_key,
+            super::balance_cache_key("treasury", NetworkSelection::Mainnet)
+        );
     }
 
     #[test]
