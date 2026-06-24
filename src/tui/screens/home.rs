@@ -317,6 +317,10 @@ fn network_safety_lines(network: NetworkSelection) -> Vec<Line<'static>> {
             format!("Address scope: {}", network.address_scope_hint()),
             Style::default().fg(Color::DarkGray),
         )]),
+        Line::from(vec![Span::styled(
+            format!("UTXO API: {}", network.utxo_api_hint()),
+            Style::default().fg(policy_color),
+        )]),
     ]
 }
 
@@ -460,6 +464,7 @@ mod tests {
         assert!(rendered.contains("MAINNET real funds"));
         assert!(rendered.contains("explicit opt-in"));
         assert!(rendered.contains("Bitcoin mainnet root address"));
+        assert!(rendered.contains("UTXO API: https://mempool.space/api"));
     }
 
     #[test]
@@ -469,6 +474,7 @@ mod tests {
         assert!(rendered.contains("regtest uses local Esplora/mempool API"));
         assert!(rendered.contains("FROSTDAO_REGTEST_MEMPOOL_API"));
         assert!(rendered.contains("local regtest root address with bcrt prefix"));
+        assert!(rendered.contains("UTXO API: regtest needs a local Esplora/mempool API endpoint"));
     }
 
     #[test]

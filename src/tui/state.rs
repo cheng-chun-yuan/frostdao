@@ -62,6 +62,13 @@ impl NetworkSelection {
         }
     }
 
+    pub fn utxo_api_hint(&self) -> String {
+        match self.mempool_api_base() {
+            Ok(endpoint) => endpoint,
+            Err(err) => err.to_string(),
+        }
+    }
+
     pub fn all() -> &'static [NetworkSelection] {
         &[
             Self::Testnet4,
@@ -637,6 +644,14 @@ mod tests {
         assert_eq!(
             NetworkSelection::from_index(usize::MAX),
             NetworkSelection::Testnet4
+        );
+    }
+
+    #[test]
+    fn network_selection_utxo_api_hint_shows_remote_endpoint() {
+        assert_eq!(
+            NetworkSelection::Signet.utxo_api_hint(),
+            "https://mempool.space/signet/api"
         );
     }
 }

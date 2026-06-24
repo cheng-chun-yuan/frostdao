@@ -69,7 +69,7 @@ Delete confirmation:
 | `Enter` | Confirm network |
 | `Esc` | Cancel |
 
-The selector shows the selected network policy before confirmation: testnet4/testnet3/signet use remote mempool.space UTXOs, regtest uses the local Esplora/mempool API from `FROSTDAO_REGTEST_MEMPOOL_API`, and mainnet requires explicit real-funds opt-in. It also shows the exact `UTXO API` endpoint or missing regtest configuration that balance, send, and Nostr proposal flows will depend on.
+The selector shows the selected network policy before confirmation: testnet4/testnet3/signet use remote mempool.space UTXOs, regtest uses the local Esplora/mempool API from `FROSTDAO_REGTEST_MEMPOOL_API`, and mainnet requires explicit real-funds opt-in. It also shows the exact `UTXO API` endpoint or missing regtest configuration that balance, send, and Nostr proposal flows will depend on. Home shows the same `UTXO API` line for the active network.
 
 The main title bar also renders this policy for the currently selected network (for quick confirmation anywhere in the TUI).
 

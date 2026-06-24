@@ -151,23 +151,13 @@ pub(crate) fn chain_select_policy_lines(network: NetworkSelection) -> Vec<Line<'
         ]),
         Line::from(vec![
             Span::styled("UTXO API: ", Style::default().fg(Color::Gray)),
-            Span::styled(
-                network_utxo_api_hint(network),
-                Style::default().fg(policy_color),
-            ),
+            Span::styled(network.utxo_api_hint(), Style::default().fg(policy_color)),
         ]),
         Line::from(Span::styled(
             "Confirming clears pending send form data and volatile Nostr ceremony state.",
             Style::default().fg(Color::DarkGray),
         )),
     ]
-}
-
-fn network_utxo_api_hint(network: NetworkSelection) -> String {
-    match network.mempool_api_base() {
-        Ok(endpoint) => endpoint,
-        Err(err) => err.to_string(),
-    }
 }
 
 /// Create a centered rectangle of given percentage width and height
