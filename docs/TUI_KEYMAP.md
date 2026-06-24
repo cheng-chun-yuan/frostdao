@@ -202,6 +202,9 @@ Copy feedback names the selected network and whether the copied address is a
 root or HD-derived address. HD copy feedback also includes the selected BIP-86
 path.
 
+Balance refresh feedback names the selected network for both root wallet and
+HD-derived address balances.
+
 The details panel shows the selected network, BIP-86 path, derived address,
 child x-only pubkey fingerprint, and MPC-threshold control note. Compare those
 fields across devices before funding or selecting an HD source for signing.

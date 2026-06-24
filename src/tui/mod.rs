@@ -2259,7 +2259,12 @@ fn handle_address_list_keys(app: &mut App, code: KeyCode) {
             };
 
             if let Some((addr, idx)) = addr_info {
-                app.set_message(&format!("Fetching balance for address {}...", idx));
+                let network = if let AppState::AddressList(ref state) = app.state {
+                    state.network
+                } else {
+                    app.network
+                };
+                app.set_message(&address_balance_fetching_message(network, idx));
 
                 // Fetch balance from mempool.space where the selected network supports it.
                 let api_base = match app.utxo_api_base_for_fetch("address balance") {
@@ -2285,9 +2290,8 @@ fn handle_address_list_keys(app: &mut App, code: KeyCode) {
                             }
 
                             let btc = balance as f64 / 100_000_000.0;
-                            app.set_message(&format!(
-                                "Address {}: {} sats ({:.8} BTC), {} UTXOs",
-                                idx, balance, btc, utxo_count
+                            app.set_message(&address_balance_updated_message(
+                                network, idx, balance, btc, utxo_count,
                             ));
                         }
                         Err(e) => {
@@ -2362,6 +2366,31 @@ fn hd_address_copy_message(network: state::NetworkSelection, path: &str, address
         network.display_name(),
         path,
         address
+    )
+}
+
+fn address_balance_fetching_message(network: state::NetworkSelection, index: u32) -> String {
+    format!(
+        "Fetching {} balance for address {}...",
+        network.display_name(),
+        index
+    )
+}
+
+fn address_balance_updated_message(
+    network: state::NetworkSelection,
+    index: u32,
+    balance: u64,
+    btc: f64,
+    utxo_count: usize,
+) -> String {
+    format!(
+        "{} address {}: {} sats ({:.8} BTC), {} UTXOs",
+        network.display_name(),
+        index,
+        balance,
+        btc,
+        utxo_count
     )
 }
 
@@ -3819,6 +3848,18 @@ mod tests {
 
         let hd = hd_address_copy_message(NetworkSelection::Signet, "m/86'/1'/0'/0/7", "tb1phd");
         assert_eq!(hd, "Copied Signet HD address m/86'/1'/0'/0/7: tb1phd");
+    }
+
+    #[test]
+    fn address_balance_messages_include_network() {
+        assert_eq!(
+            address_balance_fetching_message(NetworkSelection::Testnet4, 3),
+            "Fetching Testnet4 balance for address 3..."
+        );
+        assert_eq!(
+            address_balance_updated_message(NetworkSelection::Regtest, 3, 12_345, 0.00012345, 2),
+            "Regtest address 3: 12345 sats (0.00012345 BTC), 2 UTXOs"
+        );
     }
 
     #[test]

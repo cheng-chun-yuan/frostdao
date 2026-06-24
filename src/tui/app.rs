@@ -46,6 +46,14 @@ pub(crate) fn balance_cache_key(wallet_name: &str, network: NetworkSelection) ->
     format!("{}:{:?}", wallet_name, network)
 }
 
+fn wallet_balance_updated_message(wallet_name: &str, network: NetworkSelection) -> String {
+    format!(
+        "{} balance updated for {}",
+        network.display_name(),
+        wallet_name
+    )
+}
+
 fn copied_preview_message(text: &str) -> String {
     // Use char_indices for safe UTF-8 slicing.
     let preview = if text.chars().count() > 20 {
@@ -457,7 +465,7 @@ impl App {
                 Ok(info) => {
                     let cache_key = balance_cache_key(&wallet.name, self.network);
                     self.balance_cache.insert(cache_key, info);
-                    self.message = Some(format!("Balance updated for {}", wallet.name));
+                    self.message = Some(wallet_balance_updated_message(&wallet.name, self.network));
                 }
                 Err(e) => {
                     self.message = Some(format!("Error: {}", e));
@@ -2082,6 +2090,14 @@ mod tests {
         assert_ne!(
             super::balance_cache_key("treasury", NetworkSelection::Testnet3),
             super::balance_cache_key("treasury", NetworkSelection::Mainnet)
+        );
+    }
+
+    #[test]
+    fn wallet_balance_updated_message_includes_network() {
+        assert_eq!(
+            super::wallet_balance_updated_message("treasury", NetworkSelection::Signet),
+            "Signet balance updated for treasury"
         );
     }
 
