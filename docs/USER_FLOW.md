@@ -134,7 +134,7 @@ frostdao dkg-list-addresses --name treasury --count 10
 UX requirements:
 
 - Use language like `Derived address`, not `new wallet`.
-- Show path: `m/86'/0'/0'/0/index`.
+- Show path with the selected network's BIP-86 coin type: `m/86'/0'/0'/0/index` on mainnet, `m/86'/1'/0'/0/index` on testnet, signet, and regtest.
 - Explain that the same root wallet controls all derived addresses.
 
 ## Flow 4: Propose Transaction

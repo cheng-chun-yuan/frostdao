@@ -74,7 +74,7 @@ From the home screen:
 - press `c` to copy the JSON draft
 - press `Esc` to return home
 
-The TUI uses the same Miniscript compiler as the CLI and derives the Frost key-path payment address from the selected wallet at `m/86'/0'/0'/0/<agent_index>`. The Miniscript descriptor is included as a preview for the planned script path; script-path spending is still listed as future work below.
+The TUI uses the same Miniscript compiler as the CLI and derives the Frost key-path payment address from the selected wallet at the network-specific BIP-86 path: `m/86'/0'/0'/0/<agent_index>` on mainnet, or `m/86'/1'/0'/0/<agent_index>` on testnet, signet, and regtest. The Miniscript descriptor is included as a preview for the planned script path; script-path spending is still listed as future work below.
 
 ## Current Scope
 

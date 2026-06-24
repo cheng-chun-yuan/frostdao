@@ -9,11 +9,11 @@
 //! ```ignore
 //! let addresses = list_derived_addresses(&storage, 10, Network::Testnet)?;
 //! for (addr, pubkey, index) in addresses {
-//!     println!("m/86'/0'/0'/0/{}: {}", index, addr);
+//!     println!("{}: {}", format_bip86_path(Network::Testnet, 0, index), addr);
 //! }
 //! ```
 
-use crate::crypto::hd::{derive_at_path, DerivationPath, HdContext};
+use crate::crypto::hd::{bip86_account_prefix, derive_at_path, DerivationPath, HdContext};
 use crate::protocol::keygen::HdMetadata;
 use crate::storage::Storage;
 use crate::CommandResult;
@@ -160,7 +160,10 @@ pub fn derive_address_core(
 
     out.push_str("HD Address Derivation\n\n");
     out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-    out.push_str(&format!("Path: {}\n", path.to_full_string()));
+    out.push_str(&format!(
+        "Path: {}\n",
+        path.to_full_string_for_network(network)
+    ));
     out.push_str(&format!("Network: {}\n\n", network_str));
 
     let (addr, pubkey) = derive_taproot_address(&context, &path, network)?;
@@ -196,7 +199,10 @@ pub fn list_addresses_core(
 
     let addresses = list_derived_addresses(storage, count, network)?;
 
-    out.push_str("External Addresses (m/86'/0'/0'/0/*):\n");
+    out.push_str(&format!(
+        "External Addresses ({}/0/*):\n",
+        bip86_account_prefix(network)
+    ));
     out.push_str("─────────────────────────────────────────────────────────────────────────────\n");
 
     for (addr, pubkey, idx) in &addresses {

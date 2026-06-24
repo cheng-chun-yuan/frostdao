@@ -31,6 +31,7 @@ use crate::audit::{self, AuditEvent};
 use crate::btc::transaction::{
     broadcast_transaction, fetch_fee_estimates, fetch_utxos, mempool_explorer_tx_url,
 };
+use crate::crypto::hd::format_bip86_path;
 use crate::protocol::keygen::{get_state_dir, HtssMetadata};
 use crate::protocol::signing::NonceOutput;
 use crate::storage::{FileStorage, Storage};
@@ -1075,7 +1076,7 @@ pub fn frost_sign_all_local(
     out.push_str(&format!("Amount: {} sats\n\n", amount_sats));
     let main_storage = FileStorage::new(&state_dir)?;
     let source_path = derivation_path
-        .map(|(change, index)| format!("m/86'/0'/0'/{}/{}", change, index))
+        .map(|(change, index)| format_bip86_path(network, change, index))
         .unwrap_or_else(|| "root key-path".to_string());
 
     let shared_key_bytes = main_storage
@@ -1515,5 +1516,17 @@ mod tests {
         assert_eq!(json["amount_sats"], 10_000);
         assert_eq!(json["fee_sats"], 200);
         assert_eq!(json["sighash_fingerprint"], "abc...def");
+    }
+
+    #[test]
+    fn hd_source_path_uses_test_chain_coin_type() {
+        assert_eq!(
+            crate::crypto::hd::format_bip86_path(bitcoin::Network::Testnet4, 0, 7),
+            "m/86'/1'/0'/0/7"
+        );
+        assert_eq!(
+            crate::crypto::hd::format_bip86_path(bitcoin::Network::Bitcoin, 0, 7),
+            "m/86'/0'/0'/0/7"
+        );
     }
 }

@@ -133,7 +133,11 @@ fn render_details_panel(
         Line::from(vec![
             Span::styled("  Path: ", Style::default().fg(Color::DarkGray)),
             Span::styled(
-                format!("m/86'/0'/0'/0/{}", index),
+                frostdao::crypto::hd::format_bip86_path(
+                    state.network.to_bitcoin_network(),
+                    0,
+                    index,
+                ),
                 Style::default().fg(Color::Cyan),
             ),
         ]),

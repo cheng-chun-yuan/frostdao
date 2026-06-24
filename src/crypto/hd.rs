@@ -21,6 +21,7 @@
 
 use crate::crypto::helpers::{construct_paired_secret_share, negate_paired_secret_share};
 use anyhow::Result;
+use bitcoin::Network;
 use hmac::{Hmac, Mac};
 use schnorr_fun::frost::PairedSecretShare;
 use secp256kfun::prelude::*;
@@ -75,8 +76,40 @@ impl DerivationPath {
 
     /// Format as full BIP-86 path (assuming Bitcoin mainnet account 0)
     pub fn to_full_string(&self) -> String {
-        format!("m/86'/0'/0'/{}/{}", self.change, self.address_index)
+        self.to_full_string_for_network(Network::Bitcoin)
     }
+
+    /// Format as full BIP-86 path for the selected network.
+    ///
+    /// The threshold derivation only uses the final non-hardened change/index
+    /// levels. The hardened account prefix is displayed for human review.
+    pub fn to_full_string_for_network(&self, network: Network) -> String {
+        format!(
+            "m/86'/{}'/0'/{}/{}",
+            bip86_coin_type(network),
+            self.change,
+            self.address_index
+        )
+    }
+}
+
+pub fn bip86_coin_type(network: Network) -> u32 {
+    match network {
+        Network::Bitcoin => 0,
+        Network::Testnet | Network::Testnet4 | Network::Signet | Network::Regtest => 1,
+    }
+}
+
+pub fn bip86_account_prefix(network: Network) -> String {
+    format!("m/86'/{}'/0'", bip86_coin_type(network))
+}
+
+pub fn format_bip86_path(network: Network, change: u32, address_index: u32) -> String {
+    DerivationPath {
+        change,
+        address_index,
+    }
+    .to_full_string_for_network(network)
 }
 
 impl fmt::Display for DerivationPath {
@@ -433,6 +466,18 @@ mod tests {
         };
         assert_eq!(path.to_string(), "0/5");
         assert_eq!(path.to_full_string(), "m/86'/0'/0'/0/5");
+        assert_eq!(
+            path.to_full_string_for_network(bitcoin::Network::Testnet),
+            "m/86'/1'/0'/0/5"
+        );
+        assert_eq!(
+            path.to_full_string_for_network(bitcoin::Network::Signet),
+            "m/86'/1'/0'/0/5"
+        );
+        assert_eq!(
+            path.to_full_string_for_network(bitcoin::Network::Regtest),
+            "m/86'/1'/0'/0/5"
+        );
 
         let change_path = DerivationPath::change(3);
         assert_eq!(change_path.to_full_string(), "m/86'/0'/0'/1/3");

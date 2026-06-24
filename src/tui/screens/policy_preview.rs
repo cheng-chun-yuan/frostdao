@@ -176,7 +176,9 @@ pub fn render_policy_preview(
     .block(Block::default().borders(Borders::ALL).title(" Policy "));
     frame.render_widget(header, chunks[0]);
 
-    render_agent_fields(frame, form, chunks[1]);
+    let account_prefix =
+        frostdao::crypto::hd::bip86_account_prefix(app.network.to_bitcoin_network());
+    render_agent_fields(frame, form, &account_prefix, chunks[1]);
     form.policy_input.render(
         frame,
         chunks[2],
@@ -232,7 +234,12 @@ pub fn render_policy_preview(
     frame.render_widget(help, chunks[4]);
 }
 
-fn render_agent_fields(frame: &mut Frame, form: &PolicyPreviewFormData, area: Rect) {
+fn render_agent_fields(
+    frame: &mut Frame,
+    form: &PolicyPreviewFormData,
+    account_prefix: &str,
+    area: Rect,
+) {
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -286,7 +293,7 @@ fn render_agent_fields(frame: &mut Frame, form: &PolicyPreviewFormData, area: Re
         form.focused_field == PolicyPreviewField::Recipient,
     );
 
-    let hint = Paragraph::new("Agent index maps to Frost HD path m/86'/0'/0'/0/<index>; each agent gets a distinct derived address from the same threshold wallet.")
+    let hint = Paragraph::new(format!("{account_prefix}/0/<index>: each agent gets a distinct derived address from the same threshold wallet."))
         .style(Style::default().fg(Color::DarkGray))
         .wrap(Wrap { trim: false });
     frame.render_widget(hint, rows[4]);

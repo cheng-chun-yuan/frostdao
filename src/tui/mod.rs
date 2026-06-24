@@ -153,6 +153,7 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
                 let wallet_name = wallet.name.clone();
                 app.state = AppState::AddressList(AddressListState {
                     wallet_name: wallet_name.clone(),
+                    network: app.network,
                     addresses: Vec::new(),
                     selected: 0,
                     error: None,
@@ -442,6 +443,8 @@ fn initialize_agent_payment_policy(app: &mut App) {
     } else {
         "draft_needs_dao_approval"
     };
+    let derivation_path =
+        frostdao::crypto::hd::format_bip86_path(app.network.to_bitcoin_network(), 0, agent_index);
     let draft = serde_json::json!({
         "type": "frostdao.agent_payment_init",
         "version": 1,
@@ -451,7 +454,7 @@ fn initialize_agent_payment_policy(app: &mut App) {
             "label": agent_label,
             "pubkey": agent_xonly_pubkey,
             "index": agent_index,
-            "derivation_path": format!("m/86'/0'/0'/0/{agent_index}"),
+            "derivation_path": derivation_path,
             "frost_key_path_address": frost_key_path_address,
             "frost_control_pubkey": frost_control_pubkey,
         },
@@ -587,6 +590,7 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
                 WalletAction::ViewAddresses => {
                     app.state = AppState::AddressList(AddressListState {
                         wallet_name: wallet_name.clone(),
+                        network: app.network,
                         addresses: Vec::new(),
                         selected: 0,
                         error: None,

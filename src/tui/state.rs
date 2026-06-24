@@ -161,6 +161,8 @@ pub struct WalletDetailsState {
 pub struct AddressListState {
     /// Wallet name
     pub wallet_name: String,
+    /// Network used for address/path display
+    pub network: NetworkSelection,
     /// Addresses loaded (address, pubkey_hex, index)
     pub addresses: Vec<(String, String, u32)>,
     /// Currently selected index

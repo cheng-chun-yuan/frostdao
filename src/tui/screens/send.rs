@@ -376,13 +376,19 @@ impl SendFormData {
     }
 }
 
+fn review_source_path(form: &SendFormData, network: bitcoin::Network) -> String {
+    form.get_derivation_path()
+        .map(|(change, index)| frostdao::crypto::hd::format_bip86_path(network, change, index))
+        .unwrap_or_else(|| "root key-path".to_string())
+}
+
 /// Render send wizard
 pub fn render_send(frame: &mut Frame, app: &App, form: &SendFormData, area: Rect) {
     if let crate::tui::state::AppState::Send(state) = &app.state {
         match state {
             SendState::SelectWallet => render_select_wallet(frame, app, form, area),
             SendState::SelectSigners { .. } => render_select_signers(frame, form, area),
-            SendState::SelectAddress { .. } => render_select_address(frame, form, area),
+            SendState::SelectAddress { .. } => render_select_address(frame, app, form, area),
             SendState::ConfigureScript { .. } => render_configure_script(frame, form, area),
             SendState::EnterDetails { .. } => render_enter_details(frame, form, area),
             SendState::ReviewTransaction { wallet_name } => {
@@ -898,7 +904,7 @@ fn render_htss_status(form: &SendFormData) -> Paragraph<'static> {
     )])
 }
 
-fn render_select_address(frame: &mut Frame, form: &SendFormData, area: Rect) {
+fn render_select_address(frame: &mut Frame, app: &App, form: &SendFormData, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan))
@@ -930,7 +936,15 @@ fn render_select_address(frame: &mut Frame, form: &SendFormData, area: Rect) {
             Line::from(""),
             Line::from(vec![
                 Span::styled("   BIP-86 Path: ", Style::default().fg(Color::Gray)),
-                Span::styled("m/86'/0'/0'/0/", Style::default().fg(Color::Cyan)),
+                Span::styled(
+                    format!(
+                        "{}/0/",
+                        frostdao::crypto::hd::bip86_account_prefix(
+                            app.network.to_bitcoin_network()
+                        )
+                    ),
+                    Style::default().fg(Color::Cyan),
+                ),
                 Span::styled("<index>", Style::default().fg(Color::Yellow)),
             ]),
         ])
@@ -1586,10 +1600,7 @@ fn render_review_transaction(
         .sum();
     let total_spend = amount.saturating_add(form.estimated_fee);
     let remaining = confirmed_balance.saturating_sub(total_spend);
-    let source_path = form
-        .get_derivation_path()
-        .map(|(change, index)| format!("m/86'/0'/0'/{}/{}", change, index))
-        .unwrap_or_else(|| "root key-path".to_string());
+    let source_path = review_source_path(form, app.network.to_bitcoin_network());
     let signer_list = form
         .get_selected_indices()
         .iter()
@@ -2272,5 +2283,26 @@ mod tests {
         assert!(rendered.contains("Threshold signature complete"));
         assert!(rendered.contains("Transaction assembly or broadcast may still be required"));
         assert!(!rendered.contains("would be broadcast"));
+    }
+
+    #[test]
+    fn review_source_path_uses_selected_test_chain_coin_type() {
+        let mut form = SendFormData::new();
+        form.hd_enabled = true;
+        form.use_hd_address = true;
+        form.hd_addresses = vec![("tb1ptest".to_string(), "pubkey".to_string(), 9)];
+
+        assert_eq!(
+            review_source_path(&form, bitcoin::Network::Signet),
+            "m/86'/1'/0'/0/9"
+        );
+        assert_eq!(
+            review_source_path(&form, bitcoin::Network::Regtest),
+            "m/86'/1'/0'/0/9"
+        );
+        assert_eq!(
+            review_source_path(&form, bitcoin::Network::Bitcoin),
+            "m/86'/0'/0'/0/9"
+        );
     }
 }
