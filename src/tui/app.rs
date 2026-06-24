@@ -25,50 +25,50 @@ const TUI_NOSTR_RELAYS_ENV: &str = "FROSTDAO_TUI_NOSTR_RELAYS";
 const TUI_MAINNET_NOSTR_ENV: &str = "FROSTDAO_ENABLE_MAINNET_NOSTR";
 
 pub enum TuiNostrRuntime {
-    Demo(frostdao::nostr::NostrRoomRuntime<frostdao::nostr::InMemoryRoomTransport>),
+    LocalSimulation(frostdao::nostr::NostrRoomRuntime<frostdao::nostr::InMemoryRoomTransport>),
     Relay(frostdao::nostr::NostrRoomRuntime<frostdao::nostr::RelayRoomTransport>),
 }
 
 impl TuiNostrRuntime {
     fn publish(&mut self, message: frostdao::nostr::NostrProtocolMessage) -> Result<()> {
         match self {
-            Self::Demo(runtime) => runtime.publish(message),
+            Self::LocalSimulation(runtime) => runtime.publish(message),
             Self::Relay(runtime) => runtime.publish(message),
         }
     }
 
     fn receive(&mut self, now: u64) -> Result<Vec<frostdao::nostr::NostrProtocolMessage>> {
         match self {
-            Self::Demo(runtime) => runtime.receive(now),
+            Self::LocalSimulation(runtime) => runtime.receive(now),
             Self::Relay(runtime) => runtime.receive(now),
         }
     }
 
     fn label(&self) -> &'static str {
         match self {
-            Self::Demo(_) => "local simulation",
+            Self::LocalSimulation(_) => "local simulation",
             Self::Relay(_) => "relay",
         }
     }
 
-    fn is_demo(&self) -> bool {
-        matches!(self, Self::Demo(_))
+    fn is_local_simulation(&self) -> bool {
+        matches!(self, Self::LocalSimulation(_))
     }
 
     #[cfg(test)]
-    fn demo_room_len(&self, room: &str) -> Option<usize> {
+    fn local_simulation_room_len(&self, room: &str) -> Option<usize> {
         match self {
-            Self::Demo(runtime) => Some(runtime.transport().room_len(room)),
+            Self::LocalSimulation(runtime) => Some(runtime.transport().room_len(room)),
             Self::Relay(_) => None,
         }
     }
 
-    fn publish_demo_message(
+    fn publish_local_simulation_message(
         &mut self,
         message: frostdao::nostr::NostrProtocolMessage,
     ) -> Result<()> {
         match self {
-            Self::Demo(runtime) => runtime.transport_mut().publish(message),
+            Self::LocalSimulation(runtime) => runtime.transport_mut().publish(message),
             Self::Relay(_) => {
                 anyhow::bail!("local participant simulation is unavailable in relay mode")
             }
@@ -543,7 +543,7 @@ impl App {
         let cache_path = self.nostr_replay_cache_path();
         let mut runtime = if relay_urls.is_empty() {
             let transport = frostdao::nostr::InMemoryRoomTransport::new();
-            TuiNostrRuntime::Demo(frostdao::nostr::NostrRoomRuntime::load(
+            TuiNostrRuntime::LocalSimulation(frostdao::nostr::NostrRoomRuntime::load(
                 self.nostr_room_id.clone(),
                 self.nostr_my_index,
                 transport,
@@ -606,10 +606,10 @@ impl App {
         }
     }
 
-    pub fn nostr_demo_transport_active(&self) -> bool {
+    pub fn nostr_local_simulation_transport_active(&self) -> bool {
         self.nostr_runtime
             .as_ref()
-            .map(TuiNostrRuntime::is_demo)
+            .map(TuiNostrRuntime::is_local_simulation)
             .unwrap_or_else(|| self.nostr_relay_urls_from_env().is_empty())
     }
 
@@ -1161,7 +1161,7 @@ impl App {
         Ok(())
     }
 
-    /// Publish a demo participant join into the active room transport.
+    /// Publish a local-simulation participant join into the active room transport.
     pub fn simulate_nostr_participant_join(&mut self, party_index: u32) -> Result<()> {
         let Some(runtime) = self.nostr_runtime.as_mut() else {
             anyhow::bail!("join a room before simulating participants");
@@ -1169,7 +1169,7 @@ impl App {
 
         let payload = frostdao::nostr::RoomJoinPayload {
             party_index,
-            nostr_pubkey: format!("npub-demo-{}", party_index),
+            nostr_pubkey: format!("npub-local-sim-{}", party_index),
             threshold: self.nostr_threshold,
             n_parties: self.nostr_n_parties,
             scheme: frostdao::nostr::ThresholdScheme::Tss,
@@ -1183,7 +1183,7 @@ impl App {
         )?
         .with_tss();
 
-        runtime.publish_demo_message(message)?;
+        runtime.publish_local_simulation_message(message)?;
         self.poll_nostr_room_runtime()?;
         Ok(())
     }
@@ -1977,7 +1977,7 @@ mod tests {
         assert!(app.nostr_connected);
         assert!(app.nostr_runtime.is_some());
         assert_eq!(app.nostr_transport_label(), "local simulation");
-        assert!(app.nostr_demo_transport_active());
+        assert!(app.nostr_local_simulation_transport_active());
         assert_eq!(app.nostr_participants.get(&1).unwrap(), "tui-party-1");
         assert!(!app.nostr_participants.contains_key(&9));
         assert!(app.nostr_pending_proposals.is_empty());
@@ -1992,7 +1992,7 @@ mod tests {
         assert!(cache_path.exists());
 
         app.simulate_nostr_participant_join(2).unwrap();
-        assert_eq!(app.nostr_participants.get(&2).unwrap(), "npub-demo-2");
+        assert_eq!(app.nostr_participants.get(&2).unwrap(), "npub-local-sim-2");
         app.nostr_pending_proposals
             .insert("active-session".to_string(), TxProposal::default());
         app.nostr_received_nonces.insert(
@@ -2065,7 +2065,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(mismatched_message)
+            .publish_local_simulation_message(mismatched_message)
             .unwrap();
 
         let wrong_threshold = frostdao::nostr::RoomJoinPayload {
@@ -2088,7 +2088,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(wrong_threshold_message)
+            .publish_local_simulation_message(wrong_threshold_message)
             .unwrap();
 
         let htss_join = frostdao::nostr::RoomJoinPayload {
@@ -2111,7 +2111,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(htss_message)
+            .publish_local_simulation_message(htss_message)
             .unwrap();
 
         app.poll_nostr_room_runtime().unwrap();
@@ -2119,7 +2119,7 @@ mod tests {
         assert!(!app.nostr_participants.contains_key(&3));
 
         app.simulate_nostr_participant_join(2).unwrap();
-        assert_eq!(app.nostr_participants.get(&2).unwrap(), "npub-demo-2");
+        assert_eq!(app.nostr_participants.get(&2).unwrap(), "npub-local-sim-2");
 
         let _ = std::fs::remove_file(&cache_path);
     }
@@ -2171,7 +2171,7 @@ mod tests {
             app.nostr_runtime
                 .as_ref()
                 .unwrap()
-                .demo_room_len(&app.nostr_room_id),
+                .local_simulation_room_len(&app.nostr_room_id),
             Some(2)
         );
 
@@ -2185,7 +2185,7 @@ mod tests {
             app.nostr_runtime
                 .as_ref()
                 .unwrap()
-                .demo_room_len(&app.nostr_room_id),
+                .local_simulation_room_len(&app.nostr_room_id),
             Some(3)
         );
 
@@ -2226,7 +2226,7 @@ mod tests {
             app.nostr_runtime
                 .as_ref()
                 .unwrap()
-                .demo_room_len(&app.nostr_room_id),
+                .local_simulation_room_len(&app.nostr_room_id),
             Some(6)
         );
 
@@ -2296,7 +2296,7 @@ mod tests {
             app.nostr_runtime
                 .as_ref()
                 .unwrap()
-                .demo_room_len(&app.nostr_room_id),
+                .local_simulation_room_len(&app.nostr_room_id),
             Some(1)
         );
 
@@ -2344,7 +2344,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(walletless_proposal)
+            .publish_local_simulation_message(walletless_proposal)
             .unwrap();
         let mut other_wallet_proposal_event = proposal_event.clone();
         other_wallet_proposal_event.timestamp += 1;
@@ -2361,7 +2361,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(other_wallet_proposal)
+            .publish_local_simulation_message(other_wallet_proposal)
             .unwrap();
         app.poll_nostr_room_runtime().unwrap();
         assert!(!app
@@ -2420,7 +2420,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(sessionless_consent)
+            .publish_local_simulation_message(sessionless_consent)
             .unwrap();
 
         let mismatched_consent = frostdao::nostr::NostrProtocolMessage::new(
@@ -2436,7 +2436,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(mismatched_consent)
+            .publish_local_simulation_message(mismatched_consent)
             .unwrap();
         let wrong_wallet_consent = frostdao::nostr::NostrProtocolMessage::new(
             app.nostr_room_id.clone(),
@@ -2451,7 +2451,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(wrong_wallet_consent)
+            .publish_local_simulation_message(wrong_wallet_consent)
             .unwrap();
         let wrong_fingerprint_consent_event = frostdao::nostr::TxConsentEvent {
             proposal_session: proposal.session_id.clone(),
@@ -2472,7 +2472,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(wrong_fingerprint_consent)
+            .publish_local_simulation_message(wrong_fingerprint_consent)
             .unwrap();
         let out_of_room_consent = frostdao::nostr::NostrProtocolMessage::new(
             app.nostr_room_id.clone(),
@@ -2487,7 +2487,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(out_of_room_consent)
+            .publish_local_simulation_message(out_of_room_consent)
             .unwrap();
         app.poll_nostr_room_runtime().unwrap();
         if let NostrSignState::WaitingForConsent {
@@ -2518,7 +2518,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(sessionless_nonce)
+            .publish_local_simulation_message(sessionless_nonce)
             .unwrap();
         app.poll_nostr_room_runtime().unwrap();
         assert!(app.nostr_received_nonces.is_empty());
@@ -2545,7 +2545,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(sessionless_share)
+            .publish_local_simulation_message(sessionless_share)
             .unwrap();
         app.poll_nostr_room_runtime().unwrap();
         assert!(app.nostr_received_shares.is_empty());
@@ -2579,7 +2579,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(sessionless_broadcast)
+            .publish_local_simulation_message(sessionless_broadcast)
             .unwrap();
         app.poll_nostr_room_runtime().unwrap();
         assert!(app.nostr_broadcasts.is_empty());
@@ -2618,7 +2618,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(mismatched_message)
+            .publish_local_simulation_message(mismatched_message)
             .unwrap();
 
         let mut zero_amount = valid_remote_proposal_event(2);
@@ -2637,7 +2637,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(zero_amount_message)
+            .publish_local_simulation_message(zero_amount_message)
             .unwrap();
 
         let mut wrong_network = valid_remote_proposal_event(2);
@@ -2655,7 +2655,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(wrong_network_message)
+            .publish_local_simulation_message(wrong_network_message)
             .unwrap();
 
         let mut wrong_fingerprint = valid_remote_proposal_event(2);
@@ -2673,7 +2673,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(wrong_fingerprint_message)
+            .publish_local_simulation_message(wrong_fingerprint_message)
             .unwrap();
 
         let valid = valid_remote_proposal_event(2);
@@ -2690,7 +2690,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(valid_message)
+            .publish_local_simulation_message(valid_message)
             .unwrap();
 
         app.poll_nostr_room_runtime().unwrap();
@@ -2747,7 +2747,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(mismatched_nonce_message)
+            .publish_local_simulation_message(mismatched_nonce_message)
             .unwrap();
 
         let wrong_payload_recipient =
@@ -2767,7 +2767,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(wrong_payload_recipient_message)
+            .publish_local_simulation_message(wrong_payload_recipient_message)
             .unwrap();
 
         let out_of_room_share =
@@ -2787,7 +2787,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(out_of_room_share_message)
+            .publish_local_simulation_message(out_of_room_share_message)
             .unwrap();
 
         app.nostr_sign_state = NostrSignState::CollectingShares {
@@ -2825,7 +2825,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(early_share_message)
+            .publish_local_simulation_message(early_share_message)
             .unwrap();
         app.poll_nostr_room_runtime().unwrap();
         assert!(app.nostr_received_shares.is_empty());
@@ -2854,7 +2854,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(valid_nonce_message)
+            .publish_local_simulation_message(valid_nonce_message)
             .unwrap();
 
         let second_valid_nonce =
@@ -2874,7 +2874,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(second_valid_nonce_message)
+            .publish_local_simulation_message(second_valid_nonce_message)
             .unwrap();
 
         let valid_share = frostdao::nostr::SigningShareEvent::new(2, 1, "good-share".to_string());
@@ -2893,7 +2893,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(valid_share_message)
+            .publish_local_simulation_message(valid_share_message)
             .unwrap();
 
         app.poll_nostr_room_runtime().unwrap();
@@ -2976,7 +2976,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(proposal_message)
+            .publish_local_simulation_message(proposal_message)
             .unwrap();
 
         app.poll_nostr_room_runtime().unwrap();
@@ -3015,7 +3015,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(consent_message)
+            .publish_local_simulation_message(consent_message)
             .unwrap();
 
         app.poll_nostr_room_runtime().unwrap();
@@ -3045,7 +3045,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(nonce_message)
+            .publish_local_simulation_message(nonce_message)
             .unwrap();
         app.poll_nostr_room_runtime().unwrap();
         assert_eq!(
@@ -3090,7 +3090,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(share_message)
+            .publish_local_simulation_message(share_message)
             .unwrap();
         app.poll_nostr_room_runtime().unwrap();
         assert_eq!(
@@ -3128,7 +3128,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(wrong_wallet_message)
+            .publish_local_simulation_message(wrong_wallet_message)
             .unwrap();
 
         let mut wrong_network_broadcast = valid_broadcast_event_with_value(1_002);
@@ -3146,7 +3146,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(wrong_network_message)
+            .publish_local_simulation_message(wrong_network_message)
             .unwrap();
 
         let mut wrong_txid_broadcast = valid_broadcast_event_with_value(1_003);
@@ -3165,7 +3165,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(wrong_txid_message)
+            .publish_local_simulation_message(wrong_txid_message)
             .unwrap();
 
         let mut invalid_raw_broadcast = valid_broadcast_event_with_value(1_004);
@@ -3183,7 +3183,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(invalid_raw_message)
+            .publish_local_simulation_message(invalid_raw_message)
             .unwrap();
 
         app.poll_nostr_room_runtime().unwrap();
@@ -3207,7 +3207,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(broadcast_message)
+            .publish_local_simulation_message(broadcast_message)
             .unwrap();
         app.poll_nostr_room_runtime().unwrap();
         assert_eq!(
@@ -3294,7 +3294,7 @@ mod tests {
         app.nostr_runtime
             .as_mut()
             .unwrap()
-            .publish_demo_message(rejection_message)
+            .publish_local_simulation_message(rejection_message)
             .unwrap();
 
         app.poll_nostr_room_runtime().unwrap();

@@ -2449,7 +2449,7 @@ fn handle_nostr_room_waiting(app: &mut App, key: KeyEvent) {
             app.set_message("Left room");
         }
         KeyCode::Char(' ') => {
-            if app.nostr_demo_transport_active() {
+            if app.nostr_local_simulation_transport_active() {
                 simulate_participant_join(app);
             } else {
                 app.set_message(

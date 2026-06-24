@@ -324,7 +324,7 @@ def check_replay_cache_persistence():
         "pub enum TuiNostrRuntime",
         "join_nostr_room_runtime",
         "join_nostr_room_runtime_with_relays",
-        "nostr_demo_transport_active",
+        "nostr_local_simulation_transport_active",
         "local simulation",
         "FROSTDAO_TUI_NOSTR_RELAYS",
         "FROSTDAO_ENABLE_MAINNET_NOSTR",

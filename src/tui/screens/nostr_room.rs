@@ -200,7 +200,7 @@ fn render_waiting(frame: &mut Frame, app: &App, area: Rect) {
         )]),
         Line::from(""),
     ];
-    if app.nostr_demo_transport_active() {
+    if app.nostr_local_simulation_transport_active() {
         help_lines.push(Line::from(vec![
             Span::styled("Space", Style::default().fg(Color::Yellow)),
             Span::raw(": Simulate participant locally  "),
@@ -312,7 +312,7 @@ fn room_info_line(app: &App) -> Line<'static> {
         Span::styled("Transport: ", Style::default().fg(Color::Gray)),
         Span::styled(
             app.nostr_transport_label(),
-            if app.nostr_demo_transport_active() {
+            if app.nostr_local_simulation_transport_active() {
                 Style::default().fg(Color::Yellow)
             } else {
                 Style::default().fg(Color::Green)
