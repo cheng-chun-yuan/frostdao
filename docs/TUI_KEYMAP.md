@@ -187,6 +187,7 @@ with explicit mainnet opt-in after offline review. If broadcast fails, use
 | `Esc` | Cancel/back |
 
 The TUI does not provide a mnemonic copy shortcut. This keeps backup words deliberate and avoids accidental clipboard persistence.
+After writing the words down, verify them with `frostdao dkg-verify-mnemonic --name <wallet> --words '<24 words>'` before relying on the backup. Keep the public backup manifest with your wallet inventory; it is not secret.
 
 ## Copyable Outputs
 

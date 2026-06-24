@@ -177,6 +177,18 @@ fn mnemonic_warning_lines() -> Vec<Line<'static>> {
             "• No clipboard or copy shortcut is available for backup words",
             Style::default().fg(Color::Gray),
         )),
+        Line::from(Span::styled(
+            "• Keep the public backup manifest with your inventory",
+            Style::default().fg(Color::Gray),
+        )),
+        Line::from(Span::styled(
+            "• Verify the written words before relying on this backup",
+            Style::default().fg(Color::Gray),
+        )),
+        Line::from(Span::styled(
+            "  frostdao dkg-verify-mnemonic --name <wallet> --words '<24 words>'",
+            Style::default().fg(Color::Cyan),
+        )),
         Line::from(""),
         Line::from(""),
         Line::from(Span::styled(
@@ -229,6 +241,10 @@ fn mnemonic_reveal_footer_lines() -> Vec<Line<'static>> {
             "threshold parties to reconstruct the group signing key.",
             Style::default().fg(Color::White),
         )),
+        Line::from(Span::styled(
+            "Before relying on this backup, verify the written words with dkg-verify-mnemonic.",
+            Style::default().fg(Color::Yellow),
+        )),
         Line::from(""),
         Line::from(Span::styled(
             "Press Enter when done",
@@ -262,6 +278,8 @@ mod tests {
         assert!(rendered.contains("NOT the full group key"));
         assert!(rendered.contains("threshold cooperation"));
         assert!(rendered.contains("No clipboard or copy shortcut"));
+        assert!(rendered.contains("public backup manifest"));
+        assert!(rendered.contains("dkg-verify-mnemonic"));
     }
 
     #[test]
@@ -274,5 +292,7 @@ mod tests {
         assert!(rendered.contains("keep these words offline"));
         assert!(rendered.contains("YOUR share only"));
         assert!(rendered.contains("threshold parties"));
+        assert!(rendered.contains("Before relying on this backup"));
+        assert!(rendered.contains("dkg-verify-mnemonic"));
     }
 }

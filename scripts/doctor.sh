@@ -557,8 +557,11 @@ def check_mnemonic_backup_ux():
         ("src/tui/screens/mnemonic.rs", screen, "No copy shortcut is provided"),
         ("src/tui/screens/mnemonic.rs", screen, "YOUR SECRET SHARE"),
         ("src/tui/screens/mnemonic.rs", screen, "NOT the full group key"),
+        ("src/tui/screens/mnemonic.rs", screen, "public backup manifest"),
+        ("src/tui/screens/mnemonic.rs", screen, "dkg-verify-mnemonic"),
         ("src/tui/screens/mnemonic.rs", screen, "mnemonic_warning_explains_share_scope_and_no_clipboard"),
         ("docs/TUI_KEYMAP.md", keymap, "does not provide a mnemonic copy shortcut"),
+        ("docs/TUI_KEYMAP.md", keymap, "dkg-verify-mnemonic"),
         ("docs/SECURITY_MODEL.md", security, "equivalent to that party's local secret share"),
     ]
     missing = [f"{path}: {marker}" for path, content, marker in required if marker not in content]
