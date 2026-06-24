@@ -46,9 +46,13 @@ impl TuiNostrRuntime {
 
     fn label(&self) -> &'static str {
         match self {
-            Self::Demo(_) => "demo",
+            Self::Demo(_) => "local simulation",
             Self::Relay(_) => "relay",
         }
+    }
+
+    fn is_demo(&self) -> bool {
+        matches!(self, Self::Demo(_))
     }
 
     #[cfg(test)]
@@ -66,7 +70,7 @@ impl TuiNostrRuntime {
         match self {
             Self::Demo(runtime) => runtime.transport_mut().publish(message),
             Self::Relay(_) => {
-                anyhow::bail!("demo participant simulation is unavailable in relay mode")
+                anyhow::bail!("local participant simulation is unavailable in relay mode")
             }
         }
     }
@@ -527,7 +531,7 @@ impl App {
         self.join_nostr_room_runtime_with_relays(relay_urls)
     }
 
-    /// Join the configured room with explicit relay URLs. Empty relays use demo mode.
+    /// Join the configured room with explicit relay URLs. Empty relays use local simulation mode.
     pub fn join_nostr_room_runtime_with_relays(&mut self, relay_urls: Vec<String>) -> Result<()> {
         let cache_path = self.nostr_replay_cache_path();
         let mut runtime = if relay_urls.is_empty() {
@@ -589,10 +593,17 @@ impl App {
 
         let relays = self.nostr_relay_urls_from_env();
         if relays.is_empty() {
-            "demo".to_string()
+            "local simulation".to_string()
         } else {
             format!("relay ({})", relays.join(","))
         }
+    }
+
+    pub fn nostr_demo_transport_active(&self) -> bool {
+        self.nostr_runtime
+            .as_ref()
+            .map(TuiNostrRuntime::is_demo)
+            .unwrap_or_else(|| self.nostr_relay_urls_from_env().is_empty())
     }
 
     fn nostr_relay_urls_from_env(&self) -> Vec<String> {
@@ -1933,7 +1944,8 @@ mod tests {
         app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
         assert!(app.nostr_connected);
         assert!(app.nostr_runtime.is_some());
-        assert_eq!(app.nostr_transport_label(), "demo");
+        assert_eq!(app.nostr_transport_label(), "local simulation");
+        assert!(app.nostr_demo_transport_active());
         assert_eq!(app.nostr_participants.get(&1).unwrap(), "tui-party-1");
         assert!(!app.nostr_participants.contains_key(&9));
         assert!(app.nostr_pending_proposals.is_empty());

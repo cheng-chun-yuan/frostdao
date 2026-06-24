@@ -186,40 +186,35 @@ fn render_waiting(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(gauge, chunks[1]);
 
     // Room info
-    let room_info = Paragraph::new(Line::from(vec![
-        Span::styled("Room: ", Style::default().fg(Color::Gray)),
-        Span::styled(&app.nostr_room_id, Style::default().fg(Color::Cyan)),
-        Span::raw("  |  "),
-        Span::styled("You are: ", Style::default().fg(Color::Gray)),
-        Span::styled(
-            format!("Party {}", app.nostr_my_index),
-            Style::default()
-                .fg(Color::Magenta)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw("  |  "),
-        Span::styled(
-            format!("{}-of-{}", app.nostr_threshold, app.nostr_n_parties),
-            Style::default().fg(Color::Yellow),
-        ),
-    ]));
+    let room_info = Paragraph::new(room_info_line(app));
     frame.render_widget(room_info, chunks[2]);
 
     // Participant list
     render_participant_list(frame, app, chunks[3]);
 
     // Help
-    let help_lines = vec![
+    let mut help_lines = vec![
         Line::from(vec![Span::styled(
             "Waiting for all participants to join...",
             Style::default().fg(Color::Yellow),
         )]),
         Line::from(""),
-        Line::from(vec![
+    ];
+    if app.nostr_demo_transport_active() {
+        help_lines.push(Line::from(vec![
+            Span::styled("Space", Style::default().fg(Color::Yellow)),
+            Span::raw(": Simulate participant locally  "),
             Span::styled("Esc", Style::default().fg(Color::Yellow)),
             Span::raw(": Leave room"),
-        ]),
-    ];
+        ]));
+    } else {
+        help_lines.push(Line::from(vec![
+            Span::styled("Relay transport", Style::default().fg(Color::Cyan)),
+            Span::raw(": waiting for real devices  "),
+            Span::styled("Esc", Style::default().fg(Color::Yellow)),
+            Span::raw(": Leave room"),
+        ]));
+    }
     let help = Paragraph::new(help_lines).block(
         Block::default()
             .borders(Borders::TOP)
@@ -266,23 +261,7 @@ fn render_ready(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(gauge, chunks[1]);
 
     // Room info
-    let room_info = Paragraph::new(Line::from(vec![
-        Span::styled("Room: ", Style::default().fg(Color::Gray)),
-        Span::styled(&app.nostr_room_id, Style::default().fg(Color::Cyan)),
-        Span::raw("  |  "),
-        Span::styled("You are: ", Style::default().fg(Color::Gray)),
-        Span::styled(
-            format!("Party {}", app.nostr_my_index),
-            Style::default()
-                .fg(Color::Magenta)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw("  |  "),
-        Span::styled(
-            format!("{}-of-{}", app.nostr_threshold, app.nostr_n_parties),
-            Style::default().fg(Color::Yellow),
-        ),
-    ]));
+    let room_info = Paragraph::new(room_info_line(app));
     frame.render_widget(room_info, chunks[2]);
 
     // Participant list
@@ -310,6 +289,36 @@ fn render_ready(frame: &mut Frame, app: &App, area: Rect) {
             .border_style(Style::default().fg(Color::DarkGray)),
     );
     frame.render_widget(help, chunks[4]);
+}
+
+fn room_info_line(app: &App) -> Line<'static> {
+    Line::from(vec![
+        Span::styled("Room: ", Style::default().fg(Color::Gray)),
+        Span::styled(app.nostr_room_id.clone(), Style::default().fg(Color::Cyan)),
+        Span::raw("  |  "),
+        Span::styled("You are: ", Style::default().fg(Color::Gray)),
+        Span::styled(
+            format!("Party {}", app.nostr_my_index),
+            Style::default()
+                .fg(Color::Magenta)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("  |  "),
+        Span::styled(
+            format!("{}-of-{}", app.nostr_threshold, app.nostr_n_parties),
+            Style::default().fg(Color::Yellow),
+        ),
+        Span::raw("  |  "),
+        Span::styled("Transport: ", Style::default().fg(Color::Gray)),
+        Span::styled(
+            app.nostr_transport_label(),
+            if app.nostr_demo_transport_active() {
+                Style::default().fg(Color::Yellow)
+            } else {
+                Style::default().fg(Color::Green)
+            },
+        ),
+    ])
 }
 
 fn render_participant_list(frame: &mut Frame, app: &App, area: Rect) {
@@ -392,4 +401,33 @@ fn render_text_field(frame: &mut Frame, area: Rect, label: &str, value: &str, fo
     );
 
     frame.render_widget(content, area);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn line_to_string(line: Line<'_>) -> String {
+        line.spans
+            .into_iter()
+            .map(|span| span.content.into_owned())
+            .collect::<String>()
+    }
+
+    #[test]
+    fn room_info_labels_local_simulation_transport() {
+        let mut app = App::new().unwrap();
+        app.nostr_room_id = "treasury-room".to_string();
+        app.nostr_my_index = 2;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 3;
+
+        let rendered = line_to_string(room_info_line(&app));
+
+        assert!(rendered.contains("Room: treasury-room"));
+        assert!(rendered.contains("You are: Party 2"));
+        assert!(rendered.contains("2-of-3"));
+        assert!(rendered.contains("Transport: local simulation"));
+        assert!(!rendered.contains("demo"));
+    }
 }

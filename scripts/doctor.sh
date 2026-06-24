@@ -289,6 +289,7 @@ def check_replay_cache_persistence():
     docs = read(Path("docs/NOSTR_PROTOCOL.md"))
     run_guide = read(Path("docs/RUN_GUIDE.md"))
     production = read(Path("docs/PRODUCTION_READINESS.md"))
+    keymap = read(Path("docs/TUI_KEYMAP.md"))
     required = [
         "pub struct FileReplayCache",
         "pub struct NostrRoomRuntime",
@@ -323,6 +324,8 @@ def check_replay_cache_persistence():
         "pub enum TuiNostrRuntime",
         "join_nostr_room_runtime",
         "join_nostr_room_runtime_with_relays",
+        "nostr_demo_transport_active",
+        "local simulation",
         "FROSTDAO_TUI_NOSTR_RELAYS",
         "FROSTDAO_ENABLE_MAINNET_NOSTR",
         "tui_nostr_relay_mode_is_guarded_on_mainnet",
@@ -334,6 +337,14 @@ def check_replay_cache_persistence():
         "tui_nostr_room_uses_runtime_and_replay_cache",
     ]
     missing.extend([f"src/tui/app.rs: {item}" for item in app_required if item not in app])
+    tui_room = read(Path("src/tui/screens/nostr_room.rs"))
+    room_required = [
+        "Transport: ",
+        "local simulation",
+        "Relay transport",
+        "room_info_labels_local_simulation_transport",
+    ]
+    missing.extend([f"src/tui/screens/nostr_room.rs: {item}" for item in room_required if item not in tui_room])
     for marker in ["NostrRoomRuntime", "FileReplayCache", "RelayRoomTransport"]:
         if marker not in docs:
             missing.append(f"NOSTR_PROTOCOL {marker} documentation")
@@ -349,6 +360,10 @@ def check_replay_cache_persistence():
         missing.append("RUN_GUIDE ciphertext payload binding documentation")
     if "relay transport adapter" not in run_guide:
         missing.append("RUN_GUIDE relay transport adapter documentation")
+    if "local simulation transport" not in run_guide:
+        missing.append("RUN_GUIDE local simulation transport documentation")
+    if "local simulation mode" not in keymap:
+        missing.append("TUI_KEYMAP local simulation mode documentation")
     if "FROSTDAO_TUI_NOSTR_RELAYS" not in run_guide:
         missing.append("RUN_GUIDE relay opt-in env documentation")
     if "FROSTDAO_ENABLE_MAINNET_NOSTR=1" not in run_guide:

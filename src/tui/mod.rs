@@ -2329,7 +2329,7 @@ fn handle_nostr_room_configure(app: &mut App, key: KeyEvent) {
                 }
             }
 
-            // Check if already have all participants (demo: simulate others joining)
+            // Check if already have all participants in local simulation.
             check_participants_ready(app);
         }
         KeyCode::Char(c) => match app.nostr_room_focus {
@@ -2409,8 +2409,13 @@ fn handle_nostr_room_waiting(app: &mut App, key: KeyEvent) {
             app.set_message("Left room");
         }
         KeyCode::Char(' ') => {
-            // Demo: simulate another participant joining
-            simulate_participant_join(app);
+            if app.nostr_demo_transport_active() {
+                simulate_participant_join(app);
+            } else {
+                app.set_message(
+                    "Relay room: wait for real participants; local simulation disabled",
+                );
+            }
         }
         _ => {}
     }
@@ -2446,7 +2451,7 @@ fn check_participants_ready(app: &mut App) {
     }
 }
 
-/// Demo: simulate a participant joining
+/// Local simulation: simulate a participant joining.
 fn simulate_participant_join(app: &mut App) {
     // Find next missing participant
     for i in 1..=app.nostr_n_parties {

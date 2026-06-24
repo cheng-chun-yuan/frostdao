@@ -199,7 +199,7 @@ The policy input remains editable. Use the templates as starting points, then ty
 | Configure | `Tab` | Next field |
 | Configure | `Enter` | Join room |
 | Configure | `Esc` | Back |
-| Waiting | `Space` | Simulate participant join in local demo mode |
+| Waiting | `Space` | Simulate participant join in local simulation mode |
 | Waiting | `Esc` | Leave room |
 | Ready | `k` | Start distributed keygen |
 | Ready | `s` | Start distributed signing |
