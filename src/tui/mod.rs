@@ -71,6 +71,10 @@ pub fn run_tui() -> Result<()> {
     Ok(())
 }
 
+fn is_copy_key(code: &KeyCode) -> bool {
+    matches!(code, KeyCode::Char('c') | KeyCode::Char('C'))
+}
+
 fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> {
     loop {
         terminal.draw(|f| ui(f, app))?;
@@ -120,7 +124,7 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
                 app.set_message("No wallet selected");
             }
         }
-        KeyCode::Char('r') => app.refresh_balance(),
+        KeyCode::Char('r') | KeyCode::F(5) => app.refresh_balance(),
         KeyCode::Char('R') => app.reload_wallets(),
         KeyCode::Char('n') => {
             app.chain_selector_index = match app.network {
@@ -223,7 +227,7 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
                 app.set_message("Select a wallet first to backup");
             }
         }
-        KeyCode::Char('c') => {
+        code if is_copy_key(&code) => {
             // Copy wallet address
             let addr = app
                 .selected_wallet()
@@ -269,7 +273,7 @@ fn handle_policy_preview_keys(app: &mut App, key: KeyEvent) {
         KeyCode::Enter => {
             initialize_agent_payment_policy(app);
         }
-        KeyCode::Char('c') if !app.policy_preview_form.output.trim().is_empty() => {
+        code if is_copy_key(&code) && !app.policy_preview_form.output.trim().is_empty() => {
             let output = app.policy_preview_form.output.clone();
             app.copy_to_clipboard(&output);
         }
@@ -690,7 +694,7 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
                 }
             }
         }
-        KeyCode::Char('c') => {
+        code if is_copy_key(&code) => {
             // Copy wallet address to clipboard
             let addr_to_copy = app
                 .wallets
@@ -894,7 +898,7 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
                 app.keygen_form = screens::KeygenFormData::new();
                 app.state = AppState::Home;
             }
-            KeyCode::Char('c') => {
+            code if is_copy_key(&code) => {
                 let output = app.keygen_form.round1_output.clone();
                 app.copy_to_clipboard(&output);
             }
@@ -946,7 +950,7 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
             KeyCode::Esc => {
                 app.state = AppState::Keygen(KeygenState::Round2Input);
             }
-            KeyCode::Char('c') => {
+            code if is_copy_key(&code) => {
                 let output = app.keygen_form.round2_output.clone();
                 app.copy_to_clipboard(&output);
             }
@@ -1315,7 +1319,7 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
                 app.reshare_form = ReshareFormData::new();
                 app.state = AppState::Home;
             }
-            KeyCode::Char('c') => {
+            code if is_copy_key(&code) => {
                 let output = app.reshare_form.round1_output.clone();
                 app.copy_to_clipboard(&output);
             }
@@ -1908,7 +1912,7 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     wallet_name: wallet_name.clone(),
                 });
             }
-            KeyCode::Char('c') => {
+            code if is_copy_key(&code) => {
                 app.copy_to_clipboard(&sighash);
             }
             KeyCode::Enter => {
@@ -1949,7 +1953,7 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     session_id,
                 });
             }
-            KeyCode::Char('c') => {
+            code if is_copy_key(&code) => {
                 app.copy_to_clipboard(&nonce_output);
             }
             KeyCode::Enter => {
@@ -2038,7 +2042,7 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 app.send_form = SendFormData::new();
                 app.state = AppState::Home;
             }
-            KeyCode::Char('c') => {
+            code if is_copy_key(&code) => {
                 app.copy_to_clipboard(&share_output);
             }
             KeyCode::Enter => {
@@ -2108,7 +2112,7 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 app.send_form = SendFormData::new();
                 app.state = AppState::Home;
             }
-            KeyCode::Char('c') => {
+            code if is_copy_key(&code) => {
                 app.copy_to_clipboard(raw_tx.as_deref().unwrap_or(&txid));
             }
             _ => {}
@@ -2136,7 +2140,7 @@ fn handle_address_list_keys(app: &mut App, code: KeyCode) {
                 }
             }
         }
-        KeyCode::Char('c') => {
+        code if is_copy_key(&code) => {
             // Copy selected address to clipboard
             let addr_to_copy = if let AppState::AddressList(ref state) = app.state {
                 state
@@ -2831,7 +2835,7 @@ fn handle_nostr_sign_keys(app: &mut App, key: KeyEvent) {
                 };
             }
         }
-        KeyCode::Char('c') | KeyCode::Char('C') => {
+        code if is_copy_key(&code) => {
             // Select Consent role or copy TXID
             match &app.nostr_sign_state {
                 NostrSignState::SelectRole { wallet_name } => {
@@ -3036,11 +3040,11 @@ fn help_bar_text(app: &App) -> String {
 fn home_help_bar_text() -> String {
     #[cfg(feature = "miniscript-policy")]
     {
-        "↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | r:Balance | c:Copy | q:Quit".to_string()
+        "↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | r/F5:Balance | c:Copy | q:Quit".to_string()
     }
     #[cfg(not(feature = "miniscript-policy"))]
     {
-        "↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | r:Balance | c:Copy | q:Quit"
+        "↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | r/F5:Balance | c:Copy | q:Quit"
             .to_string()
     }
 }
@@ -3084,7 +3088,7 @@ mod tests {
         let app = App::new().unwrap();
         let help = help_bar_text(&app);
 
-        assert!(help.contains("r:Balance"));
+        assert!(help.contains("r/F5:Balance"));
         assert!(help.contains("Enter:Select"));
         assert!(help.contains("c:Copy"));
     }

@@ -373,6 +373,204 @@ fn test_resharing_preserves_address() {
     cleanup_wallet(&prefix);
 }
 
+#[test]
+fn test_reshare_preserves_hd_address_control() {
+    let prefix = get_unique_prefix();
+    let wallet1 = format!("{}_p1", prefix);
+    let wallet2 = format!("{}_p2", prefix);
+    let new_wallet = format!("{}_new", prefix);
+
+    let parse_hd_address = |output: &str| -> String {
+        output
+            .lines()
+            .find_map(|line| {
+                let line = line.trim();
+                line.strip_prefix("Address: ")
+                    .map(|value| value.to_string())
+            })
+            .unwrap_or_else(|| panic!("Missing Address line in output: {output}"))
+    };
+
+    // Create 2-of-2 wallet
+    let r1_p1 = Command::new(frostdao_bin())
+        .args([
+            "keygen-round1",
+            "--name",
+            &wallet1,
+            "--threshold",
+            "2",
+            "--n-parties",
+            "2",
+            "--my-index",
+            "1",
+        ])
+        .output()
+        .expect("keygen-round1 failed");
+    assert!(r1_p1.status.success(), "p1 r1 failed");
+    let commit1 = extract_json(&String::from_utf8_lossy(&r1_p1.stdout)).unwrap();
+
+    let r1_p2 = Command::new(frostdao_bin())
+        .args([
+            "keygen-round1",
+            "--name",
+            &wallet2,
+            "--threshold",
+            "2",
+            "--n-parties",
+            "2",
+            "--my-index",
+            "2",
+        ])
+        .output()
+        .expect("keygen-round1 failed");
+    assert!(r1_p2.status.success(), "p2 r1 failed");
+    let commit2 = extract_json(&String::from_utf8_lossy(&r1_p2.stdout)).unwrap();
+
+    let commits = format!("{} {}", commit1, commit2);
+
+    let r2_p1 = Command::new(frostdao_bin())
+        .args(["keygen-round2", "--name", &wallet1, "--data", &commits])
+        .output()
+        .expect("keygen-round2 failed");
+    assert!(r2_p1.status.success(), "p1 r2 failed");
+    let shares1 = extract_json(&String::from_utf8_lossy(&r2_p1.stdout)).unwrap();
+
+    let r2_p2 = Command::new(frostdao_bin())
+        .args(["keygen-round2", "--name", &wallet2, "--data", &commits])
+        .output()
+        .expect("keygen-round2 failed");
+    assert!(r2_p2.status.success(), "p2 r2 failed");
+    let shares2 = extract_json(&String::from_utf8_lossy(&r2_p2.stdout)).unwrap();
+
+    let shares = format!("{} {}", shares1, shares2);
+
+    let fin1 = Command::new(frostdao_bin())
+        .args(["keygen-finalize", "--name", &wallet1, "--data", &shares])
+        .output()
+        .expect("keygen-finalize failed");
+    assert!(fin1.status.success(), "p1 finalize failed");
+
+    let fin2 = Command::new(frostdao_bin())
+        .args(["keygen-finalize", "--name", &wallet2, "--data", &shares])
+        .output()
+        .expect("keygen-finalize failed");
+    assert!(fin2.status.success(), "p2 finalize failed");
+
+    let source_hd_path = format!(".frost_state/{}/hd_metadata.json", wallet1);
+    let source_hd_content =
+        fs::read_to_string(&source_hd_path).expect("source hd_metadata.json should exist");
+    let source_hd: serde_json::Value = serde_json::from_str(&source_hd_content).unwrap();
+    assert!(source_hd["hd_enabled"].as_bool().unwrap_or(false));
+
+    let source_hd_address = Command::new(frostdao_bin())
+        .args([
+            "dkg-derive-address",
+            "--name",
+            &wallet1,
+            "--change",
+            "0",
+            "--index",
+            "4",
+            "--network",
+            "testnet",
+        ])
+        .output()
+        .expect("dkg-derive-address failed");
+    assert!(
+        source_hd_address.status.success(),
+        "source derive address failed"
+    );
+    let source_hd_output = String::from_utf8_lossy(&source_hd_address.stdout);
+    let source_hd_addr = parse_hd_address(&source_hd_output);
+
+    let reshare1 = Command::new(frostdao_bin())
+        .args([
+            "reshare-round1",
+            "--source",
+            &wallet1,
+            "--new-threshold",
+            "2",
+            "--new-n-parties",
+            "2",
+            "--my-index",
+            "1",
+        ])
+        .output()
+        .expect("reshare-round1 failed");
+    assert!(reshare1.status.success(), "reshare1 failed");
+    let sub1 = extract_json(&String::from_utf8_lossy(&reshare1.stdout)).unwrap();
+
+    let reshare2 = Command::new(frostdao_bin())
+        .args([
+            "reshare-round1",
+            "--source",
+            &wallet2,
+            "--new-threshold",
+            "2",
+            "--new-n-parties",
+            "2",
+            "--my-index",
+            "2",
+        ])
+        .output()
+        .expect("reshare-round1 failed");
+    assert!(reshare2.status.success(), "reshare2 failed");
+    let sub2 = extract_json(&String::from_utf8_lossy(&reshare2.stdout)).unwrap();
+
+    let reshare_data = format!("{} {}", sub1, sub2);
+
+    let finalize = Command::new("sh")
+        .args([
+            "-c",
+            &format!(
+                "echo 'y' | {} reshare-finalize --source {} --target {} --my-index 1 --data '{}'",
+                frostdao_bin(),
+                wallet1,
+                new_wallet,
+                reshare_data
+            ),
+        ])
+        .output()
+        .expect("reshare-finalize failed");
+    assert!(finalize.status.success(), "reshare-finalize failed");
+
+    let target_hd_path = format!(".frost_state/{}/hd_metadata.json", new_wallet);
+    let target_hd_content =
+        fs::read_to_string(&target_hd_path).expect("target hd_metadata.json should exist");
+    let target_hd: serde_json::Value = serde_json::from_str(&target_hd_content).unwrap();
+
+    assert_eq!(source_hd["chain_code"], target_hd["chain_code"]);
+    assert_eq!(source_hd["hd_enabled"], target_hd["hd_enabled"]);
+
+    let target_hd_address = Command::new(frostdao_bin())
+        .args([
+            "dkg-derive-address",
+            "--name",
+            &new_wallet,
+            "--change",
+            "0",
+            "--index",
+            "4",
+            "--network",
+            "testnet",
+        ])
+        .output()
+        .expect("dkg-derive-address failed");
+    assert!(
+        target_hd_address.status.success(),
+        "target derive address failed"
+    );
+    let target_hd_output = String::from_utf8_lossy(&target_hd_address.stdout);
+    let target_hd_addr = parse_hd_address(&target_hd_output);
+
+    assert_eq!(
+        source_hd_addr, target_hd_addr,
+        "Derived HD address should stay exactly the same after reshare."
+    );
+
+    cleanup_wallet(&prefix);
+}
+
 /// Test wallet listing
 #[test]
 fn test_wallet_listing() {

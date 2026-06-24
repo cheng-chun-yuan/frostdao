@@ -12,11 +12,12 @@ This is the maintained keyboard convention for FrostDAO TUI.
 | `j` / `k` | Move down/up, Vim-style alternative to arrows |
 | `Tab` / `Shift-Tab` | Next/previous form field |
 | `Space` | Toggle checkbox or binary option |
-| `c` | Copy current selected/output value when the screen has copyable output |
+| `c` | Copy current selected/output value when the screen has copyable output (`C` also works). |
 | `r` | Refresh, retry, or reject depending on screen context |
+| `F5` | Refresh selected wallet balance on Home (UI compatibility alias for `r`). |
 | `q` | Quit only from home; close QR popup when shown |
 
-Avoid function keys for required actions. Use lowercase shortcuts in help text. Uppercase aliases may work in some older flows, but new UI should document lowercase.
+Prefer lowercase shortcuts in help text. Uppercase/layered aliases are compatibility-only (`C` for copy, `F5` for home refresh), not primary bindings.
 
 ## Home
 
@@ -33,7 +34,7 @@ Avoid function keys for required actions. Use lowercase shortcuts in help text. 
 | `a` | View derived addresses |
 | `m` | Show mnemonic backup flow |
 | `c` | Copy selected wallet address |
-| `r` | Refresh selected wallet balance |
+| `r` / `F5` | Refresh selected wallet balance |
 | `R` | Reload wallet list |
 | `q` | Quit |
 

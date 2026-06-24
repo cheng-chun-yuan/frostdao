@@ -413,8 +413,8 @@ fn render_round1_output(frame: &mut Frame, output_json: &str, area: Rect) {
         ])
         .split(inner);
 
-    let instructions =
-        Paragraph::new("Share this with NEW parties only.").style(Style::default().fg(Color::Yellow));
+    let instructions = Paragraph::new("Share this with NEW parties only.")
+        .style(Style::default().fg(Color::Yellow));
     frame.render_widget(instructions, chunks[0]);
 
     let output_block = Block::default()
@@ -504,10 +504,9 @@ fn render_finalize_input(frame: &mut Frame, form: &ReshareFormData, area: Rect) 
         .style(Style::default().fg(Color::Yellow));
     frame.render_widget(instructions, chunks[4]);
 
-    let finalize_context = Paragraph::new(
-        "Only paste JSON for this ceremony's source wallet and your target wallet.",
-    )
-    .style(Style::default().fg(Color::Gray));
+    let finalize_context =
+        Paragraph::new("Only paste JSON for this ceremony's source wallet and your target wallet.")
+            .style(Style::default().fg(Color::Gray));
     frame.render_widget(finalize_context, chunks[5]);
 
     form.finalize_input.render(
@@ -612,4 +611,55 @@ fn reshare_address_stability_lines() -> Vec<Line<'static>> {
             "Address continuity: public key and root address should match source wallet after finalization.",
         ),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn line_to_string(line: &Line<'_>) -> String {
+        line.spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect::<Vec<_>>()
+            .join("")
+    }
+
+    fn lines_to_string(lines: &[Line<'_>]) -> String {
+        lines
+            .iter()
+            .map(line_to_string)
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn reshare_local_boundary_is_secret_local() {
+        let rendered = lines_to_string(&reshare_local_boundary_lines());
+        assert!(rendered.contains("old share material stays on this device"));
+        assert!(rendered.contains("Address and group public key do not change in this step"));
+    }
+
+    #[test]
+    fn reshare_distributed_boundary_guides_party_bound_shares() {
+        let rendered = lines_to_string(&reshare_distributed_boundary_lines());
+        assert!(rendered.contains("Only share Round 1 sub-shares for this new wallet"));
+        assert!(rendered.contains("Payloads are party-bound and not full secret material"));
+        assert!(rendered.contains("preserve source wallet identity"));
+    }
+
+    #[test]
+    fn reshare_output_boundary_reminds_single_recipient_transfer() {
+        let rendered = lines_to_string(&reshare_distributed_output_boundary_lines());
+        assert!(rendered.contains("copy only"));
+        assert!(rendered.contains("single recipient party"));
+        assert!(rendered.contains("Verify recipient identity"));
+    }
+
+    #[test]
+    fn reshare_address_stability_is_explicit() {
+        let rendered = lines_to_string(&reshare_address_stability_lines());
+        assert!(rendered.contains("Address continuity"));
+        assert!(rendered.contains("public key and root address should match source wallet"));
+    }
 }

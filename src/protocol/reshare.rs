@@ -19,14 +19,51 @@
 //!
 //! Result: New shares s'_j for the same group secret s
 
-use crate::protocol::keygen::{get_state_dir, GroupInfo, HtssMetadata};
+use crate::btc::hd_address;
+use crate::crypto::hd::{derive_at_path, DerivationPath};
+use crate::protocol::keygen::{get_state_dir, GroupInfo, HdMetadata, HtssMetadata};
 use crate::storage::{FileStorage, Storage};
-use anyhow::Result;
+use anyhow::{Context, Result};
+use bitcoin::Network;
 use schnorr_fun::frost;
 use schnorr_fun::fun::marker::*;
 use secp256kfun::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+
+fn copy_hd_metadata_if_present(
+    source_storage: &dyn Storage,
+    target_storage: &dyn Storage,
+) -> Result<bool> {
+    let hd_json = match source_storage.read("hd_metadata.json") {
+        Ok(json) => json,
+        Err(_) => return Ok(false),
+    };
+
+    let hd_metadata: HdMetadata = serde_json::from_slice(&hd_json)?;
+    if !hd_metadata.hd_enabled {
+        return Ok(false);
+    }
+
+    target_storage.write("hd_metadata.json", &hd_json)?;
+    Ok(true)
+}
+
+fn load_optional_group_info(storage: &dyn Storage) -> Result<Option<GroupInfo>> {
+    let bytes = match storage.read("group_info.json") {
+        Ok(data) => data,
+        Err(_) => return Ok(None),
+    };
+
+    serde_json::from_slice::<GroupInfo>(&bytes)
+        .map(Some)
+        .or_else(|error| {
+            Err(anyhow::anyhow!(
+                "group_info.json exists but is invalid: {}",
+                error
+            ))
+        })
+}
 
 /// Output from reshare round 1 (old party generates sub-shares)
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -165,100 +202,10 @@ pub fn reshare_finalize(
     hierarchical: bool,
     round1_data: &str,
 ) -> Result<()> {
-    println!("Reshare Finalize - Combine Sub-shares\n");
-    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-
-    // Parse round1 outputs (space-separated JSON objects)
-    let round1_outputs: Vec<ReshareRound1Output> =
-        crate::protocol::keygen::parse_space_separated_json(round1_data)?;
-
-    if round1_outputs.is_empty() {
-        anyhow::bail!("No round1 data provided");
-    }
-
-    println!(
-        "Received sub-shares from {} old parties",
-        round1_outputs.len()
-    );
-    println!("My new index: {}", my_new_index);
-    println!("My rank: {}", my_rank);
-    println!();
-
-    // Load source wallet to get group public key
-    let source_state_dir = get_state_dir(source_wallet);
-    let source_storage = FileStorage::new(&source_state_dir)?;
-
-    let shared_key_bytes = source_storage.read("shared_key.bin")?;
-    let shared_key: frost::SharedKey<EvenY> = bincode::deserialize(&shared_key_bytes)?;
-    let group_public_key = shared_key.public_key();
-
-    let source_htss_json = String::from_utf8(source_storage.read("htss_metadata.json")?)?;
-    let source_htss: HtssMetadata = serde_json::from_str(&source_htss_json)?;
-    let old_threshold = source_htss.threshold;
-
-    // Verify we have enough sub-shares (need at least old_threshold)
-    if (round1_outputs.len() as u32) < old_threshold {
-        anyhow::bail!(
-            "Not enough sub-shares: got {}, need at least {}",
-            round1_outputs.len(),
-            old_threshold
-        );
-    }
-
-    println!(
-        "Old threshold: {} (have {} sub-shares)",
-        old_threshold,
-        round1_outputs.len()
-    );
-
-    // Get the new threshold from the polynomial commitment degree
-    let new_threshold = round1_outputs[0].polynomial_commitment.len() as u32;
-    let new_n_parties = round1_outputs[0].sub_shares.len() as u32;
-
-    println!("New config: {}-of-{}", new_threshold, new_n_parties);
-    println!();
-
-    // Collect old party indices for Lagrange computation
-    let old_indices: Vec<u32> = round1_outputs.iter().map(|o| o.old_party_index).collect();
-
-    // Compute my new share: sum of (lagrange_coeff * sub_share) for each old party
-    let mut new_share_bytes = [0u8; 32];
-
-    for output in &round1_outputs {
-        // Get sub-share for my new index
-        let sub_share_hex = output
-            .sub_shares
-            .get(&my_new_index)
-            .ok_or_else(|| anyhow::anyhow!("Missing sub-share for index {}", my_new_index))?;
-
-        let sub_share_bytes: [u8; 32] = hex::decode(sub_share_hex)?
-            .try_into()
-            .map_err(|_| anyhow::anyhow!("Invalid sub-share length"))?;
-
-        let sub_share: Scalar<Secret, Zero> = Scalar::from_bytes(sub_share_bytes)
-            .ok_or_else(|| anyhow::anyhow!("Invalid sub-share scalar"))?;
-
-        // Compute Lagrange coefficient for this old party at x=0
-        let lagrange_coeff = crate::crypto::helpers::lagrange_coefficient_at_zero(
-            output.old_party_index,
-            &old_indices,
-        )?;
-
-        // Add weighted sub-share to result
-        let current: Scalar<Secret, Zero> =
-            Scalar::from_bytes(new_share_bytes).unwrap_or(Scalar::zero());
-        let weighted = s!(lagrange_coeff * sub_share);
-        let sum = s!(current + weighted);
-        new_share_bytes = sum.to_bytes();
-    }
-
-    println!("Computed new secret share");
-
-    // Create new wallet directory
     let target_state_dir = get_state_dir(target_wallet);
     let target_path = std::path::Path::new(&target_state_dir);
 
-    if target_path.exists() {
+    let force_overwrite = if target_path.exists() {
         println!("⚠️  Target wallet '{}' already exists", target_wallet);
         print!("   Replace? [y/N]: ");
         std::io::Write::flush(&mut std::io::stdout())?;
@@ -269,96 +216,25 @@ pub fn reshare_finalize(
             println!("Aborted.");
             return Ok(());
         }
-        std::fs::remove_dir_all(target_path)?;
-    }
+        true
+    } else {
+        false
+    };
 
-    let target_storage = FileStorage::new(&target_state_dir)?;
-
-    // Create PairedSecretShare using helper function
-    let share_scalar: Scalar<Secret, Zero> = Scalar::from_bytes(new_share_bytes)
-        .ok_or_else(|| anyhow::anyhow!("Invalid computed share"))?;
-    let share_nonzero = crate::crypto::helpers::share_to_nonzero(share_scalar)?;
-
-    let paired_share = crate::crypto::helpers::construct_paired_secret_share(
+    let cmd_result = reshare_finalize_core(
+        source_wallet,
+        target_wallet,
         my_new_index,
-        share_nonzero,
-        &group_public_key,
-    )?;
-    let paired_bytes = bincode::serialize(&paired_share)?;
-
-    target_storage.write("paired_secret_share.bin", &paired_bytes)?;
-    target_storage.write("shared_key.bin", &shared_key_bytes)?;
-
-    // Create new HTSS metadata
-    let mut party_ranks: BTreeMap<u32, u32> = BTreeMap::new();
-    party_ranks.insert(my_new_index, my_rank);
-
-    // Add placeholder ranks for other parties (they'll update their own)
-    for i in 1..=new_n_parties {
-        if i != my_new_index {
-            party_ranks.insert(i, 0); // default rank
-        }
-    }
-
-    let new_htss = HtssMetadata {
-        my_index: my_new_index,
         my_rank,
-        threshold: new_threshold,
         hierarchical,
-        party_ranks,
-        signing_requirement: None, // Reshare creates new config
-    };
-
-    target_storage.write(
-        "htss_metadata.json",
-        serde_json::to_string_pretty(&new_htss)?.as_bytes(),
+        round1_data,
+        force_overwrite,
     )?;
 
-    // Create group info
-    let pubkey_bytes: [u8; 32] = group_public_key.to_xonly_bytes();
-    let pubkey_hex = hex::encode(pubkey_bytes);
-
-    use bitcoin::{Address, Network, XOnlyPublicKey};
-    let xonly_pk = XOnlyPublicKey::from_slice(&pubkey_bytes)?;
-    let secp = bitcoin::secp256k1::Secp256k1::new();
-    let address_testnet = Address::p2tr(&secp, xonly_pk, None, Network::Testnet).to_string();
-    let address_mainnet = Address::p2tr(&secp, xonly_pk, None, Network::Bitcoin).to_string();
-
-    let group_info = GroupInfo {
-        name: target_wallet.to_string(),
-        group_public_key: pubkey_hex.clone(),
-        taproot_address_testnet: address_testnet.clone(),
-        taproot_address_mainnet: address_mainnet.clone(),
-        threshold: new_threshold,
-        total_parties: new_n_parties,
-        hierarchical,
-        parties: vec![], // Will be populated when all parties complete
-    };
-
-    target_storage.write(
-        "group_info.json",
-        serde_json::to_string_pretty(&group_info)?.as_bytes(),
-    )?;
-
-    // Also save share in hex format for easy verification
-    target_storage.write("share_hex.txt", hex::encode(new_share_bytes).as_bytes())?;
-
-    println!();
+    println!("{}", cmd_result.output);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("✅ Resharing complete!");
-    println!();
-    println!("New wallet: {}", target_wallet);
-    println!("Config: {}-of-{}", new_threshold, new_n_parties);
-    println!("Your index: {}", my_new_index);
-    println!();
-    println!("Public Key: {}", pubkey_hex);
-    println!("Testnet Address: {}", address_testnet);
-    println!();
-    println!("⚠️  The public key and address are the SAME as before!");
-    println!("    Funds are still accessible with the new shares.");
-    println!();
-    println!("🗑️  Once ALL parties have reshared, delete old wallet:");
-    println!("    rm -rf .frost_state/{}/", source_wallet);
+    println!("📋 Reshare complete!");
+    println!("   New wallet: {}", cmd_result.result);
 
     Ok(())
 }
@@ -516,6 +392,7 @@ pub fn reshare_finalize_core(
     let source_htss_json = String::from_utf8(source_storage.read("htss_metadata.json")?)?;
     let source_htss: HtssMetadata = serde_json::from_str(&source_htss_json)?;
     let old_threshold = source_htss.threshold;
+    let source_group_info = load_optional_group_info(&source_storage)?;
 
     if (round1_outputs.len() as u32) < old_threshold {
         anyhow::bail!(
@@ -573,6 +450,7 @@ pub fn reshare_finalize_core(
     }
 
     let target_storage = FileStorage::new(&target_state_dir)?;
+    let hd_copied = copy_hd_metadata_if_present(&source_storage, &target_storage)?;
 
     // Create PairedSecretShare using helper function
     let share_scalar: Scalar<Secret, Zero> = Scalar::from_bytes(new_share_bytes)
@@ -638,6 +516,35 @@ pub fn reshare_finalize_core(
         serde_json::to_string_pretty(&group_info)?.as_bytes(),
     )?;
 
+    if let Some(source_info) = source_group_info {
+        if source_info.group_public_key != group_info.group_public_key {
+            anyhow::bail!(
+                "Reshare continuity check failed: source public key does not match target public key.\n\
+                 Source: {}, Target: {}",
+                source_info.group_public_key,
+                group_info.group_public_key
+            );
+        }
+    }
+
+    if hd_copied {
+        let hd_json = String::from_utf8(target_storage.read("hd_metadata.json")?)?;
+        let hd_metadata: HdMetadata = serde_json::from_str(&hd_json)?;
+        if !hd_metadata.hd_enabled {
+            anyhow::bail!("Reshared wallet has hd metadata but hd_enabled=false.");
+        }
+        // Ensure source-derived chain code is present so derived addresses map to the same key path
+        let source_hd_json = String::from_utf8(source_storage.read("hd_metadata.json")?)?;
+        let source_hd: HdMetadata = serde_json::from_str(&source_hd_json)?;
+        if source_hd.chain_code != hd_metadata.chain_code {
+            anyhow::bail!(
+                "Reshare continuity check failed: hd chain_code differs between source and target."
+            );
+        }
+
+        verify_reshare_hd_control_continuity(&source_storage, &target_storage)?;
+    }
+
     target_storage.write("share_hex.txt", hex::encode(new_share_bytes).as_bytes())?;
 
     Ok(CommandResult {
@@ -687,6 +594,11 @@ pub fn reshare_local(
     let source_htss: HtssMetadata = serde_json::from_str(&source_htss_json)?;
     let old_threshold = source_htss.threshold;
     let old_n_parties = source_htss.party_ranks.len() as u32;
+    let source_group_info = load_optional_group_info(&source_storage)?;
+    let source_public_key_hex = {
+        let hd_pub_key = group_public_key.to_xonly_bytes();
+        hex::encode(hd_pub_key)
+    };
 
     // Use provided or keep same config
     let new_t = new_threshold.unwrap_or(old_threshold);
@@ -821,6 +733,7 @@ pub fn reshare_local(
 
     // Save shared_key at wallet root
     let root_storage = FileStorage::new(&target_state_dir)?;
+    let hd_copied = copy_hd_metadata_if_present(&source_storage, &root_storage)?;
     root_storage.write("shared_key.bin", &shared_key_bytes)?;
 
     // Collect old party indices for Lagrange computation
@@ -942,6 +855,31 @@ pub fn reshare_local(
         serde_json::to_string_pretty(&group_info)?.as_bytes(),
     )?;
 
+    if let Some(source_info) = source_group_info {
+        if source_info.group_public_key != source_public_key_hex {
+            anyhow::bail!(
+                "Reshare continuity check failed: source public key does not match local target public key.\n\
+                 Source: {}, Target: {}",
+                source_info.group_public_key,
+                source_public_key_hex
+            );
+        }
+    }
+
+    if hd_copied {
+        let hd_json = String::from_utf8(root_storage.read("hd_metadata.json")?)?;
+        let hd_metadata: HdMetadata = serde_json::from_str(&hd_json)?;
+        let source_hd_json = String::from_utf8(source_storage.read("hd_metadata.json")?)?;
+        let source_hd: HdMetadata = serde_json::from_str(&source_hd_json)?;
+        if source_hd.chain_code != hd_metadata.chain_code {
+            anyhow::bail!(
+                "Reshare continuity check failed: hd chain_code differs between source and target."
+            );
+        }
+
+        verify_reshare_hd_control_continuity(&source_storage, &root_storage)?;
+    }
+
     println!();
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("✅ Local reshare complete!");
@@ -991,4 +929,46 @@ mod tests {
         let secret_zero: Scalar<Secret, Zero> = Scalar::from_bytes(secret.to_bytes()).unwrap();
         assert_eq!(reconstructed.to_bytes(), secret_zero.to_bytes());
     }
+}
+
+fn verify_reshare_hd_control_continuity(
+    source_storage: &dyn Storage,
+    target_storage: &dyn Storage,
+) -> Result<()> {
+    // Compare HD-derived public key at a canonical path (external index 0).
+    // This proves the source and target HD wallets still produce the same threshold-controlled
+    // child key material for the same derivation path.
+    let source_context = hd_address::load_hd_context(source_storage)
+        .context("Failed to load HD context from source wallet")?;
+    let target_context = hd_address::load_hd_context(target_storage)
+        .context("Failed to load HD context from target wallet")?;
+
+    let source_derived = derive_at_path(&source_context, &DerivationPath::receive(0))?;
+    let target_derived = derive_at_path(&target_context, &DerivationPath::receive(0))?;
+
+    if source_derived.public_key != target_derived.public_key {
+        anyhow::bail!(
+            "Reshare continuity check failed: HD derived public key differs at m/86'/coin'/0'/0/0."
+        );
+    }
+
+    // Extra belt-and-suspenders check for deterministic network-specific addresses.
+    let source_address = hd_address::derive_taproot_address(
+        &source_context,
+        &DerivationPath::receive(0),
+        Network::Testnet,
+    )?;
+    let target_address = hd_address::derive_taproot_address(
+        &target_context,
+        &DerivationPath::receive(0),
+        Network::Testnet,
+    )?;
+
+    if source_address.0 != target_address.0 {
+        anyhow::bail!(
+            "Reshare continuity check failed: HD derived address differs at m/86'/coin'/0'/0/0."
+        );
+    }
+
+    Ok(())
 }
