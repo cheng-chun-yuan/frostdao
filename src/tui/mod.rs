@@ -3147,7 +3147,7 @@ fn help_bar_text(app: &App) -> String {
             if state.confirm_delete {
                 "Type wallet name | Enter:Delete | Backspace:Edit | Esc:Cancel".to_string()
             } else {
-                "j/k/↑/↓:Navigate | Enter:Select | b/r/F5 (Refresh):Balance | r:Balance | c/C:Copy | v:QR | Esc:Back"
+                "j/k/↑/↓:Navigate | Enter:Select | b/r/F5 (Refresh):Balance | c/C:Copy | v:QR | Esc:Back"
                     .to_string()
             }
         }
@@ -3156,7 +3156,7 @@ fn help_bar_text(app: &App) -> String {
         AppState::Reshare(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
         AppState::Send(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
         AppState::AddressList(_) => {
-            "j/k/↑/↓:Navigate | c/C:Copy | b/r/F5 (Refresh):Balance | r:Balance | a:Add | x:Remove | Esc:Back"
+            "j/k/↑/↓:Navigate | c/C:Copy | b/r/F5 (Refresh):Refresh | a:Add | x:Remove | Esc:Back"
                 .to_string()
         }
         AppState::MnemonicBackup(state) => {
@@ -3193,12 +3193,12 @@ fn help_bar_text(app: &App) -> String {
 fn home_help_bar_text() -> String {
     #[cfg(feature = "miniscript-policy")]
     {
-        "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | b/r/F5 (Refresh):Balance | r:Balance | c/C:Copy | q:Quit | F1:Help"
+        "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | b/r/F5 (Refresh):Balance | c/C:Copy | q:Quit | F1:Help"
             .to_string()
     }
     #[cfg(not(feature = "miniscript-policy"))]
     {
-        "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | b/r/F5 (Refresh):Balance | r:Balance | c/C:Copy | q:Quit | F1:Help"
+        "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | b/r/F5 (Refresh):Balance | c/C:Copy | q:Quit | F1:Help"
             .to_string()
     }
 }
@@ -3296,7 +3296,7 @@ mod tests {
 
         let help = help_bar_text(&app);
 
-        assert!(help.contains("b/r/F5 (Refresh):Balance"));
+        assert!(help.contains("b/r/F5 (Refresh):Refresh"));
         assert!(help.contains("a:Add"));
         assert!(help.contains("x:Remove"));
     }
