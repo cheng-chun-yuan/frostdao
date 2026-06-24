@@ -449,6 +449,27 @@ def check_transaction_review():
         doctor.ok("transaction review fields and TUI confirmation are present")
 
 
+def check_mnemonic_backup_ux():
+    screen = read(Path("src/tui/screens/mnemonic.rs"))
+    keymap = read(Path("docs/TUI_KEYMAP.md"))
+    security = read(Path("docs/SECURITY_MODEL.md"))
+    required = [
+        ("src/tui/screens/mnemonic.rs", screen, "No clipboard or copy shortcut"),
+        ("src/tui/screens/mnemonic.rs", screen, "No copy shortcut is provided"),
+        ("src/tui/screens/mnemonic.rs", screen, "YOUR SECRET SHARE"),
+        ("src/tui/screens/mnemonic.rs", screen, "NOT the full group key"),
+        ("src/tui/screens/mnemonic.rs", screen, "mnemonic_warning_explains_share_scope_and_no_clipboard"),
+        ("docs/TUI_KEYMAP.md", keymap, "does not provide a mnemonic copy shortcut"),
+        ("docs/SECURITY_MODEL.md", security, "equivalent to that party's local secret share"),
+    ]
+    missing = [f"{path}: {marker}" for path, content, marker in required if marker not in content]
+
+    if missing:
+        doctor.fail(f"mnemonic backup UX markers missing: {', '.join(missing)}")
+    else:
+        doctor.ok("mnemonic backup UX keeps share scope and clipboard risk visible")
+
+
 def check_audit_logging():
     audit = read(Path("src/audit.rs"))
     protocol = read(Path("src/protocol/dkg_tx.rs"))
@@ -620,6 +641,7 @@ check_cli_docs_match_help()
 check_agent_payment_semantics()
 check_replay_cache_persistence()
 check_transaction_review()
+check_mnemonic_backup_ux()
 check_audit_logging()
 check_nostr_transaction_review()
 
