@@ -18,7 +18,7 @@ Run before any relay-backed release candidate, once against an operator-controll
 ./scripts/nostr-relay-smoke.sh wss://relay.damus.io
 ```
 
-The relay smoke test publishes and receives both a public room join and a direct per-recipient signing nonce envelope. The doctor check verifies documentation links, stale command/keymap strings, CLI/docs command drift, script executable bits, and agent-payment draft semantics. The full gate runs doctor first, then checks formatting, strict Clippy, all tests, debug build, and rustdoc warnings.
+The relay smoke test publishes and receives a public room join, direct per-recipient signing nonce and signing share envelopes, and a public `tx_broadcast` announcement. The doctor check verifies documentation links, stale command/keymap strings, CLI/docs command drift, script executable bits, and agent-payment draft semantics. The full gate runs doctor first, then checks formatting, strict Clippy, all tests, debug build, and rustdoc warnings.
 
 ## Security Invariants
 

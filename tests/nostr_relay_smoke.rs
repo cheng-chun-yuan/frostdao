@@ -5,7 +5,7 @@
 
 use frostdao::nostr::{
     NostrMessageKind, NostrProtocolMessage, NostrRoomRuntime, RelayRoomTransport, RoomJoinPayload,
-    SigningNonceEvent, ThresholdScheme,
+    SigningNonceEvent, SigningShareEvent, ThresholdScheme, TxBroadcastEvent,
 };
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -92,10 +92,6 @@ fn relay_room_transport_round_trips_public_room_join() {
         .iter()
         .any(|message| message.kind == NostrMessageKind::SigningNonceEncrypted);
 
-    party_1.transport().disconnect();
-    party_2.transport().disconnect();
-    let _ = std::fs::remove_dir_all(&dir);
-
     assert!(
         accepted,
         "party 2 did not receive party 1 room_join within {:?} through {:?}",
@@ -110,6 +106,81 @@ fn relay_room_transport_round_trips_public_room_join() {
         !party_1_accepted_own_direct,
         "party 1 accepted a direct message addressed to party 2"
     );
+
+    let share = SigningShareEvent::new(1, 2, "relay-smoke-share-ciphertext".to_string());
+    let share_message = NostrProtocolMessage::new(
+        room.clone(),
+        NostrMessageKind::SigningShareEncrypted,
+        1,
+        &share,
+    )
+    .unwrap()
+    .with_tss()
+    .with_session("relay-smoke-session")
+    .to_party(2)
+    .unwrap();
+    party_1.publish(share_message).unwrap();
+
+    let mut share_accepted = false;
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        let messages = party_2.receive(unix_timestamp_secs()).unwrap();
+        share_accepted = messages.iter().any(|message| {
+            message.kind == NostrMessageKind::SigningShareEncrypted
+                && message.from == 1
+                && message.to == Some(2)
+                && message.session.as_deref() == Some("relay-smoke-session")
+        });
+        if share_accepted {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+
+    let broadcast = TxBroadcastEvent {
+        txid: "relay-smoke-txid".to_string(),
+        raw_tx: "02000000000100".to_string(),
+        network: "testnet".to_string(),
+    };
+    let broadcast_message =
+        NostrProtocolMessage::new(room.clone(), NostrMessageKind::TxBroadcast, 1, &broadcast)
+            .unwrap()
+            .with_tss()
+            .with_wallet("relay-smoke-wallet")
+            .with_session("relay-smoke-session");
+    party_1.publish(broadcast_message).unwrap();
+
+    let mut broadcast_accepted = false;
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        let messages = party_2.receive(unix_timestamp_secs()).unwrap();
+        broadcast_accepted = messages.iter().any(|message| {
+            message.kind == NostrMessageKind::TxBroadcast
+                && message.from == 1
+                && message.to.is_none()
+                && message.wallet.as_deref() == Some("relay-smoke-wallet")
+                && message.session.as_deref() == Some("relay-smoke-session")
+        });
+        if broadcast_accepted {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+
+    assert!(
+        share_accepted,
+        "party 2 did not receive party 1 direct signing_share_encrypted within {:?} through {:?}",
+        timeout, relay_urls
+    );
+    assert!(
+        broadcast_accepted,
+        "party 2 did not receive party 1 tx_broadcast within {:?} through {:?}",
+        timeout, relay_urls
+    );
+
+    party_1.transport().disconnect();
+    party_2.transport().disconnect();
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 fn relay_urls_from_env() -> Vec<String> {

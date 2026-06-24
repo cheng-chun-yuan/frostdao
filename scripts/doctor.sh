@@ -313,6 +313,9 @@ def check_replay_cache_persistence():
         "relay_room_transport_round_trips_public_room_join",
         "#[ignore = \"requires reachable Nostr relay URLs in FROSTDAO_TEST_NOSTR_RELAYS\"]",
         "FROSTDAO_TEST_NOSTR_RELAYS",
+        "SigningNonceEncrypted",
+        "SigningShareEncrypted",
+        "TxBroadcast",
     ]
     missing.extend([f"tests/nostr_relay_smoke.rs: {item}" for item in smoke_required if item not in smoke_test])
     script_required = [
