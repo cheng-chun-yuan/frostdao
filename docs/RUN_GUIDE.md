@@ -1,6 +1,6 @@
 # FrostDAO Run Guide
 
-This guide matches the current CLI version. Use it for local testing, demos, and multi-device dry runs.
+This guide matches the current CLI version. Use it for local testing and multi-device dry runs.
 
 ## 1. Build And Verify
 
@@ -9,7 +9,7 @@ cargo build
 ./scripts/quality.sh
 ```
 
-Before a release or serious demo:
+Before a release or recorded walkthrough:
 
 ```bash
 ./scripts/quality.sh --full
@@ -17,7 +17,7 @@ Before a release or serious demo:
 
 This runs formatting checks, strict Clippy, tests, a debug build, and rustdoc warnings.
 
-Transaction build, broadcast, local auto-sign, and TUI Nostr proposal/consent flows append metadata-only audit events to `.frost_state/audit.jsonl`. Accepted inbound TUI Nostr signing messages are also audited with metadata only. Set `FROSTDAO_AUDIT_LOG=/path/to/audit.jsonl` to move the log for demos or CI runs.
+Transaction build, broadcast, local auto-sign, and TUI Nostr proposal/consent flows append metadata-only audit events to `.frost_state/audit.jsonl`. Accepted inbound TUI Nostr signing messages are also audited with metadata only. Set `FROSTDAO_AUDIT_LOG=/path/to/audit.jsonl` to move the log for walk-throughs or CI runs.
 
 ## 2. Open The TUI
 

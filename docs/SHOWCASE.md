@@ -1,6 +1,6 @@
 # FrostDAO Showcase
 
-This page is a guided map of the project for demos, reviews, and technical walkthroughs.
+This page is a guided map of the project for reviews, onboarding, and technical walkthroughs.
 
 ## What To Show First
 
@@ -25,21 +25,21 @@ This page is a guided map of the project for demos, reviews, and technical walkt
 | Miniscript | Optional Taproot policy templates and agent payment drafts | [Miniscript](MINISCRIPT.md) |
 | Security | Security invariants, threat model, and mainnet cautions | [Security Model](SECURITY_MODEL.md) |
 
-## Demo Commands
+## Preview Commands
 
-Run the fast quality gate before demos:
+Run the fast quality gate before any walkthrough or review:
 
 ```bash
 ./scripts/quality.sh
 ```
 
-Run a simple DKG demo:
+Run a local 2-of-3 DKG walkthrough:
 
 ```bash
 ./scripts/demo.sh
 ```
 
-Run a resharing demo:
+Run a local resharing walkthrough:
 
 ```bash
 ./scripts/demo-reshare.sh
@@ -77,7 +77,7 @@ The test suite covers:
 - CLI-driven DKG, address, wallet listing, signing, and resharing flows.
 - Taproot script construction and Bitcoin signing helpers.
 
-Use the full gate when preparing a release or recorded demo:
+Use the full gate when preparing a release or recorded walkthrough:
 
 ```bash
 ./scripts/quality.sh --full

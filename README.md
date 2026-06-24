@@ -64,7 +64,7 @@ frostdao tui
 
 | Document | Description |
 |----------|-------------|
-| [Showcase](docs/SHOWCASE.md) | Demo path, code tour, and verification map |
+| [Showcase](docs/SHOWCASE.md) | Walkthrough path, code tour, and verification map |
 | [Run Guide](docs/RUN_GUIDE.md) | Current build, test, TUI, CLI, TSS, HTSS, reshare, recovery, and Nostr usage |
 | [CLI Reference](docs/CLI.md) | All CLI commands |
 | [TUI Keymap](docs/TUI_KEYMAP.md) | Unified terminal keyboard shortcuts |
