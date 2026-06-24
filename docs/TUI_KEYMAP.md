@@ -222,5 +222,5 @@ The policy input remains editable. Use the templates as starting points, then ty
 | `p` | Propose transaction, in role select |
 | `c` | Consent role in role select, or copy TXID on completion |
 | `y` | Consent after reviewing proposal fingerprint |
-| `r` | Reject proposal or retry where shown |
+| `r` | Publish a proposal rejection or retry where shown |
 | `Esc` | Back/cancel |

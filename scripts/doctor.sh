@@ -508,6 +508,8 @@ def check_nostr_transaction_review():
         ("src/tui/app.rs", app, "early-share"),
         ("src/tui/mod.rs", tui, "ready_to_combine"),
         ("src/tui/mod.rs", tui, "press y to consent"),
+        ("src/tui/mod.rs", tui, "Rejection sent for proposal fingerprint"),
+        ("src/tui/mod.rs", tui, "nostr_review_reject_key_publishes_rejection"),
         ("src/tui/mod.rs", tui, "Proposal published through room runtime"),
         ("src/tui/mod.rs", tui, "No pending proposals received"),
         ("src/tui/screens/nostr_sign.rs", screen, "Sighash fingerprint: "),
@@ -522,6 +524,7 @@ def check_nostr_transaction_review():
         ("docs/RUN_GUIDE.md", run_guide, "share ciphertext is ignored until nonce ciphertext"),
         ("docs/RUN_GUIDE.md", run_guide, "replays already accepted session nonces"),
         ("docs/RUN_GUIDE.md", run_guide, "party-by-party nonce/share progress table"),
+        ("docs/RUN_GUIDE.md", run_guide, "`r` publishes an explicit rejection"),
         ("docs/RUN_GUIDE.md", run_guide, "NIP-44 signing plaintext helpers encrypt typed nonce/share payloads"),
         ("docs/RUN_GUIDE.md", run_guide, "`tx_broadcast` announcements are also published and ingested through the runtime"),
         ("docs/NOSTR_PROTOCOL.md", docs, "`tx_proposal` must include a `review` object"),
@@ -537,6 +540,7 @@ def check_nostr_transaction_review():
         ("docs/NOSTR_PROTOCOL.md", docs, "Recovery relay envelopes follow the same identity binding"),
         ("docs/RUN_GUIDE.md", run_guide, "Reshare and recovery relay parser helpers reject versioned messages"),
         ("docs/TUI_KEYMAP.md", keymap, "Consent after reviewing proposal fingerprint"),
+        ("docs/TUI_KEYMAP.md", keymap, "Publish a proposal rejection"),
     ]
     missing = [f"{path}: {marker}" for path, content, marker in required if marker not in content]
 

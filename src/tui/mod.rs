@@ -2752,11 +2752,28 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
             }
         }
         KeyCode::Char('r') | KeyCode::Char('R') => {
-            if let NostrSignState::ReviewProposal { wallet_name, .. } = &app.nostr_sign_state {
-                app.nostr_sign_state = NostrSignState::ViewProposals {
-                    wallet_name: wallet_name.clone(),
-                };
-                app.set_message("Proposal rejected");
+            if let NostrSignState::ReviewProposal {
+                wallet_name,
+                proposal,
+            } = &app.nostr_sign_state
+            {
+                let wallet_name = wallet_name.clone();
+                let proposal = proposal.clone();
+                let fingerprint = proposal.review.sighash_fingerprint.clone();
+                if let Err(e) = app.publish_nostr_tx_consent(
+                    &wallet_name,
+                    &proposal,
+                    false,
+                    Some("Rejected in TUI".to_string()),
+                ) {
+                    app.message = Some(format!("Nostr rejection publish error: {}", e));
+                    return;
+                }
+                app.nostr_sign_state = NostrSignState::ViewProposals { wallet_name };
+                app.set_message(&format!(
+                    "Rejection sent for proposal fingerprint {}",
+                    fingerprint
+                ));
             }
         }
         KeyCode::Char('y') | KeyCode::Char('Y') => {
@@ -2912,4 +2929,71 @@ fn render_help_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
         .block(Block::default().borders(Borders::ALL).title("Help"));
 
     frame.render_widget(help, area);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tui::state::{NetworkSelection, TxProposal};
+
+    fn reviewable_proposal() -> TxProposal {
+        TxProposal {
+            session_id: "session-review-reject".to_string(),
+            wallet_name: "wallet-test".to_string(),
+            proposer_index: 2,
+            to_address: "tb1qrecipient".to_string(),
+            amount_sats: 50_000,
+            fee_rate: 10,
+            sighash: "abc123".to_string(),
+            review: frostdao::nostr::TxReviewPayload {
+                network: "Testnet3".to_string(),
+                source_path: "m/86'/1'/0'/0/0".to_string(),
+                from_address: "tb1qfrom".to_string(),
+                to_address: "tb1qrecipient".to_string(),
+                amount_sats: 50_000,
+                fee_rate_sats_vb: 10,
+                sighash_fingerprint: "abc12345".to_string(),
+            },
+            description: "test proposal".to_string(),
+            timestamp: 1_700_000_000,
+        }
+    }
+
+    #[test]
+    fn nostr_review_reject_key_publishes_rejection() {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Testnet3;
+        app.nostr_room_id = format!("tui-reject-proposal-test-{}", std::process::id());
+        app.nostr_my_index = 1;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 2;
+        let cache_path = app.nostr_replay_cache_path();
+        let _ = std::fs::remove_file(&cache_path);
+
+        app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
+        app.state = AppState::NostrSign;
+        app.nostr_sign_state = NostrSignState::ReviewProposal {
+            wallet_name: "wallet-test".to_string(),
+            proposal: reviewable_proposal(),
+        };
+
+        handle_nostr_sign_keys(&mut app, KeyCode::Char('r'));
+
+        assert!(matches!(
+            app.nostr_sign_state,
+            NostrSignState::ViewProposals { .. }
+        ));
+        assert_eq!(app.audit_events[0].event, "nostr_tx_consent");
+        assert_eq!(app.audit_events[0].status, "rejected");
+        assert_eq!(
+            app.audit_events[0].fields["sighash_fingerprint"],
+            "abc12345"
+        );
+        assert!(app
+            .message
+            .as_deref()
+            .unwrap_or("")
+            .contains("Rejection sent"));
+        let _ = std::fs::remove_file(&cache_path);
+    }
 }

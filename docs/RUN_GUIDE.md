@@ -168,7 +168,7 @@ DKG transaction build and broadcast commands accept `testnet`, `testnet3`, `sign
 
 Never reuse a signing session nonce.
 
-In the TUI send flow, `Enter` prepares the transaction review screen. Press `y` only after the review fields match what every signer expects.
+In the TUI send flow, `Enter` prepares the transaction review screen. Press `y` only after the review fields match what every signer expects. In Nostr proposal review, `y` publishes consent and `r` publishes an explicit rejection tied to the reviewed proposal fingerprint.
 
 ## 8. Reshare Without Changing Address
 
