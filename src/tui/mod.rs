@@ -2933,59 +2933,63 @@ fn render_title(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
 }
 
 fn render_help_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
-    let help_text = if let Some(msg) = &app.message {
-        msg.clone()
-    } else {
-        match &app.state {
-            AppState::Home => {
-                #[cfg(feature = "miniscript-policy")]
-                {
-                    "↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | c:Copy | q:Quit".to_string()
-                }
-                #[cfg(not(feature = "miniscript-policy"))]
-                {
-                    "↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | c:Copy | q:Quit"
-                        .to_string()
-                }
-            }
-            AppState::WalletDetails(_) => {
-                "↑/↓:Navigate | Enter:Select | b:Balance | c:Copy | v:QR | Esc:Back".to_string()
-            }
-            AppState::ChainSelect => "↑/↓:Select | Enter:Confirm | Esc:Cancel".to_string(),
-            AppState::Keygen(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
-            AppState::Reshare(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
-            AppState::Send(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
-            AppState::AddressList(_) => {
-                "↑/↓:Navigate | c:Copy | b:Balance | a:Add | x:Remove | Esc:Back".to_string()
-            }
-            AppState::MnemonicBackup(state) => {
-                if state.revealed {
-                    "Enter:Done | Esc:Back".to_string()
-                } else {
-                    "Enter:Reveal | Esc:Cancel".to_string()
-                }
-            }
-            AppState::NostrRoom => match app.nostr_room_phase {
-                NostrRoomPhase::Configure => "Tab:Next | Enter:Join | Esc:Back".to_string(),
-                NostrRoomPhase::WaitingForParticipants => {
-                    "Space:Simulate join | Esc:Leave".to_string()
-                }
-                NostrRoomPhase::Ready => "k:Keygen | s:Sign | Esc:Leave".to_string(),
-            },
-            AppState::NostrKeygen => "Enter:Continue | r:Retry | Esc:Cancel".to_string(),
-            AppState::NostrSign => "Enter:Continue | ↑/↓:Navigate | Esc:Cancel".to_string(),
-            #[cfg(feature = "miniscript-policy")]
-            AppState::PolicyPreview => {
-                "Enter:Init draft | [/]:Template | Tab:Field | c:Copy | Esc:Back".to_string()
-            }
-        }
-    };
+    let help_text = help_bar_text(app);
 
     let help = Paragraph::new(help_text)
         .style(Style::default().fg(Color::Gray))
         .block(Block::default().borders(Borders::ALL).title("Help"));
 
     frame.render_widget(help, area);
+}
+
+fn help_bar_text(app: &App) -> String {
+    if let Some(msg) = &app.message {
+        return msg.clone();
+    }
+
+    match &app.state {
+        AppState::Home => home_help_bar_text(),
+        AppState::WalletDetails(_) => {
+            "↑/↓:Navigate | Enter:Select | b:Balance | c:Copy | v:QR | Esc:Back".to_string()
+        }
+        AppState::ChainSelect => "↑/↓:Select | Enter:Confirm | Esc:Cancel".to_string(),
+        AppState::Keygen(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
+        AppState::Reshare(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
+        AppState::Send(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
+        AppState::AddressList(_) => {
+            "↑/↓:Navigate | c:Copy | b:Balance | a:Add | x:Remove | Esc:Back".to_string()
+        }
+        AppState::MnemonicBackup(state) => {
+            if state.revealed {
+                "Enter:Done | Esc:Back".to_string()
+            } else {
+                "Enter:Reveal | Esc:Cancel".to_string()
+            }
+        }
+        AppState::NostrRoom => match app.nostr_room_phase {
+            NostrRoomPhase::Configure => "Tab:Next | Enter:Join | Esc:Back".to_string(),
+            NostrRoomPhase::WaitingForParticipants => "Space:Simulate join | Esc:Leave".to_string(),
+            NostrRoomPhase::Ready => "k:Keygen | s:Sign | Esc:Leave".to_string(),
+        },
+        AppState::NostrKeygen => "Enter:Continue | r:Retry | Esc:Cancel".to_string(),
+        AppState::NostrSign => "Enter:Continue | ↑/↓:Navigate | Esc:Cancel".to_string(),
+        #[cfg(feature = "miniscript-policy")]
+        AppState::PolicyPreview => {
+            "Enter:Init draft | [/]:Template | Tab:Field | c:Copy | Esc:Back".to_string()
+        }
+    }
+}
+
+fn home_help_bar_text() -> String {
+    #[cfg(feature = "miniscript-policy")]
+    {
+        "↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | r:Balance | c:Copy | q:Quit".to_string()
+    }
+    #[cfg(not(feature = "miniscript-policy"))]
+    {
+        "↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | r:Balance | c:Copy | q:Quit"
+            .to_string()
+    }
 }
 
 #[cfg(test)]
@@ -3019,6 +3023,24 @@ mod tests {
             description: "test proposal".to_string(),
             timestamp: 1_700_000_000,
         }
+    }
+
+    #[test]
+    fn home_help_bar_exposes_balance_refresh_shortcut() {
+        let app = App::new().unwrap();
+        let help = help_bar_text(&app);
+
+        assert!(help.contains("r:Balance"));
+        assert!(help.contains("Enter:Select"));
+        assert!(help.contains("c:Copy"));
+    }
+
+    #[test]
+    fn help_bar_prefers_status_message() {
+        let mut app = App::new().unwrap();
+        app.message = Some("Balance updated for treasury".to_string());
+
+        assert_eq!(help_bar_text(&app), "Balance updated for treasury");
     }
 
     #[test]
