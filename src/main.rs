@@ -247,7 +247,7 @@ enum Commands {
         #[arg(long, default_value = "0")]
         index: u32,
 
-        /// Network (testnet, mainnet, signet)
+        /// Network (testnet, testnet4, signet, regtest, mainnet)
         #[arg(long, default_value = "testnet")]
         network: String,
     },
@@ -262,7 +262,7 @@ enum Commands {
         #[arg(long, default_value = "10")]
         count: u32,
 
-        /// Network (testnet, mainnet, signet)
+        /// Network (testnet, testnet4, signet, regtest, mainnet)
         #[arg(long, default_value = "testnet")]
         network: String,
     },
@@ -453,7 +453,7 @@ enum Commands {
         #[arg(long)]
         fee_rate: Option<u64>,
 
-        /// Network (testnet, signet, mainnet)
+        /// Network (testnet, testnet4, signet, regtest, mainnet)
         #[arg(long, default_value = "testnet")]
         network: String,
     },
@@ -506,7 +506,7 @@ enum Commands {
         #[arg(long)]
         data: String,
 
-        /// Network (testnet, signet, mainnet)
+        /// Network (testnet, testnet4, signet, regtest, mainnet)
         #[arg(long, default_value = "testnet")]
         network: String,
     },
@@ -564,11 +564,12 @@ fn load_backup_inputs(
 fn parse_dkg_network(network: &str) -> Result<bitcoin::Network> {
     match network {
         "testnet" | "testnet3" => Ok(bitcoin::Network::Testnet),
+        "testnet4" | "test4" => Ok(bitcoin::Network::Testnet4),
         "signet" => Ok(bitcoin::Network::Signet),
         "regtest" | "local" => Ok(bitcoin::Network::Regtest),
         "mainnet" | "bitcoin" => Ok(bitcoin::Network::Bitcoin),
         other => anyhow::bail!(
-            "unknown network '{}'; use testnet, signet, regtest, or mainnet",
+            "unknown network '{}'; use testnet, testnet4, signet, regtest, or mainnet",
             other
         ),
     }
@@ -898,6 +899,14 @@ mod tests {
         assert_eq!(
             parse_dkg_network("testnet3").unwrap(),
             bitcoin::Network::Testnet
+        );
+        assert_eq!(
+            parse_dkg_network("testnet4").unwrap(),
+            bitcoin::Network::Testnet4
+        );
+        assert_eq!(
+            parse_dkg_network("test4").unwrap(),
+            bitcoin::Network::Testnet4
         );
         assert_eq!(
             parse_dkg_network("signet").unwrap(),

@@ -142,9 +142,9 @@ pub(crate) fn mempool_explorer_tx_url(network: Network, txid: impl std::fmt::Dis
     match network {
         Network::Bitcoin => format!("https://mempool.space/tx/{txid}"),
         Network::Testnet => format!("https://mempool.space/testnet/tx/{txid}"),
+        Network::Testnet4 => format!("https://mempool.space/testnet4/tx/{txid}"),
         Network::Signet => format!("https://mempool.space/signet/tx/{txid}"),
         Network::Regtest => format!("regtest:{txid}"),
-        _ => format!("unsupported-network:{txid}"),
     }
 }
 
@@ -814,6 +814,10 @@ mod tests {
         assert_eq!(
             mempool_explorer_tx_url(Network::Testnet, txid),
             "https://mempool.space/testnet/tx/txid-test"
+        );
+        assert_eq!(
+            mempool_explorer_tx_url(Network::Testnet4, txid),
+            "https://mempool.space/testnet4/tx/txid-test"
         );
         assert_eq!(
             mempool_explorer_tx_url(Network::Signet, txid),

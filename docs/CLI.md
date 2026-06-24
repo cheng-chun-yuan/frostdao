@@ -600,7 +600,7 @@ Derive a single HD address.
 frostdao dkg-derive-address \
   --name <wallet_name> \
   --index <n> \
-  --network <testnet|signet|mainnet>
+  --network <testnet|testnet4|signet|regtest|mainnet>
 ```
 
 ---
@@ -613,7 +613,7 @@ List derived HD addresses.
 frostdao dkg-list-addresses \
   --name <wallet_name> \
   --count <n> \
-  --network <testnet|signet|mainnet>
+  --network <testnet|testnet4|signet|regtest|mainnet>
 ```
 
 ---
