@@ -3193,9 +3193,9 @@ fn help_bar_text(app: &App) -> String {
             }
         }
         AppState::ChainSelect => "j/k/↑/↓:Select | Enter:Confirm | Esc:Cancel".to_string(),
-        AppState::Keygen(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
-        AppState::Reshare(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
-        AppState::Send(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
+        AppState::Keygen(state) => keygen_help_bar_text(app, state),
+        AppState::Reshare(state) => reshare_help_bar_text(state),
+        AppState::Send(state) => send_help_bar_text(state),
         AppState::AddressList(_) => {
             format!(
                 "j/k/↑/↓:Navigate | {copy}:Copy | {refresh} (Refresh):Refresh | a:Add | x:Remove | Esc:Back"
@@ -3229,6 +3229,99 @@ fn help_bar_text(app: &App) -> String {
         #[cfg(feature = "miniscript-policy")]
         AppState::PolicyPreview => {
             format!("Enter:Init draft | [/]:Template | Tab:Field | {copy}:Copy | Esc:Back").to_string()
+        }
+    }
+}
+
+fn keygen_help_bar_text(app: &App, state: &KeygenState) -> String {
+    let copy = COPY_KEY_LABEL;
+
+    match state {
+        KeygenState::ModeSelect => "j/k/↑/↓/1/2:Select | Enter:Continue | Esc:Cancel".to_string(),
+        KeygenState::ParamsSetup => {
+            if app.keygen_form.hierarchical {
+                "Tab:Next field | Enter:Generate | Esc:Back | Ctrl+u:Clear field".to_string()
+            } else {
+                "Tab:Next field | Enter:Generate All Parties | Esc:Back | Ctrl+u:Clear field"
+                    .to_string()
+            }
+        }
+        KeygenState::Round1Output { .. } => {
+            format!("{copy}:Copy to clipboard | Enter:Continue to Round 2 | Esc:Cancel")
+        }
+        KeygenState::Round2Input => {
+            "Paste/type JSON | Ctrl+u:Clear | Enter:Generate Shares | Esc:Back".to_string()
+        }
+        KeygenState::Round2Output { .. } => {
+            format!("{copy}:Copy to clipboard | Enter:Continue to Finalize | Esc:Cancel")
+        }
+        KeygenState::FinalizeInput => {
+            "Paste/type JSON | Ctrl+u:Clear | Enter:Finalize Wallet | Esc:Back".to_string()
+        }
+        KeygenState::Complete { .. } => "Enter/Esc:Return to wallet list".to_string(),
+    }
+}
+
+fn reshare_help_bar_text(state: &ReshareState) -> String {
+    let copy = COPY_KEY_LABEL;
+
+    match state {
+        ReshareState::ModeSelect => "j/k/↑/↓:Select | Enter:Continue | Esc:Cancel".to_string(),
+        ReshareState::LocalSetup => {
+            "Tab:Next | j/k/↑/↓:Select wallet | Enter:Reshare | Esc:Back".to_string()
+        }
+        ReshareState::LocalComplete { .. } => "Enter/Esc:Return to wallet list".to_string(),
+        ReshareState::Round1Setup => {
+            "Tab:Next | j/k/↑/↓:Select wallet | Enter:Generate | Esc:Cancel".to_string()
+        }
+        ReshareState::Round1Output { .. } => {
+            format!("{copy}:Copy | Enter:Go to Finalize (if new party) | Esc:Done (if old party)")
+        }
+        ReshareState::FinalizeInput => {
+            "Tab:Next | Space:Toggle | Ctrl+u:Clear | Enter:Finalize | Esc:Back".to_string()
+        }
+        ReshareState::Complete { .. } => "Enter/Esc:Return to wallet list".to_string(),
+    }
+}
+
+fn send_help_bar_text(state: &SendState) -> String {
+    let copy = COPY_KEY_LABEL;
+
+    match state {
+        SendState::SelectWallet => {
+            "j/k/↑/↓:Select wallet | Enter:Continue | Esc:Cancel".to_string()
+        }
+        SendState::SelectSigners { .. } => {
+            "j/k/↑/↓:Navigate | Space:Toggle | Enter:Continue | Esc:Back".to_string()
+        }
+        SendState::SelectAddress { .. } => {
+            "j/k/↑/↓:Navigate | Enter:Continue | Esc:Back".to_string()
+        }
+        SendState::ConfigureScript { .. } => {
+            "j/k/↑/↓:Select type | Tab:Next field | Space:Toggle | Enter:Continue | Esc:Back"
+                .to_string()
+        }
+        SendState::EnterDetails { .. } => {
+            "Tab:Next field | Enter:Prepare TX | Esc:Back".to_string()
+        }
+        SendState::ReviewTransaction { .. } => "y:Confirm and sign | Esc:Back to edit".to_string(),
+        SendState::ShowSighash { .. } => {
+            format!("{copy}:Copy | Enter:Generate Nonce | Esc:Back")
+        }
+        SendState::GenerateNonce { .. } => {
+            format!("{copy}:Copy | Enter:Collect nonces from others | Esc:Back")
+        }
+        SendState::EnterNonces { .. } => {
+            "Paste/type JSON | Ctrl+u:Clear | Enter:Generate Share | Esc:Back".to_string()
+        }
+        SendState::GenerateShare { .. } => {
+            format!("{copy}:Copy | Enter:Combine (Aggregator) | Esc:Done")
+        }
+        SendState::CombineShares { .. } => {
+            "Paste/type JSON | Ctrl+u:Clear | Enter:Combine | Esc:Back".to_string()
+        }
+        SendState::Complete { .. } => {
+            format!("Enter/Esc:Return to home | {copy}:Copy raw tx")
         }
     }
 }
@@ -3554,6 +3647,122 @@ mod tests {
             app.keygen_form.error_message.as_deref(),
             Some("Enter parties per rank (e.g., 2,3,3)")
         );
+    }
+
+    #[test]
+    fn keygen_help_bar_uses_htss_parameters_language() {
+        let mut app = App::new().unwrap();
+        app.keygen_form.hierarchical = true;
+        app.state = AppState::Keygen(KeygenState::ParamsSetup);
+
+        let help = help_bar_text(&app);
+
+        assert!(help.contains("Tab:Next field"));
+        assert!(help.contains("Enter:Generate"));
+        assert!(help.contains("Esc:Back"));
+        assert!(!help.contains("Generate All Parties"));
+    }
+
+    #[test]
+    fn keygen_help_bar_matches_round_states() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::Keygen(KeygenState::Round2Input);
+
+        let round2_help = help_bar_text(&app);
+        assert!(round2_help.contains("Paste/type JSON"));
+        assert!(round2_help.contains("Enter:Generate Shares"));
+
+        app.state = AppState::Keygen(KeygenState::Round1Output {
+            output_json: "{}".to_string(),
+        });
+        let round1_help = help_bar_text(&app);
+        assert!(round1_help.contains("Enter:Continue to Round 2"));
+
+        app.state = AppState::Keygen(KeygenState::Complete {
+            wallet_name: "wallet-help".to_string(),
+        });
+        let complete_help = help_bar_text(&app);
+        assert!(complete_help.contains("Return to wallet list"));
+    }
+
+    #[test]
+    fn reshare_help_bar_matches_distributed_local_modes() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::Reshare(ReshareState::LocalSetup);
+
+        let local_help = help_bar_text(&app);
+        assert!(local_help.contains("Tab:Next"));
+        assert!(local_help.contains("Enter:Reshare"));
+        assert!(local_help.contains("Esc:Back"));
+
+        app.state = AppState::Reshare(ReshareState::FinalizeInput);
+        let finalize_help = help_bar_text(&app);
+        assert!(finalize_help.contains("Enter:Finalize"));
+        assert!(finalize_help.contains("Ctrl+u:Clear"));
+
+        app.state = AppState::Reshare(ReshareState::Round1Output {
+            output_json: "{}".to_string(),
+        });
+        let output_help = help_bar_text(&app);
+        assert!(output_help.contains("Enter:Go to Finalize"));
+        assert!(output_help.contains("Esc:Done"));
+    }
+
+    #[test]
+    fn send_help_bar_matches_state_transitions() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::Send(SendState::SelectSigners {
+            wallet_name: "wallet-help".to_string(),
+        });
+
+        let select_signers = help_bar_text(&app);
+        assert!(select_signers.contains("Space:Toggle"));
+        assert!(select_signers.contains("Enter:Continue"));
+
+        app.state = AppState::Send(SendState::ConfigureScript {
+            wallet_name: "wallet-help".to_string(),
+        });
+        let script_help = help_bar_text(&app);
+        assert!(script_help.contains("Space:Toggle"));
+        assert!(script_help.contains("Esc:Back"));
+
+        app.state = AppState::Send(SendState::ReviewTransaction {
+            wallet_name: "wallet-help".to_string(),
+        });
+        let review_help = help_bar_text(&app);
+        assert!(review_help.contains("y:Confirm and sign"));
+        assert!(review_help.contains("Esc:Back to edit"));
+
+        app.state = AppState::Send(SendState::ShowSighash {
+            wallet_name: "wallet-help".to_string(),
+            sighash: "abc".to_string(),
+            session_id: "session-help".to_string(),
+        });
+        let show_sighash_help = help_bar_text(&app);
+        assert!(show_sighash_help.contains("Enter:Generate Nonce"));
+        assert!(show_sighash_help.contains("c/C:Copy"));
+    }
+
+    #[test]
+    fn send_help_bar_matches_signature_share_state() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::Send(SendState::GenerateShare {
+            wallet_name: "wallet-help".to_string(),
+            share_output: "".to_string(),
+        });
+
+        let generate_share = help_bar_text(&app);
+        assert!(generate_share.contains("Enter:Combine (Aggregator)"));
+        assert!(generate_share.contains("Esc:Done"));
+
+        app.state = AppState::Send(SendState::Complete {
+            txid: "abc".to_string(),
+            broadcast_status: None,
+            raw_tx: None,
+        });
+        let complete_help = help_bar_text(&app);
+        assert!(complete_help.contains("Enter/Esc:Return to home"));
+        assert!(complete_help.contains("c/C:Copy raw tx"));
     }
 
     #[test]
