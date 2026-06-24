@@ -70,6 +70,19 @@ impl NetworkSelection {
             Self::Mainnet,
         ]
     }
+
+    /// Convert a network selection to its index in [`NetworkSelection::all`].
+    pub fn index(self) -> usize {
+        Self::all()
+            .iter()
+            .position(|network| *network == self)
+            .unwrap_or(0)
+    }
+
+    /// Convert an index to a network selection, defaulting to the configured default.
+    pub fn from_index(index: usize) -> Self {
+        Self::all().get(index).copied().unwrap_or_default()
+    }
 }
 
 /// Main application state
@@ -600,4 +613,29 @@ pub struct TxProposal {
     pub description: String,
     /// Timestamp when proposed
     pub timestamp: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::NetworkSelection;
+
+    #[test]
+    fn network_selection_index_roundtrip() {
+        let networks = NetworkSelection::all();
+
+        assert_eq!(networks.len(), 5);
+
+        for (index, network) in networks.iter().copied().enumerate() {
+            assert_eq!(NetworkSelection::from_index(index), network);
+            assert_eq!(network.index(), index);
+        }
+    }
+
+    #[test]
+    fn network_selection_from_index_out_of_bounds_defaults_to_testnet4() {
+        assert_eq!(
+            NetworkSelection::from_index(usize::MAX),
+            NetworkSelection::Testnet4
+        );
+    }
 }

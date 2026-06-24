@@ -315,10 +315,7 @@ fn network_safety_lines(network: NetworkSelection) -> Vec<Line<'static>> {
 fn balance_fetch_hint_line() -> Line<'static> {
     Line::from(vec![
         Span::styled("Balance: ", Style::default().fg(Color::Gray)),
-        Span::styled(
-            "Press r to fetch",
-            Style::default().fg(Color::DarkGray),
-        ),
+        Span::styled("Press r to fetch", Style::default().fg(Color::DarkGray)),
     ])
 }
 

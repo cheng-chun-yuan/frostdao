@@ -127,13 +127,7 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
         KeyCode::Char('b') | KeyCode::Char('r') | KeyCode::F(5) => app.refresh_balance(),
         KeyCode::Char('R') => app.reload_wallets(),
         KeyCode::Char('n') => {
-            app.chain_selector_index = match app.network {
-                state::NetworkSelection::Testnet4 => 0,
-                state::NetworkSelection::Testnet3 => 1,
-                state::NetworkSelection::Signet => 2,
-                state::NetworkSelection::Regtest => 3,
-                state::NetworkSelection::Mainnet => 4,
-            };
+            app.chain_selector_index = app.network.index();
             app.state = AppState::ChainSelect;
         }
         KeyCode::Char('g') => {

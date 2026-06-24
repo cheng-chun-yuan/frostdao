@@ -1309,14 +1309,7 @@ impl App {
 
     /// Confirm network selection
     pub fn confirm_network(&mut self) {
-        self.network = match self.chain_selector_index {
-            0 => NetworkSelection::Testnet4,
-            1 => NetworkSelection::Testnet3,
-            2 => NetworkSelection::Signet,
-            3 => NetworkSelection::Regtest,
-            4 => NetworkSelection::Mainnet,
-            _ => NetworkSelection::Testnet4,
-        };
+        self.network = NetworkSelection::from_index(self.chain_selector_index);
         self.clear_network_volatile_state();
         self.state = AppState::Home;
         self.message = Some(format!(
