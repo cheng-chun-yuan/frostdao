@@ -558,6 +558,29 @@ pub enum NostrSignState {
     Complete { txid: String },
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum NostrTxField {
+    #[default]
+    Recipient,
+    Amount,
+}
+
+impl NostrTxField {
+    pub fn next(self) -> Self {
+        match self {
+            Self::Recipient => Self::Amount,
+            Self::Amount => Self::Recipient,
+        }
+    }
+
+    pub fn prev(self) -> Self {
+        match self {
+            Self::Recipient => Self::Amount,
+            Self::Amount => Self::Recipient,
+        }
+    }
+}
+
 /// Transaction proposal for Nostr signing
 #[derive(Clone, Default, Debug)]
 pub struct TxProposal {

@@ -7,12 +7,13 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use crate::tui::components::TextInput;
 #[cfg(feature = "miniscript-policy")]
 use crate::tui::screens::PolicyPreviewFormData;
 use crate::tui::screens::{KeygenFormData, ReshareFormData, SendFormData};
 use crate::tui::state::{
     AppState, NetworkSelection, NostrKeygenState, NostrRoomField, NostrRoomPhase, NostrSignState,
-    TxProposal,
+    NostrTxField, TxProposal,
 };
 use frostdao::nostr::RoomMessageTransport;
 use frostdao::protocol::keygen::{get_state_dir, list_wallets, WalletSummary};
@@ -179,6 +180,12 @@ pub struct App {
     pub nostr_sign_state: NostrSignState,
 
     // Nostr signing transaction data
+    /// Current focused Nostr transaction draft field
+    pub nostr_tx_focus: NostrTxField,
+    /// Editable recipient address for transaction proposals
+    pub nostr_to_address_input: TextInput,
+    /// Editable amount in satoshis for transaction proposals
+    pub nostr_amount_input: TextInput,
     /// Recipient address for transaction
     pub nostr_to_address: String,
     /// Amount in satoshis
@@ -228,6 +235,11 @@ impl App {
             nostr_runtime: None,
             nostr_keygen_state: NostrKeygenState::ModeSelect,
             nostr_sign_state: NostrSignState::SelectWallet,
+            nostr_tx_focus: NostrTxField::Recipient,
+            nostr_to_address_input: TextInput::new("Recipient Address").with_placeholder("tb1p..."),
+            nostr_amount_input: TextInput::new("Amount (sats)")
+                .with_placeholder("50000")
+                .numeric(),
             nostr_to_address: String::new(),
             nostr_amount_sats: 0,
             #[cfg(test)]
@@ -244,12 +256,13 @@ impl App {
 
     /// Build a locally proposed TUI Nostr transaction after validating the draft fields.
     pub fn build_nostr_tx_proposal(&self, wallet_name: &str, timestamp: u64) -> Result<TxProposal> {
+        let amount_sats = self.nostr_amount_sats()?;
         let to_address = parse_tui_recipient_address(
-            self.nostr_to_address.trim(),
+            self.nostr_to_address_value().trim(),
             self.network.to_bitcoin_network(),
             self.network.display_name(),
         )?;
-        if self.nostr_amount_sats == 0 {
+        if amount_sats == 0 {
             anyhow::bail!("amount must be greater than zero");
         }
 
@@ -274,7 +287,7 @@ impl App {
         let build = frostdao::protocol::dkg_tx::build_unsigned_tx_core_with_source_path(
             wallet_name,
             &to_address,
-            self.nostr_amount_sats,
+            amount_sats,
             Some(10),
             self.network.to_bitcoin_network(),
             &storage,
@@ -284,6 +297,26 @@ impl App {
             serde_json::from_str(&build.result)?;
 
         Ok(self.nostr_tx_proposal_from_build_output(wallet_name, timestamp, build_output))
+    }
+
+    pub(crate) fn nostr_to_address_value(&self) -> &str {
+        let input_value = self.nostr_to_address_input.value().trim();
+        if input_value.is_empty() {
+            self.nostr_to_address.as_str()
+        } else {
+            self.nostr_to_address_input.value()
+        }
+    }
+
+    pub(crate) fn nostr_amount_sats(&self) -> Result<u64> {
+        let input_value = self.nostr_amount_input.value().trim();
+        if input_value.is_empty() {
+            Ok(self.nostr_amount_sats)
+        } else {
+            input_value
+                .parse::<u64>()
+                .map_err(|_| anyhow::anyhow!("amount must be a whole number of sats"))
+        }
     }
 
     pub(crate) fn nostr_source_derivation_path(&self) -> Option<(u32, u32)> {

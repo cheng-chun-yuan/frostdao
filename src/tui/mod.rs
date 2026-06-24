@@ -35,7 +35,8 @@ use std::str::FromStr;
 use app::App;
 use state::{
     AddressListState, AppState, KeygenState, MnemonicState, NostrKeygenState, NostrRoomField,
-    NostrRoomPhase, NostrSignState, ReshareState, SendState, WalletAction, WalletDetailsState,
+    NostrRoomPhase, NostrSignState, NostrTxField, ReshareState, SendState, WalletAction,
+    WalletDetailsState,
 };
 
 use frostdao::protocol::{keygen, reshare, signing};
@@ -92,7 +93,7 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut A
                     AppState::MnemonicBackup(_) => handle_mnemonic_keys(app, key.code),
                     AppState::NostrRoom => handle_nostr_room_keys(app, key),
                     AppState::NostrKeygen => handle_nostr_keygen_keys(app, key.code),
-                    AppState::NostrSign => handle_nostr_sign_keys(app, key.code),
+                    AppState::NostrSign => handle_nostr_sign_keys(app, key),
                     #[cfg(feature = "miniscript-policy")]
                     AppState::PolicyPreview => handle_policy_preview_keys(app, key),
                 }
@@ -2572,7 +2573,8 @@ fn handle_nostr_keygen_keys(app: &mut App, code: KeyCode) {
     }
 }
 
-fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
+fn handle_nostr_sign_keys(app: &mut App, key: KeyEvent) {
+    let code = key.code;
     match code {
         KeyCode::Esc => {
             // Go back based on current state
@@ -2605,6 +2607,30 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                 }
             }
         }
+        KeyCode::Tab if matches!(app.nostr_sign_state, NostrSignState::ConfigureTx { .. }) => {
+            app.nostr_tx_focus = app.nostr_tx_focus.next();
+        }
+        KeyCode::BackTab if matches!(app.nostr_sign_state, NostrSignState::ConfigureTx { .. }) => {
+            app.nostr_tx_focus = app.nostr_tx_focus.prev();
+        }
+        KeyCode::Char(_)
+        | KeyCode::Backspace
+        | KeyCode::Delete
+        | KeyCode::Left
+        | KeyCode::Right
+        | KeyCode::Home
+        | KeyCode::End
+            if matches!(app.nostr_sign_state, NostrSignState::ConfigureTx { .. }) =>
+        {
+            match app.nostr_tx_focus {
+                NostrTxField::Recipient => {
+                    app.nostr_to_address_input.handle_key(key);
+                }
+                NostrTxField::Amount => {
+                    app.nostr_amount_input.handle_key(key);
+                }
+            }
+        }
         KeyCode::Enter => {
             if matches!(
                 app.nostr_sign_state,
@@ -2630,6 +2656,7 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                     }
                 }
                 NostrSignState::SelectRole { wallet_name } => {
+                    app.nostr_tx_focus = NostrTxField::Recipient;
                     app.nostr_sign_state = NostrSignState::ConfigureTx {
                         wallet_name: wallet_name.clone(),
                     };
@@ -2798,6 +2825,7 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
         KeyCode::Char('p') | KeyCode::Char('P') => {
             // Select Propose role
             if let NostrSignState::SelectRole { wallet_name } = &app.nostr_sign_state {
+                app.nostr_tx_focus = NostrTxField::Recipient;
                 app.nostr_sign_state = NostrSignState::ConfigureTx {
                     wallet_name: wallet_name.clone(),
                 };
@@ -3207,6 +3235,51 @@ mod tests {
     }
 
     #[test]
+    fn nostr_sign_help_bar_matches_configure_actions() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::NostrSign;
+        app.nostr_sign_state = NostrSignState::ConfigureTx {
+            wallet_name: "wallet-test".to_string(),
+        };
+
+        let help = help_bar_text(&app);
+
+        assert!(help.contains("Tab:Field"));
+        assert!(help.contains("Enter:Publish proposal"));
+        assert!(help.contains("Ctrl+u:Clear field"));
+    }
+
+    #[test]
+    fn nostr_configure_tx_accepts_recipient_and_amount_input() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::NostrSign;
+        app.nostr_sign_state = NostrSignState::ConfigureTx {
+            wallet_name: "wallet-test".to_string(),
+        };
+
+        for c in "tb1precipient".chars() {
+            handle_nostr_sign_keys(
+                &mut app,
+                KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            );
+        }
+        assert_eq!(app.nostr_to_address_input.value(), "tb1precipient");
+        assert_eq!(app.nostr_tx_focus, NostrTxField::Recipient);
+
+        handle_nostr_sign_keys(&mut app, KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        assert_eq!(app.nostr_tx_focus, NostrTxField::Amount);
+
+        for c in "50000".chars() {
+            handle_nostr_sign_keys(
+                &mut app,
+                KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            );
+        }
+        assert_eq!(app.nostr_amount_input.value(), "50000");
+        assert_eq!(app.nostr_amount_sats().unwrap(), 50_000);
+    }
+
+    #[test]
     fn nostr_room_waiting_help_uses_local_test_participant_wording() {
         let mut app = App::new().unwrap();
         app.state = AppState::NostrRoom;
@@ -3238,7 +3311,10 @@ mod tests {
             proposal: reviewable_proposal(),
         };
 
-        handle_nostr_sign_keys(&mut app, KeyCode::Char('r'));
+        handle_nostr_sign_keys(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE),
+        );
 
         assert!(matches!(
             app.nostr_sign_state,

@@ -14,7 +14,7 @@ use ratatui::{
 use std::collections::HashMap;
 
 use crate::tui::app::{wallet_address_for_network, App};
-use crate::tui::state::NostrSignState;
+use crate::tui::state::{NostrSignState, NostrTxField};
 
 /// Render the Nostr signing screen
 pub fn render_nostr_sign(frame: &mut Frame, app: &App, area: Rect) {
@@ -453,6 +453,9 @@ pub(crate) fn nostr_configure_source_summary(
 
 fn render_content(frame: &mut Frame, app: &App, area: Rect) {
     match &app.nostr_sign_state {
+        NostrSignState::ConfigureTx { wallet_name } => {
+            render_configure_tx(frame, app, wallet_name, area);
+        }
         NostrSignState::SelectRole { .. } => {
             render_role_selection(frame, app, area);
         }
@@ -484,6 +487,46 @@ fn render_content(frame: &mut Frame, app: &App, area: Rect) {
             frame.render_widget(placeholder, area);
         }
     }
+}
+
+fn render_configure_tx(frame: &mut Frame, app: &App, wallet_name: &str, area: Rect) {
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Min(4),
+        ])
+        .split(area);
+
+    app.nostr_to_address_input.render(
+        frame,
+        rows[0],
+        app.nostr_tx_focus == NostrTxField::Recipient,
+    );
+    app.nostr_amount_input
+        .render(frame, rows[1], app.nostr_tx_focus == NostrTxField::Amount);
+
+    let (_, source_address, _) = nostr_configure_source_summary(app, wallet_name);
+    let details = Paragraph::new(vec![
+        Line::from(vec![
+            Span::styled("Source: ", Style::default().fg(Color::Gray)),
+            Span::styled(source_address, Style::default().fg(Color::White)),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Enter builds a real unsigned transaction, source path, source address, and BIP341 sighash for cross-device review.",
+            Style::default().fg(Color::DarkGray),
+        )),
+    ])
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Proposal Draft ")
+            .border_style(Style::default().fg(Color::DarkGray)),
+    )
+    .wrap(ratatui::widgets::Wrap { trim: false });
+    frame.render_widget(details, rows[2]);
 }
 
 fn render_role_selection(frame: &mut Frame, _app: &App, area: Rect) {
@@ -840,6 +883,9 @@ fn render_help(frame: &mut Frame, app: &App, area: Rect) {
 pub(crate) fn nostr_sign_help_text(state: &NostrSignState) -> &'static str {
     match state {
         NostrSignState::SelectRole { .. } => "p: Propose | c: Consent | Enter: Propose | Esc: Back",
+        NostrSignState::ConfigureTx { .. } => {
+            "Tab:Field | Enter:Publish proposal | Ctrl+u:Clear field | Esc:Back"
+        }
         NostrSignState::ReviewProposal { .. } => "y: Consent | r: Reject | Esc: Back",
         NostrSignState::Complete { .. } => "Enter: Done | c: Copy TXID",
         _ => "Enter: Continue | Esc: Cancel",

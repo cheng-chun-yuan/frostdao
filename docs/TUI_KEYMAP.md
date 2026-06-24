@@ -227,9 +227,11 @@ The policy input remains editable. Use the templates as starting points, then ty
 | Key | Action |
 |-----|--------|
 | `↑/↓`, `j/k` | Select wallet where applicable |
+| `Tab`, `Shift-Tab` | Move recipient/amount field while configuring a proposal |
 | `Enter` | Continue/done |
 | `p` | Propose transaction, in role select |
 | `c` | Consent role in role select, or copy TXID on completion |
+| `Ctrl+u` | Clear focused recipient or amount field while configuring a proposal |
 | `y` | Consent after reviewing proposal fingerprint |
 | `r` | Publish a proposal rejection or retry where shown |
 | `Esc` | Back/cancel |
