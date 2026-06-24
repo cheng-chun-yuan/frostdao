@@ -343,6 +343,8 @@ def check_replay_cache_persistence():
         "local simulation",
         "Relay transport",
         "room_info_labels_local_simulation_transport",
+        "local_waiting_help_uses_test_participant_wording",
+        "Add local test participant",
     ]
     missing.extend([f"src/tui/screens/nostr_room.rs: {item}" for item in room_required if item not in tui_room])
     for marker in ["NostrRoomRuntime", "FileReplayCache", "RelayRoomTransport"]:
@@ -364,6 +366,8 @@ def check_replay_cache_persistence():
         missing.append("RUN_GUIDE local simulation transport documentation")
     if "local simulation mode" not in keymap:
         missing.append("TUI_KEYMAP local simulation mode documentation")
+    if "Add a local test participant" not in keymap:
+        missing.append("TUI_KEYMAP local test participant wording")
     if "FROSTDAO_TUI_NOSTR_RELAYS" not in run_guide:
         missing.append("RUN_GUIDE relay opt-in env documentation")
     if "FROSTDAO_ENABLE_MAINNET_NOSTR=1" not in run_guide:

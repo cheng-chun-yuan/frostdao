@@ -201,12 +201,7 @@ fn render_waiting(frame: &mut Frame, app: &App, area: Rect) {
         Line::from(""),
     ];
     if app.nostr_local_simulation_transport_active() {
-        help_lines.push(Line::from(vec![
-            Span::styled("Space", Style::default().fg(Color::Yellow)),
-            Span::raw(": Simulate participant locally  "),
-            Span::styled("Esc", Style::default().fg(Color::Yellow)),
-            Span::raw(": Leave room"),
-        ]));
+        help_lines.push(local_waiting_help_line());
     } else {
         help_lines.push(Line::from(vec![
             Span::styled("Relay transport", Style::default().fg(Color::Cyan)),
@@ -221,6 +216,15 @@ fn render_waiting(frame: &mut Frame, app: &App, area: Rect) {
             .border_style(Style::default().fg(Color::DarkGray)),
     );
     frame.render_widget(help, chunks[4]);
+}
+
+fn local_waiting_help_line() -> Line<'static> {
+    Line::from(vec![
+        Span::styled("Space", Style::default().fg(Color::Yellow)),
+        Span::raw(": Add local test participant  "),
+        Span::styled("Esc", Style::default().fg(Color::Yellow)),
+        Span::raw(": Leave room"),
+    ])
 }
 
 fn render_ready(frame: &mut Frame, app: &App, area: Rect) {
@@ -428,6 +432,15 @@ mod tests {
         assert!(rendered.contains("You are: Party 2"));
         assert!(rendered.contains("2-of-3"));
         assert!(rendered.contains("Transport: local simulation"));
+        assert!(!rendered.contains("demo"));
+    }
+
+    #[test]
+    fn local_waiting_help_uses_test_participant_wording() {
+        let rendered = line_to_string(local_waiting_help_line());
+
+        assert!(rendered.contains("Space: Add local test participant"));
+        assert!(!rendered.contains("Simulate participant"));
         assert!(!rendered.contains("demo"));
     }
 }

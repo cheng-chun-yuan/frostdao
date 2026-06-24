@@ -2983,7 +2983,9 @@ fn help_bar_text(app: &App) -> String {
         }
         AppState::NostrRoom => match app.nostr_room_phase {
             NostrRoomPhase::Configure => "Tab:Next | Enter:Join | Esc:Back".to_string(),
-            NostrRoomPhase::WaitingForParticipants => "Space:Simulate join | Esc:Leave".to_string(),
+            NostrRoomPhase::WaitingForParticipants => {
+                "Space:Add local test participant | Esc:Leave".to_string()
+            }
             NostrRoomPhase::Ready => "k:Keygen | s:Sign | Esc:Leave".to_string(),
         },
         AppState::NostrKeygen => "Enter:Continue | r:Retry | Esc:Cancel".to_string(),
@@ -3153,6 +3155,20 @@ mod tests {
         assert!(help.contains("p: Propose"));
         assert!(help.contains("c: Consent"));
         assert!(help.contains("Enter: Propose"));
+    }
+
+    #[test]
+    fn nostr_room_waiting_help_uses_local_test_participant_wording() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::NostrRoom;
+        app.nostr_room_phase = NostrRoomPhase::WaitingForParticipants;
+
+        let help = help_bar_text(&app);
+
+        assert!(help.contains("Space:Add local test participant"));
+        assert!(help.contains("Esc:Leave"));
+        assert!(!help.contains("Simulate join"));
+        assert!(!help.contains("demo"));
     }
 
     #[test]
