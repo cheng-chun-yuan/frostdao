@@ -244,6 +244,27 @@ pub fn build_unsigned_tx_core(
     network: Network,
     storage: &dyn Storage,
 ) -> Result<CommandResult> {
+    build_unsigned_tx_core_with_source_path(
+        wallet_name,
+        to_address,
+        amount_sats,
+        fee_rate,
+        network,
+        storage,
+        None,
+    )
+}
+
+/// Core function for building unsigned transaction from a root or HD-derived source.
+pub fn build_unsigned_tx_core_with_source_path(
+    wallet_name: &str,
+    to_address: &str,
+    amount_sats: u64,
+    fee_rate: Option<u64>,
+    network: Network,
+    storage: &dyn Storage,
+    derivation_path: Option<(u32, u32)>,
+) -> Result<CommandResult> {
     let mut out = String::new();
 
     out.push_str("DKG Transaction Builder\n\n");
@@ -259,11 +280,25 @@ pub fn build_unsigned_tx_core(
     let shared_key: SharedKey<EvenY> =
         bincode::deserialize(&shared_key_bytes).context("Failed to deserialize shared key")?;
 
-    // Get x-only public key
-    let pubkey_point = shared_key.public_key();
-    let pubkey_bytes: [u8; 32] = pubkey_point.to_xonly_bytes();
+    let source_path = derivation_path
+        .map(|(change, index)| format_bip86_path(network, change, index))
+        .unwrap_or_else(|| "root key-path".to_string());
 
-    // Get our address
+    let source_pubkey = if let Some((change, index)) = derivation_path {
+        let hd_context = crate::btc::hd_address::load_hd_context(storage)
+            .context("HD context not found. Wallet may not support HD derivation.")?;
+        let path = crate::crypto::hd::DerivationPath {
+            change,
+            address_index: index,
+        };
+        crate::crypto::hd::derive_at_path(&hd_context, &path)
+            .context("Failed to derive HD key")?
+            .public_key
+    } else {
+        shared_key.public_key()
+    };
+
+    let pubkey_bytes: [u8; 32] = source_pubkey.to_xonly_bytes();
     let xonly_pubkey = XOnlyPublicKey::from_slice(&pubkey_bytes)?;
     let secp = bitcoin::secp256k1::Secp256k1::new();
     let from_address = Address::p2tr(&secp, xonly_pubkey, None, network);
@@ -276,6 +311,7 @@ pub fn build_unsigned_tx_core(
 
     out.push_str(&format!("Wallet: {}\n", wallet_name));
     out.push_str(&format!("Network: {}\n", network_name(network)));
+    out.push_str(&format!("Source path: {}\n", source_path));
     out.push_str(&format!("From: {}\n", from_address));
     out.push_str(&format!("To: {}\n", dest_address));
     out.push_str(&format!("Amount: {} sats\n\n", amount_sats));
@@ -372,7 +408,6 @@ pub fn build_unsigned_tx_core(
 
     // Generate session ID
     let session_id = generate_session_id(to_address, amount_sats);
-    let source_path = "root key-path".to_string();
     let sighash_fingerprint = sighash_fingerprint(&sighash_hex);
 
     // Serialize unsigned tx

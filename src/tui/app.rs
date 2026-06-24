@@ -270,18 +270,24 @@ impl App {
 
         let state_dir = get_state_dir(wallet_name);
         let storage = FileStorage::new(&state_dir)?;
-        let build = frostdao::protocol::dkg_tx::build_unsigned_tx_core(
+        let derivation_path = self.nostr_source_derivation_path();
+        let build = frostdao::protocol::dkg_tx::build_unsigned_tx_core_with_source_path(
             wallet_name,
             &to_address,
             self.nostr_amount_sats,
             Some(10),
             self.network.to_bitcoin_network(),
             &storage,
+            derivation_path,
         )?;
         let build_output: frostdao::protocol::dkg_tx::BuildTxOutput =
             serde_json::from_str(&build.result)?;
 
         Ok(self.nostr_tx_proposal_from_build_output(wallet_name, timestamp, build_output))
+    }
+
+    pub(crate) fn nostr_source_derivation_path(&self) -> Option<(u32, u32)> {
+        self.send_form.get_derivation_path()
     }
 
     fn nostr_tx_proposal_from_build_output(
@@ -2126,6 +2132,21 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("has no known Testnet3 source address"));
+    }
+
+    #[test]
+    fn tui_nostr_source_uses_selected_hd_path_when_enabled() {
+        let mut app = app_with_wallet(Some(test_address(Network::Testnet)));
+        app.send_form.hd_enabled = true;
+        app.send_form.use_hd_address = true;
+        app.send_form.hd_selected_index = 0;
+        app.send_form.hd_addresses =
+            vec![("tb1pagentderived".to_string(), "pubkey".to_string(), 42)];
+
+        assert_eq!(app.nostr_source_derivation_path(), Some((0, 42)));
+
+        app.send_form.use_hd_address = false;
+        assert_eq!(app.nostr_source_derivation_path(), None);
     }
 
     #[test]

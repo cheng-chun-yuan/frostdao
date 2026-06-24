@@ -231,3 +231,5 @@ The policy input remains editable. Use the templates as starting points, then ty
 | `y` | Consent after reviewing proposal fingerprint |
 | `r` | Publish a proposal rejection or retry where shown |
 | `Esc` | Back/cancel |
+
+The configure and review screens show the source path and source address. If the proposer selected an HD-derived source, the Nostr proposal uses that same derived path; consent only after every signer sees the same source path, source address, destination, amount, and fingerprint.

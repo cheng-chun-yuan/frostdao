@@ -13,7 +13,7 @@ use ratatui::{
 };
 use std::collections::HashMap;
 
-use crate::tui::app::App;
+use crate::tui::app::{wallet_address_for_network, App};
 use crate::tui::state::NostrSignState;
 
 /// Render the Nostr signing screen
@@ -125,6 +125,32 @@ fn get_progress(state: &NostrSignState, app: &App) -> (u16, String) {
 
 fn render_status_info(frame: &mut Frame, app: &App, area: Rect) {
     let lines = match &app.nostr_sign_state {
+        NostrSignState::ConfigureTx { wallet_name } => {
+            let (source_path, source_address, control) =
+                nostr_configure_source_summary(app, wallet_name);
+            vec![
+                Line::from(vec![
+                    Span::styled("Wallet: ", Style::default().fg(Color::Gray)),
+                    Span::styled(wallet_name, Style::default().fg(Color::White)),
+                    Span::raw("  "),
+                    Span::styled("Network: ", Style::default().fg(Color::Gray)),
+                    Span::styled(app.network.display_name(), Style::default().fg(Color::Cyan)),
+                ]),
+                Line::from(vec![
+                    Span::styled("Source path: ", Style::default().fg(Color::Gray)),
+                    Span::styled(source_path, Style::default().fg(Color::White)),
+                ]),
+                Line::from(vec![
+                    Span::styled("Source address: ", Style::default().fg(Color::Gray)),
+                    Span::styled(source_address, Style::default().fg(Color::White)),
+                ]),
+                Line::from(Span::styled(control, Style::default().fg(Color::DarkGray))),
+                Line::from(vec![
+                    Span::styled("Review: ", Style::default().fg(Color::Gray)),
+                    Span::raw("the proposal will publish this source path, source address, and sighash fingerprint."),
+                ]),
+            ]
+        }
         NostrSignState::SelectRole { wallet_name } => {
             vec![
                 Line::from(vec![
@@ -389,6 +415,40 @@ fn render_status_info(frame: &mut Frame, app: &App, area: Rect) {
 
     let status = Paragraph::new(lines);
     frame.render_widget(status, area);
+}
+
+pub(crate) fn nostr_configure_source_summary(
+    app: &App,
+    wallet_name: &str,
+) -> (String, String, &'static str) {
+    if let (Some((change, index)), Some(address)) = (
+        app.nostr_source_derivation_path(),
+        app.send_form.get_selected_hd_address(),
+    ) {
+        return (
+            frostdao::crypto::hd::format_bip86_path(
+                app.network.to_bitcoin_network(),
+                change,
+                index,
+            ),
+            address,
+            "MPC threshold shares sign this derived path with the HD tweak.",
+        );
+    }
+
+    let root_address = app
+        .wallets
+        .iter()
+        .find(|wallet| wallet.name == wallet_name)
+        .and_then(|wallet| wallet_address_for_network(wallet, app.network))
+        .unwrap_or("unknown source address")
+        .to_string();
+
+    (
+        "root key-path".to_string(),
+        root_address,
+        "MPC threshold shares sign the root key-path address.",
+    )
 }
 
 fn render_content(frame: &mut Frame, app: &App, area: Rect) {
@@ -812,11 +872,14 @@ fn format_timestamp(timestamp: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tui::state::NetworkSelection;
     use crate::tui::state::TxProposal;
+    use frostdao::protocol::keygen::WalletSummary;
     use frostdao::protocol::{
         SigningAttemptConfig, SigningCoordinator, SigningNonceInput, SigningSchemePolicy,
         SigningShareInput,
     };
+    use std::collections::BTreeMap;
 
     fn test_review_proposal() -> TxProposal {
         TxProposal {
@@ -838,6 +901,20 @@ mod tests {
             },
             description: "test proposal".to_string(),
             timestamp: 1_700_000_000,
+        }
+    }
+
+    fn wallet_summary(name: &str, address: &str) -> WalletSummary {
+        WalletSummary {
+            name: name.to_string(),
+            threshold: Some(2),
+            total_parties: Some(3),
+            hierarchical: Some(false),
+            address: Some(address.to_string()),
+            address_testnet: Some(address.to_string()),
+            address_mainnet: None,
+            signing_requirement: None,
+            party_ranks: None::<BTreeMap<u32, u32>>,
         }
     }
 
@@ -868,6 +945,24 @@ mod tests {
         ] {
             assert!(rendered.contains(expected), "missing {expected}");
         }
+    }
+
+    #[test]
+    fn configure_source_summary_uses_selected_hd_address() {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Signet;
+        app.wallets = vec![wallet_summary("treasury", "tb1proot")];
+        app.send_form.hd_enabled = true;
+        app.send_form.use_hd_address = true;
+        app.send_form.hd_selected_index = 0;
+        app.send_form.hd_addresses =
+            vec![("tb1pagentderived".to_string(), "pubkey".to_string(), 9)];
+
+        let (path, address, control) = nostr_configure_source_summary(&app, "treasury");
+
+        assert_eq!(path, "m/86'/1'/0'/0/9");
+        assert_eq!(address, "tb1pagentderived");
+        assert!(control.contains("HD tweak"));
     }
 
     #[test]
