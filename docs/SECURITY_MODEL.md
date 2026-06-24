@@ -67,7 +67,7 @@ The current recovery flow is useful for restoring a lost party share, but it sho
 
 ## Backup Caution
 
-The 24-word share mnemonic is equivalent to that party's local secret share. The backup manifest, including the public shared-key polynomial, is intentionally public and does not contain the secret.
+The 24-word share mnemonic is equivalent to that party's local secret share. The backup manifest, including the public party-rank map and public shared-key polynomial, is intentionally public and does not contain the secret.
 
 Before relying on a backup:
 

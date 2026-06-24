@@ -12,10 +12,10 @@ Each party should store:
 - party index
 - rank, for HTSS
 - threshold and total party count
-- group public key, public shared-key polynomial, and address fingerprint
+- group public key, public party-rank map, public shared-key polynomial, and address fingerprint
 - recovery instructions
 
-The mnemonic is secret. The manifest is public metadata that helps verify the mnemonic belongs to the correct wallet and party. Its public shared-key polynomial is restore metadata for the FROST wallet, not a private share.
+The mnemonic is secret. The manifest is public metadata that helps verify the mnemonic belongs to the correct wallet and party. Its party-rank map and shared-key polynomial are restore metadata for the FROST wallet, not private shares.
 
 ## Generate A Backup
 
@@ -86,6 +86,7 @@ Implemented:
 
 - share mnemonic generation
 - public backup manifest
+- public party-rank map in the manifest
 - public shared-key polynomial in the manifest
 - backup ID
 - share fingerprint

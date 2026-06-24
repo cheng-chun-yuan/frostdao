@@ -559,6 +559,7 @@ fn load_backup_inputs(
         threshold: htss.threshold,
         total_parties: group_info.total_parties,
         hierarchical: htss.hierarchical,
+        party_ranks: htss.party_ranks.clone(),
         group_public_key: group_info.group_public_key.clone(),
         shared_key_polynomial: hex::encode(shared_key.to_bytes()),
         taproot_address_testnet: group_info.taproot_address_testnet.clone(),

@@ -7,6 +7,7 @@
 use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 
 pub const BACKUP_FORMAT: &str = "frostdao-share-backup";
 pub const BACKUP_VERSION: u16 = 1;
@@ -19,6 +20,7 @@ pub struct BackupWalletMetadata {
     pub threshold: u32,
     pub total_parties: u32,
     pub hierarchical: bool,
+    pub party_ranks: BTreeMap<u32, u32>,
     pub group_public_key: String,
     pub shared_key_polynomial: String,
     pub taproot_address_testnet: String,
@@ -35,6 +37,7 @@ pub struct BackupManifest {
     pub threshold: u32,
     pub total_parties: u32,
     pub hierarchical: bool,
+    pub party_ranks: BTreeMap<u32, u32>,
     pub group_public_key: String,
     pub shared_key_polynomial: String,
     pub taproot_address_testnet: String,
@@ -66,6 +69,12 @@ impl BackupManifest {
         }
         if self.threshold > self.total_parties {
             bail!("threshold cannot exceed total parties");
+        }
+        if self.party_ranks.len() != self.total_parties as usize {
+            bail!("party ranks must include every party");
+        }
+        if !self.party_ranks.contains_key(&self.party_index) {
+            bail!("party ranks must include the backed-up party");
         }
         if self.group_public_key.len() != 64 || hex::decode(&self.group_public_key).is_err() {
             bail!("group public key must be 32-byte hex");
@@ -104,6 +113,7 @@ pub fn build_backup_manifest(
         threshold: metadata.threshold,
         total_parties: metadata.total_parties,
         hierarchical: metadata.hierarchical,
+        party_ranks: metadata.party_ranks,
         group_public_key: metadata.group_public_key,
         shared_key_polynomial: metadata.shared_key_polynomial,
         taproot_address_testnet: metadata.taproot_address_testnet,
@@ -143,6 +153,7 @@ pub fn verify_share_against_manifest(
         threshold: manifest.threshold,
         total_parties: manifest.total_parties,
         hierarchical: manifest.hierarchical,
+        party_ranks: manifest.party_ranks.clone(),
         group_public_key: manifest.group_public_key.clone(),
         shared_key_polynomial: manifest.shared_key_polynomial.clone(),
         taproot_address_testnet: manifest.taproot_address_testnet.clone(),
@@ -223,6 +234,7 @@ mod tests {
             threshold: 2,
             total_parties: 3,
             hierarchical: true,
+            party_ranks: [(1, 1), (2, 1), (3, 2)].into(),
             group_public_key: "11".repeat(32),
             shared_key_polynomial: format!("02{}", "11".repeat(32)),
             taproot_address_testnet: "tb1ptest".to_string(),
@@ -271,5 +283,14 @@ mod tests {
         assert!(err
             .to_string()
             .contains("shared key polynomial does not match group public key"));
+    }
+
+    #[test]
+    fn manifest_rejects_incomplete_party_ranks() {
+        let mut metadata = metadata();
+        metadata.party_ranks.remove(&2);
+
+        let err = build_backup_manifest(metadata, &[0x42u8; 32]).unwrap_err();
+        assert!(err.to_string().contains("party ranks"));
     }
 }

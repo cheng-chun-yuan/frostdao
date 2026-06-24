@@ -74,7 +74,7 @@ frostdao dkg-generate-mnemonic --name treasury
 frostdao dkg-verify-mnemonic --name treasury --words '<24 words>'
 ```
 
-The mnemonic is secret. The backup manifest is public metadata containing wallet, party, rank, threshold, group public key, public shared-key polynomial, address, share fingerprint, and backup ID.
+The mnemonic is secret. The backup manifest is public metadata containing wallet, party, rank, threshold, party-rank map, group public key, public shared-key polynomial, address, share fingerprint, and backup ID.
 
 ## Threshold Transaction Signing
 
