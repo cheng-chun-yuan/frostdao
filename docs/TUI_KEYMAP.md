@@ -67,7 +67,7 @@ Delete confirmation:
 | `Enter` | Confirm network |
 | `Esc` | Cancel |
 
-The selector shows the selected network policy before confirmation: testnet4/testnet3/signet use remote mempool.space UTXOs, regtest uses a local-node workflow, and mainnet requires explicit real-funds opt-in.
+The selector shows the selected network policy before confirmation: testnet4/testnet3/signet use remote mempool.space UTXOs, regtest uses the local Esplora/mempool API from `FROSTDAO_REGTEST_MEMPOOL_API`, and mainnet requires explicit real-funds opt-in.
 
 ## Forms And Wizards
 
@@ -237,4 +237,4 @@ The policy input remains editable. Use the templates as starting points, then ty
 | `Esc` | Back/cancel |
 
 The configure and review screens show the source path and source address. Send review also shows the child x-only pubkey fingerprint for HD sources. If the proposer selected an HD-derived source, the Nostr proposal uses that same derived path; consent only after every signer sees the same source path, source address, destination, amount, and fingerprint.
-Regtest Nostr proposals are marked unavailable in the configure screen until TUI local-node UTXO support is wired.
+Regtest Nostr proposals require `FROSTDAO_REGTEST_MEMPOOL_API`; without it, the configure screen blocks publishing and shows the missing setting.

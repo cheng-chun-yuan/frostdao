@@ -60,7 +60,7 @@ pub fn render_chain_select(frame: &mut Frame, app: &App, area: Rect) {
             };
 
             let suffix = match network {
-                NetworkSelection::Regtest => " (local node workflow)",
+                NetworkSelection::Regtest => " (local API)",
                 NetworkSelection::Mainnet => " (CAUTION: Real funds!)",
                 _ => "",
             };
@@ -207,8 +207,8 @@ mod tests {
     fn chain_select_policy_lines_explain_regtest_local_node() {
         let rendered = lines_to_string(chain_select_policy_lines(NetworkSelection::Regtest));
 
-        assert!(rendered.contains("regtest uses local-node workflow"));
-        assert!(rendered.contains("no mempool.space"));
+        assert!(rendered.contains("regtest uses local Esplora/mempool API"));
+        assert!(rendered.contains("FROSTDAO_REGTEST_MEMPOOL_API"));
         assert!(rendered.contains("test-chain root address"));
     }
 

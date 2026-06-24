@@ -502,7 +502,7 @@ frostdao dkg-build-tx \
   --to <recipient_address> \
   --amount <satoshis> \
   [--fee-rate <sats_per_vbyte>] \
-  [--network testnet|signet|mainnet]
+  [--network testnet|testnet4|signet|regtest|mainnet]
 ```
 
 **Parameters:**
@@ -512,7 +512,7 @@ frostdao dkg-build-tx \
 | `--to` | Recipient Taproot address | Required |
 | `--amount` | Amount in satoshis | Required |
 | `--fee-rate` | Fee rate (sats/vbyte) | Auto |
-| `--network` | Bitcoin network | `testnet` |
+| `--network` | Bitcoin network. For `regtest`, set `FROSTDAO_REGTEST_MEMPOOL_API` to a local Esplora/mempool API endpoint. | `testnet` |
 
 **Output:** JSON with `session_id`, `sighash`, `unsigned_tx`, and `review`.
 
@@ -574,7 +574,7 @@ frostdao dkg-broadcast \
   --session <session_id> \
   --unsigned-tx <hex> \
   --data '<signature_shares_json>' \
-  [--network testnet|signet|mainnet]
+  [--network testnet|testnet4|signet|regtest|mainnet]
 ```
 
 **Parameters:**
@@ -584,7 +584,7 @@ frostdao dkg-broadcast \
 | `--session` | Session ID |
 | `--unsigned-tx` | Unsigned transaction hex from dkg-build-tx |
 | `--data` | JSON array of signature shares |
-| `--network` | Bitcoin network; default `testnet` |
+| `--network` | Bitcoin network; for `regtest`, set `FROSTDAO_REGTEST_MEMPOOL_API` |
 
 **Output:** JSON with `txid` and broadcast status
 

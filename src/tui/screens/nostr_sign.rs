@@ -536,7 +536,7 @@ pub(crate) fn nostr_configure_network_lines(app: &App) -> Vec<Line<'static>> {
                 Span::styled(error.to_string(), Style::default().fg(Color::Red)),
             ]),
             Line::from(Span::styled(
-                "Switch to testnet4, testnet3, or signet for remote mempool.space proposal building.",
+                "For regtest, set FROSTDAO_REGTEST_MEMPOOL_API to a local Esplora/mempool API; testnet4, testnet3, and signet use mempool.space.",
                 Style::default().fg(Color::DarkGray),
             )),
         ];
@@ -944,6 +944,7 @@ mod tests {
         SigningAttemptConfig, SigningCoordinator, SigningNonceInput, SigningSchemePolicy,
         SigningShareInput,
     };
+    use serial_test::serial;
     use std::collections::BTreeMap;
 
     fn test_review_proposal() -> TxProposal {
@@ -1044,16 +1045,19 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn configure_network_lines_explain_regtest_unavailable() {
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
         let mut app = App::new().unwrap();
         app.network = NetworkSelection::Regtest;
 
         let rendered = lines_to_string(nostr_configure_network_lines(&app));
 
         assert!(rendered.contains("Unavailable"));
-        assert!(rendered.contains("Nostr transaction proposals are unavailable on Regtest"));
-        assert!(rendered.contains("local-node workflow"));
-        assert!(rendered.contains("Switch to testnet4, testnet3, or signet"));
+        assert!(rendered.contains("Nostr transaction proposals need a UTXO API on Regtest"));
+        assert!(rendered.contains("local Esplora/mempool API"));
+        assert!(rendered.contains("FROSTDAO_REGTEST_MEMPOOL_API"));
+        assert!(rendered.contains("testnet4, testnet3, and signet use mempool.space"));
     }
 
     #[test]

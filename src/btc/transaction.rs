@@ -22,6 +22,7 @@ use reqwest::blocking::Client;
 use secp256kfun::prelude::*;
 use serde::{Deserialize, Serialize};
 // sha2 no longer needed - using shared tagged_hash from crypto_helpers
+use std::env;
 use std::str::FromStr;
 
 const STATE_DIR: &str = ".frost_state";
@@ -30,6 +31,7 @@ const STATE_DIR: &str = ".frost_state";
 const MEMPOOL_TESTNET_API: &str = "https://mempool.space/testnet/api";
 const MEMPOOL_SIGNET_API: &str = "https://mempool.space/signet/api";
 const MEMPOOL_MAINNET_API: &str = "https://mempool.space/api";
+pub const REGTEST_MEMPOOL_API_ENV: &str = "FROSTDAO_REGTEST_MEMPOOL_API";
 
 // ============================================================================
 // API Response Types
@@ -106,13 +108,23 @@ struct StoredBitcoinKey {
 // Helper Functions
 // ============================================================================
 
-fn get_api_base(network: Network) -> Result<&'static str> {
+pub fn mempool_api_base_url(network: Network) -> Result<String> {
     match network {
-        Network::Bitcoin => Ok(MEMPOOL_MAINNET_API),
-        Network::Testnet => Ok(MEMPOOL_TESTNET_API),
-        Network::Testnet4 => Ok("https://mempool.space/testnet4/api"),
-        Network::Signet => Ok(MEMPOOL_SIGNET_API),
-        Network::Regtest => anyhow::bail!("regtest does not have a mempool.space API endpoint"),
+        Network::Bitcoin => Ok(MEMPOOL_MAINNET_API.to_string()),
+        Network::Testnet => Ok(MEMPOOL_TESTNET_API.to_string()),
+        Network::Testnet4 => Ok("https://mempool.space/testnet4/api".to_string()),
+        Network::Signet => Ok(MEMPOOL_SIGNET_API.to_string()),
+        Network::Regtest => {
+            let endpoint = env::var(REGTEST_MEMPOOL_API_ENV).unwrap_or_default();
+            let endpoint = endpoint.trim().trim_end_matches('/');
+            if endpoint.is_empty() {
+                anyhow::bail!(
+                    "regtest needs a local Esplora/mempool API endpoint; set {}",
+                    REGTEST_MEMPOOL_API_ENV
+                );
+            }
+            Ok(endpoint.to_string())
+        }
     }
 }
 
@@ -221,7 +233,7 @@ fn sign_bip340(
 /// Fetch UTXOs for an address
 pub fn fetch_utxos(address: &str, network: Network) -> Result<Vec<UtxoResponse>> {
     let client = Client::new();
-    let api_base = get_api_base(network)?;
+    let api_base = mempool_api_base_url(network)?;
     let url = format!("{}/address/{}/utxo", api_base, address);
 
     let response = client
@@ -242,7 +254,7 @@ pub fn fetch_utxos(address: &str, network: Network) -> Result<Vec<UtxoResponse>>
 /// Fetch recommended fees
 pub fn fetch_fee_estimates(network: Network) -> Result<FeeEstimate> {
     let client = Client::new();
-    let api_base = get_api_base(network)?;
+    let api_base = mempool_api_base_url(network)?;
     let url = format!("{}/v1/fees/recommended", api_base);
 
     let response = client
@@ -268,7 +280,7 @@ pub fn fetch_fee_estimates(network: Network) -> Result<FeeEstimate> {
 /// Broadcast a transaction
 pub fn broadcast_transaction(raw_tx_hex: &str, network: Network) -> Result<String> {
     let client = Client::new();
-    let api_base = get_api_base(network)?;
+    let api_base = mempool_api_base_url(network)?;
     let url = format!("{}/tx", api_base);
 
     let response = client
@@ -789,6 +801,7 @@ pub fn send_signet(to_address: &str, amount_sats: u64, fee_rate: Option<u64>) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
     fn mempool_explorer_url_matches_network() {
@@ -813,12 +826,42 @@ mod tests {
     }
 
     #[test]
-    fn mempool_api_base_rejects_unsupported_networks() {
-        assert_eq!(get_api_base(Network::Bitcoin).unwrap(), MEMPOOL_MAINNET_API);
-        assert_eq!(get_api_base(Network::Testnet).unwrap(), MEMPOOL_TESTNET_API);
-        assert_eq!(get_api_base(Network::Signet).unwrap(), MEMPOOL_SIGNET_API);
+    fn mempool_api_base_defaults_to_public_test_chain_endpoints() {
+        assert_eq!(
+            mempool_api_base_url(Network::Bitcoin).unwrap(),
+            MEMPOOL_MAINNET_API
+        );
+        assert_eq!(
+            mempool_api_base_url(Network::Testnet).unwrap(),
+            MEMPOOL_TESTNET_API
+        );
+        assert_eq!(
+            mempool_api_base_url(Network::Signet).unwrap(),
+            MEMPOOL_SIGNET_API
+        );
+    }
 
-        let err = get_api_base(Network::Regtest).unwrap_err();
-        assert!(err.to_string().contains("regtest does not have"));
+    #[test]
+    #[serial]
+    fn mempool_api_base_requires_configured_regtest_endpoint() {
+        std::env::remove_var(REGTEST_MEMPOOL_API_ENV);
+
+        let err = mempool_api_base_url(Network::Regtest).unwrap_err();
+
+        assert!(err.to_string().contains("regtest needs a local Esplora"));
+        assert!(err.to_string().contains(REGTEST_MEMPOOL_API_ENV));
+    }
+
+    #[test]
+    #[serial]
+    fn mempool_api_base_uses_configured_regtest_endpoint() {
+        std::env::set_var(REGTEST_MEMPOOL_API_ENV, "http://127.0.0.1:3002/api/");
+
+        assert_eq!(
+            mempool_api_base_url(Network::Regtest).unwrap(),
+            "http://127.0.0.1:3002/api"
+        );
+
+        std::env::remove_var(REGTEST_MEMPOOL_API_ENV);
     }
 }

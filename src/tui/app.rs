@@ -303,9 +303,10 @@ impl App {
     pub(crate) fn ensure_nostr_proposal_network_available(&self) -> Result<()> {
         self.network.mempool_api_base().map(|_| ()).map_err(|_| {
             anyhow::anyhow!(
-                "Nostr transaction proposals are unavailable on {}; {}. Use the local-node CLI workflow until TUI local-node UTXO support is wired.",
+                "Nostr transaction proposals need a UTXO API on {}; {}. For regtest, set {} to your local Esplora/mempool API.",
                 self.network.display_name(),
-                self.network.policy_hint()
+                self.network.policy_hint(),
+                frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV
             )
         })
     }
@@ -1807,6 +1808,7 @@ mod tests {
         XOnlyPublicKey,
     };
     use frostdao::protocol::keygen::WalletSummary;
+    use serial_test::serial;
     use std::collections::BTreeMap;
     use std::collections::HashMap;
 
@@ -1935,7 +1937,7 @@ mod tests {
         assert_eq!(app.network, NetworkSelection::Regtest);
         assert_eq!(app.network.to_bitcoin_network(), Network::Regtest);
         let message = app.message.as_deref().unwrap_or_default();
-        assert!(message.contains("regtest uses local-node workflow"));
+        assert!(message.contains("regtest uses local Esplora/mempool API"));
         assert!(message.contains("cleared pending send and Nostr ceremony state"));
     }
 
@@ -2017,14 +2019,38 @@ mod tests {
     }
 
     #[test]
-    fn regtest_rejects_mempool_api_fetches() {
+    #[serial]
+    fn regtest_requires_configured_mempool_api_fetches() {
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
+
         let err = NetworkSelection::Regtest.mempool_api_base().unwrap_err();
 
-        assert!(err.to_string().contains("local node workflow"));
+        assert!(err.to_string().contains("local Esplora/mempool API"));
+        assert!(err
+            .to_string()
+            .contains(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV));
     }
 
     #[test]
+    #[serial]
+    fn regtest_uses_configured_mempool_api_fetches() {
+        std::env::set_var(
+            frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV,
+            "http://127.0.0.1:3002/api/",
+        );
+
+        assert_eq!(
+            NetworkSelection::Regtest.mempool_api_base().unwrap(),
+            "http://127.0.0.1:3002/api"
+        );
+
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
+    }
+
+    #[test]
+    #[serial]
     fn regtest_utxo_fetch_marks_send_form_unavailable() {
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
         let mut app = App::new().unwrap();
         app.network = NetworkSelection::Regtest;
 
@@ -2039,7 +2065,7 @@ mod tests {
             .utxo_fetch_error
             .as_deref()
             .unwrap_or("")
-            .contains("local node workflow"));
+            .contains("local Esplora/mempool API"));
         assert!(app
             .send_form
             .error_message
@@ -2183,7 +2209,9 @@ mod tests {
     }
 
     #[test]
-    fn tui_nostr_tx_proposal_rejects_regtest_remote_build() {
+    #[serial]
+    fn tui_nostr_tx_proposal_requires_regtest_api_configuration() {
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
         let mut app = app_with_wallet(Some(test_address(Network::Regtest)));
         app.network = NetworkSelection::Regtest;
         app.nostr_to_address = test_address(Network::Regtest);
@@ -2194,9 +2222,24 @@ mod tests {
             .unwrap_err()
             .to_string();
 
-        assert!(err.contains("unavailable on Regtest"));
-        assert!(err.contains("local-node workflow"));
-        assert!(err.contains("local-node CLI workflow"));
+        assert!(err.contains("need a UTXO API on Regtest"));
+        assert!(err.contains("local Esplora/mempool API"));
+        assert!(err.contains(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV));
+    }
+
+    #[test]
+    #[serial]
+    fn tui_nostr_tx_proposal_allows_configured_regtest_api() {
+        std::env::set_var(
+            frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV,
+            "http://127.0.0.1:3002/api/",
+        );
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Regtest;
+
+        assert!(app.ensure_nostr_proposal_network_available().is_ok());
+
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
     }
 
     #[test]

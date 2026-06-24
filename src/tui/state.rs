@@ -26,16 +26,8 @@ impl NetworkSelection {
         }
     }
 
-    pub fn mempool_api_base(&self) -> anyhow::Result<&'static str> {
-        match self {
-            Self::Testnet4 => Ok("https://mempool.space/testnet4/api"),
-            Self::Testnet3 => Ok("https://mempool.space/testnet/api"),
-            Self::Signet => Ok("https://mempool.space/signet/api"),
-            Self::Regtest => anyhow::bail!(
-                "regtest does not have a mempool.space API endpoint; use a local node workflow"
-            ),
-            Self::Mainnet => Ok("https://mempool.space/api"),
-        }
+    pub fn mempool_api_base(&self) -> anyhow::Result<String> {
+        frostdao::btc::transaction::mempool_api_base_url(self.to_bitcoin_network())
     }
 
     pub fn display_name(&self) -> &'static str {
@@ -53,7 +45,9 @@ impl NetworkSelection {
             Self::Testnet4 => "testnet4 remote UTXOs via mempool.space",
             Self::Testnet3 => "testnet3 remote UTXOs via mempool.space",
             Self::Signet => "signet remote UTXOs via mempool.space",
-            Self::Regtest => "regtest uses local-node workflow; no mempool.space",
+            Self::Regtest => {
+                "regtest uses local Esplora/mempool API from FROSTDAO_REGTEST_MEMPOOL_API"
+            }
             Self::Mainnet => "MAINNET real funds; guarded commands require explicit opt-in",
         }
     }

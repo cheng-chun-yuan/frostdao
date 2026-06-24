@@ -92,6 +92,8 @@ frostdao dkg-broadcast --name treasury --session <session_id> --unsigned-tx <hex
 
 Never reuse a nonce or signing session nonce output.
 
+For regtest transaction build or broadcast, set `FROSTDAO_REGTEST_MEMPOOL_API` to a local Esplora/mempool API endpoint. Testnet, testnet4, signet, and mainnet use their selected public mempool API endpoints, with mainnet still requiring explicit opt-in where commands guard real funds.
+
 ## Reshare
 
 Reshare is used to rotate shares, replace devices, or change the party set.

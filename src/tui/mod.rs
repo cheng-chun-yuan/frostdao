@@ -3351,7 +3351,7 @@ mod tests {
     fn send_enter_details_blocks_when_utxo_source_unavailable() {
         let mut app = app_ready_to_prepare_send();
         app.send_form.utxo_fetch_error =
-            Some("Cannot fetch UTXOs on Regtest: local node workflow".to_string());
+            Some("Cannot fetch UTXOs on Regtest: set FROSTDAO_REGTEST_MEMPOOL_API".to_string());
 
         handle_send_keys(&mut app, enter_key());
 
