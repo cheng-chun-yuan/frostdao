@@ -752,6 +752,7 @@ fn review_checklist_lines(proposal: &crate::tui::state::TxProposal) -> Vec<Line<
                 .add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
+        checklist_line("Wallet", proposal.wallet_name.clone()),
         checklist_line(
             "Network and session",
             format!("{} / {}", proposal.review.network, proposal.session_id),
@@ -1141,6 +1142,7 @@ mod tests {
             .join("\n");
 
         for expected in [
+            "Wallet: treasury",
             "Network and session",
             "Testnet3 / session-review",
             "m/86'/1'/0'/0/0 from tb1qsource",
