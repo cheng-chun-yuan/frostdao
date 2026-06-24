@@ -387,6 +387,8 @@ def check_transaction_review():
     tui_chain_select = read(Path("src/tui/screens/chain_select.rs"))
     main_rs = read(Path("src/main.rs"))
     docs = read(Path("docs/RUN_GUIDE.md"))
+    protocols_doc = read(Path("docs/PROTOCOLS.md"))
+    user_flow_doc = read(Path("docs/USER_FLOW.md"))
     required = [
         ("src/protocol/dkg_tx.rs", protocol, "pub struct TransactionReview"),
         ("src/protocol/dkg_tx.rs", protocol, "sighash_fingerprint"),
@@ -409,7 +411,11 @@ def check_transaction_review():
         ("src/tui/mod.rs", tui_keys, "KeyCode::Char('y')"),
         ("src/tui/mod.rs", tui_keys, "parsed[\"broadcast_status\"]"),
         ("src/tui/screens/send.rs", read(Path("src/tui/screens/send.rs")), "review_source_path"),
+        ("src/tui/screens/send.rs", read(Path("src/tui/screens/send.rs")), "same MPC threshold shares"),
         ("src/tui/screens/address_list.rs", read(Path("src/tui/screens/address_list.rs")), "format_bip86_path"),
+        ("src/tui/screens/address_list.rs", read(Path("src/tui/screens/address_list.rs")), "MPC threshold shares"),
+        ("docs/PROTOCOLS.md", protocols_doc, "Each party applies the same public tweak"),
+        ("docs/USER_FLOW.md", user_flow_doc, "same MPC threshold signer set"),
         ("src/main.rs", main_rs, "parse_dkg_network"),
         ("src/main.rs", main_rs, "\"regtest\" | \"local\""),
         ("src/main.rs", main_rs, "FROSTDAO_ENABLE_MAINNET_BITCOIN"),

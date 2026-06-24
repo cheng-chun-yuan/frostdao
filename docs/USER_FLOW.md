@@ -135,7 +135,8 @@ UX requirements:
 
 - Use language like `Derived address`, not `new wallet`.
 - Show path with the selected network's BIP-86 coin type: `m/86'/0'/0'/0/index` on mainnet, `m/86'/1'/0'/0/index` on testnet, signet, and regtest.
-- Explain that the same root wallet controls all derived addresses.
+- Explain that the same MPC threshold signer set controls all derived addresses.
+- Explain that each derived address is controlled by tweaked threshold shares for the selected path, not by a newly reconstructed private key.
 
 ## Flow 4: Propose Transaction
 

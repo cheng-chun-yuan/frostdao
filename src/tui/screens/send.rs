@@ -382,6 +382,54 @@ fn review_source_path(form: &SendFormData, network: bitcoin::Network) -> String 
         .unwrap_or_else(|| "root key-path".to_string())
 }
 
+fn selected_address_lines(form: &SendFormData) -> Vec<Line<'static>> {
+    if form.use_hd_address && form.hd_enabled {
+        if let Some((_addr, _, idx)) = form.hd_addresses.get(form.hd_selected_index) {
+            return vec![
+                Line::from(vec![
+                    Span::styled("Selected: ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        format!("HD Address at path 0/{}", idx),
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                ]),
+                Line::from(vec![
+                    Span::styled("Control: ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        "same MPC threshold shares",
+                        Style::default().fg(Color::Green),
+                    ),
+                    Span::raw(" with HD tweak"),
+                ]),
+                Line::from("No new root key or single-device private key is created."),
+            ];
+        }
+
+        return Vec::new();
+    }
+
+    vec![
+        Line::from(vec![
+            Span::styled("Selected: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                "Root Address (no HD tweak)",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("Control: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                "root MPC threshold shares",
+                Style::default().fg(Color::Green),
+            ),
+        ]),
+    ]
+}
+
 /// Render send wizard
 pub fn render_send(frame: &mut Frame, app: &App, form: &SendFormData, area: Rect) {
     if let crate::tui::state::AppState::Send(state) = &app.state {
@@ -1027,31 +1075,7 @@ fn render_select_address(frame: &mut Frame, app: &App, form: &SendFormData, area
     }
 
     // Selection info
-    let selection_info = if form.use_hd_address && form.hd_enabled {
-        if let Some((_addr, _, idx)) = form.hd_addresses.get(form.hd_selected_index) {
-            Paragraph::new(vec![Line::from(vec![
-                Span::styled("Selected: ", Style::default().fg(Color::Gray)),
-                Span::styled(
-                    format!("HD Address at path 0/{}", idx),
-                    Style::default()
-                        .fg(Color::Green)
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ])])
-        } else {
-            Paragraph::new("")
-        }
-    } else {
-        Paragraph::new(vec![Line::from(vec![
-            Span::styled("Selected: ", Style::default().fg(Color::Gray)),
-            Span::styled(
-                "Root Address (no HD tweak)",
-                Style::default()
-                    .fg(Color::Green)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ])])
-    };
+    let selection_info = Paragraph::new(selected_address_lines(form));
     frame.render_widget(selection_info, chunks[2]);
 
     if let Some(error) = &form.error_message {
@@ -2304,5 +2328,31 @@ mod tests {
             review_source_path(&form, bitcoin::Network::Bitcoin),
             "m/86'/0'/0'/0/9"
         );
+    }
+
+    #[test]
+    fn selected_address_lines_explain_hd_threshold_control() {
+        let mut form = SendFormData::new();
+        form.hd_enabled = true;
+        form.use_hd_address = true;
+        form.hd_addresses = vec![("tb1ptest".to_string(), "pubkey".to_string(), 7)];
+
+        let rendered = lines_to_string(selected_address_lines(&form));
+
+        assert!(rendered.contains("HD Address at path 0/7"));
+        assert!(rendered.contains("same MPC threshold shares"));
+        assert!(rendered.contains("HD tweak"));
+        assert!(rendered.contains("No new root key"));
+        assert!(rendered.contains("single-device private key"));
+    }
+
+    #[test]
+    fn selected_address_lines_explain_root_threshold_control() {
+        let form = SendFormData::new();
+
+        let rendered = lines_to_string(selected_address_lines(&form));
+
+        assert!(rendered.contains("Root Address (no HD tweak)"));
+        assert!(rendered.contains("root MPC threshold shares"));
     }
 }

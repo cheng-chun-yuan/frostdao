@@ -53,13 +53,15 @@ Example:
 ## HD Address Derivation
 
 FrostDAO derives receive addresses from the same threshold wallet. This does not rerun DKG and does not create a new root wallet.
+Each party applies the same public tweak to their own FROST share, so no full private key is reconstructed and no single device can take control of the derived address.
+When the group signs for a derived address, every signer must use the selected derivation path and the resulting tweaked shares.
 
 ```bash
 frostdao dkg-derive-address --name treasury --change 0 --index 0 --network testnet
 frostdao dkg-list-addresses --name treasury --count 10 --network testnet
 ```
 
-Only non-hardened child derivation is supported in the threshold setting.
+Only non-hardened child derivation is supported in the threshold setting. Hardened child derivation would require private parent material that the threshold wallet intentionally never reconstructs.
 
 ## Share Backup
 

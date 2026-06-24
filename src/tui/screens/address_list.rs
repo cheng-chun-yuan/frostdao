@@ -122,7 +122,7 @@ fn render_details_panel(
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(7), // Info section
+            Constraint::Length(9), // Info section
             Constraint::Min(12),   // QR code
             Constraint::Length(1), // Help
         ])
@@ -151,6 +151,7 @@ fn render_details_panel(
             Style::default().fg(Color::Yellow),
         )]),
     ];
+    info_lines.extend(hd_control_lines());
 
     // Add balance if cached
     if let Some((balance, utxo_count)) = state.balance_cache.get(&index) {
@@ -197,6 +198,26 @@ fn render_details_panel(
         Span::styled(" Back", Style::default().fg(Color::DarkGray)),
     ]));
     frame.render_widget(help, chunks[2]);
+}
+
+fn hd_control_lines() -> Vec<Line<'static>> {
+    vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Control: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                "MPC threshold shares",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" sign this derived path"),
+        ]),
+        Line::from(vec![
+            Span::styled("  Key: ", Style::default().fg(Color::DarkGray)),
+            Span::raw("No new root key or single-device private key is created"),
+        ]),
+    ]
 }
 
 /// Render a QR code for the given address (square aspect ratio)
@@ -264,5 +285,33 @@ fn truncate_address(addr: &str, max_len: usize) -> String {
         addr.to_string()
     } else {
         format!("{}...", &addr[..max_len - 3])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn lines_to_string(lines: Vec<Line<'_>>) -> String {
+        lines
+            .into_iter()
+            .map(|line| {
+                line.spans
+                    .into_iter()
+                    .map(|span| span.content.into_owned())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn hd_control_lines_explain_threshold_control() {
+        let rendered = lines_to_string(hd_control_lines());
+
+        assert!(rendered.contains("MPC threshold shares"));
+        assert!(rendered.contains("sign this derived path"));
+        assert!(rendered.contains("No new root key"));
+        assert!(rendered.contains("single-device private key"));
     }
 }
