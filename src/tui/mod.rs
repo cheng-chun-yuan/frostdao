@@ -2908,7 +2908,7 @@ fn ui(frame: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3), // Title
+            Constraint::Length(4), // Title + network status
             Constraint::Min(10),   // Main content
             Constraint::Length(3), // Help bar
         ])
@@ -2954,25 +2954,50 @@ fn render_title(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
         state::NetworkSelection::Mainnet => Color::Red,
     };
 
-    let title = Line::from(vec![
-        Span::styled(
-            "FrostDAO - DKG Wallet Manager",
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw("  "),
-        Span::styled("[", Style::default().fg(Color::Gray)),
-        Span::styled(
-            app.network.display_name(),
-            Style::default().fg(network_color),
-        ),
-        Span::styled("]", Style::default().fg(Color::Gray)),
-    ]);
+    let status_line = network_title_status_line(app.network);
+    let status_style = if app.network == state::NetworkSelection::Mainnet {
+        Color::Red
+    } else if app.network == state::NetworkSelection::Regtest {
+        Color::Cyan
+    } else {
+        Color::Yellow
+    };
+
+    let title = vec![
+        Line::from(vec![
+            Span::styled(
+                "FrostDAO - DKG Wallet Manager",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
+            Span::styled("[", Style::default().fg(Color::Gray)),
+            Span::styled(
+                app.network.display_name(),
+                Style::default().fg(network_color),
+            ),
+            Span::styled("]", Style::default().fg(Color::Gray)),
+        ]),
+        Line::from(vec![
+            Span::styled("Policy: ", Style::default().fg(Color::Gray)),
+            Span::styled(status_line, Style::default().fg(status_style)),
+        ]),
+    ];
 
     let paragraph = Paragraph::new(title).block(Block::default().borders(Borders::ALL));
 
     frame.render_widget(paragraph, area);
+}
+
+fn network_title_status_line(network: state::NetworkSelection) -> String {
+    match network {
+        state::NetworkSelection::Regtest => match network.mempool_api_base() {
+            Ok(_) => network.policy_hint().to_string(),
+            Err(err) => err.to_string(),
+        },
+        _ => network.policy_hint().to_string(),
+    }
 }
 
 fn render_help_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
@@ -3188,6 +3213,28 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn network_title_status_line_reflects_regtest_requirement() {
+        let status = network_title_status_line(NetworkSelection::Regtest);
+
+        assert!(
+            status.contains("FROSTDAO_REGTEST_MEMPOOL_API"),
+            "unexpected status: {status}"
+        );
+    }
+
+    #[test]
+    fn network_title_status_line_reflects_remote_test_chain_policy() {
+        assert!(network_title_status_line(NetworkSelection::Signet)
+            .contains("signet remote UTXOs via mempool.space"));
+        assert!(network_title_status_line(NetworkSelection::Testnet3)
+            .contains("testnet3 remote UTXOs via mempool.space"));
+        assert!(network_title_status_line(NetworkSelection::Testnet4)
+            .contains("testnet4 remote UTXOs via mempool.space"));
+        assert!(network_title_status_line(NetworkSelection::Mainnet)
+            .contains("MAINNET real funds; guarded commands require explicit opt-in"));
     }
 
     fn mnemonic_state_for_help(party_selected: bool, revealed: bool) -> MnemonicState {

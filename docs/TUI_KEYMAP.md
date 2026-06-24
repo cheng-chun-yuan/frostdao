@@ -70,6 +70,8 @@ Delete confirmation:
 
 The selector shows the selected network policy before confirmation: testnet4/testnet3/signet use remote mempool.space UTXOs, regtest uses the local Esplora/mempool API from `FROSTDAO_REGTEST_MEMPOOL_API`, and mainnet requires explicit real-funds opt-in.
 
+The main title bar also renders this policy for the currently selected network (for quick confirmation anywhere in the TUI).
+
 ## Forms And Wizards
 
 Applies to keygen, reshare, send, and Nostr room configuration.
