@@ -34,7 +34,7 @@ The same checks are available as a script:
 ./scripts/quality.sh
 ```
 
-Use the full script before releases or demos:
+Use the full script before releases or recorded walkthroughs:
 
 ```bash
 ./scripts/quality.sh --full

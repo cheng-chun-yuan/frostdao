@@ -22,7 +22,7 @@ FrostDAO implements FROST threshold signatures with **Hierarchical TSS (HTSS)** 
 ## Installation
 
 ```bash
-git clone https://github.com/anthropics/frostdao.git
+git clone https://github.com/cheng-chun-yuan/frostdao.git
 cd frostdao
 cargo install --path .
 ```
@@ -55,7 +55,7 @@ frostdao dkg-balance --name treasury
 ### Send Transaction
 
 ```bash
-# TUI handles multi-party signing automatically
+# TUI guides wallet review, test-chain sends, and Nostr proposal consent
 frostdao tui
 # Navigate to wallet → Send Transaction
 ```
