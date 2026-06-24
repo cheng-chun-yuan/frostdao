@@ -24,6 +24,22 @@ use frostdao::storage::{FileStorage, Storage};
 const TUI_NOSTR_RELAYS_ENV: &str = "FROSTDAO_TUI_NOSTR_RELAYS";
 const TUI_MAINNET_NOSTR_ENV: &str = "FROSTDAO_ENABLE_MAINNET_NOSTR";
 
+pub(crate) fn wallet_address_for_network(
+    wallet: &WalletSummary,
+    network: NetworkSelection,
+) -> Option<&str> {
+    match network {
+        NetworkSelection::Mainnet => wallet.address_mainnet.as_deref(),
+        NetworkSelection::Testnet4
+        | NetworkSelection::Testnet3
+        | NetworkSelection::Signet
+        | NetworkSelection::Regtest => wallet
+            .address_testnet
+            .as_deref()
+            .or(wallet.address.as_deref()),
+    }
+}
+
 pub enum TuiNostrRuntime {
     LocalSimulation(frostdao::nostr::NostrRoomRuntime<frostdao::nostr::InMemoryRoomTransport>),
     Relay(frostdao::nostr::NostrRoomRuntime<frostdao::nostr::RelayRoomTransport>),
@@ -238,12 +254,15 @@ impl App {
             .iter()
             .find(|wallet| wallet.name == wallet_name)
             .ok_or_else(|| anyhow::anyhow!("wallet '{wallet_name}' is not loaded"))?;
-        wallet
-            .address
-            .as_deref()
+        wallet_address_for_network(wallet, self.network)
             .map(str::trim)
             .filter(|address| !address.is_empty())
-            .ok_or_else(|| anyhow::anyhow!("wallet '{wallet_name}' has no known source address"))?;
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "wallet '{wallet_name}' has no known {} source address",
+                    self.network.display_name()
+                )
+            })?;
 
         let state_dir = get_state_dir(wallet_name);
         let storage = FileStorage::new(&state_dir)?;
@@ -1718,12 +1737,15 @@ mod tests {
     use std::collections::HashMap;
 
     fn wallet_summary(name: &str, address: Option<String>) -> WalletSummary {
+        let address_mainnet = address.as_ref().map(|_| test_address(Network::Bitcoin));
         WalletSummary {
             name: name.to_string(),
             threshold: Some(2),
             total_parties: Some(3),
             hierarchical: Some(false),
-            address,
+            address: address.clone(),
+            address_testnet: address,
+            address_mainnet,
             signing_requirement: None,
             party_ranks: None::<BTreeMap<u32, u32>>,
         }
@@ -1746,6 +1768,57 @@ mod tests {
         app.nostr_to_address = test_address(Network::Testnet);
         app.nostr_amount_sats = 50_000;
         app
+    }
+
+    #[test]
+    fn wallet_address_for_network_uses_explicit_mainnet_address() {
+        let testnet = test_address(Network::Testnet);
+        let mainnet = test_address(Network::Bitcoin);
+        let wallet = WalletSummary {
+            name: "wallet-test".to_string(),
+            threshold: Some(2),
+            total_parties: Some(3),
+            hierarchical: Some(false),
+            address: Some(testnet.clone()),
+            address_testnet: Some(testnet.clone()),
+            address_mainnet: Some(mainnet.clone()),
+            signing_requirement: None,
+            party_ranks: None::<BTreeMap<u32, u32>>,
+        };
+
+        assert_eq!(
+            super::wallet_address_for_network(&wallet, NetworkSelection::Testnet3),
+            Some(testnet.as_str())
+        );
+        assert_eq!(
+            super::wallet_address_for_network(&wallet, NetworkSelection::Signet),
+            Some(testnet.as_str())
+        );
+        assert_eq!(
+            super::wallet_address_for_network(&wallet, NetworkSelection::Regtest),
+            Some(testnet.as_str())
+        );
+        assert_eq!(
+            super::wallet_address_for_network(&wallet, NetworkSelection::Mainnet),
+            Some(mainnet.as_str())
+        );
+    }
+
+    #[test]
+    fn wallet_address_for_network_does_not_fake_mainnet_from_testnet_address() {
+        let wallet = WalletSummary {
+            name: "wallet-test".to_string(),
+            threshold: Some(2),
+            total_parties: Some(3),
+            hierarchical: Some(false),
+            address: Some(test_address(Network::Testnet)),
+            address_testnet: None,
+            address_mainnet: None,
+            signing_requirement: None,
+            party_ranks: None::<BTreeMap<u32, u32>>,
+        };
+
+        assert!(super::wallet_address_for_network(&wallet, NetworkSelection::Mainnet).is_none());
     }
 
     #[test]
@@ -1936,7 +2009,7 @@ mod tests {
             .build_nostr_tx_proposal("wallet-test", 1_700_000_000)
             .unwrap_err()
             .to_string()
-            .contains("has no known source address"));
+            .contains("has no known Testnet3 source address"));
     }
 
     #[test]

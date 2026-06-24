@@ -9,7 +9,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::tui::app::App;
+use crate::tui::app::{wallet_address_for_network, App};
 use crate::tui::state::{WalletAction, WalletDetailsState};
 
 /// Render the wallet details screen
@@ -30,7 +30,7 @@ pub fn render_wallet_details(frame: &mut Frame, app: &App, state: &WalletDetails
     // Render QR code popup if showing
     if state.show_qr {
         let wallet = app.wallets.iter().find(|w| w.name == state.wallet_name);
-        if let Some(addr) = wallet.and_then(|w| w.address.as_ref()) {
+        if let Some(addr) = wallet.and_then(|w| wallet_address_for_network(w, app.network)) {
             render_qr_popup(frame, addr, area);
         }
     }
@@ -145,15 +145,23 @@ fn render_wallet_info(frame: &mut Frame, app: &App, wallet_name: &str, area: Rec
         lines.push(Line::from(""));
 
         // Address
-        if let Some(addr) = &wallet.address {
+        if let Some(addr) = wallet_address_for_network(wallet, app.network) {
             lines.push(Line::from(vec![Span::styled(
                 format!("Address ({}): ", app.network.display_name()),
                 Style::default().fg(Color::Gray),
             )]));
             lines.push(Line::from(vec![Span::styled(
-                addr.clone(),
+                addr,
                 Style::default().fg(Color::Green),
             )]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("Address ({}): ", app.network.display_name()),
+                    Style::default().fg(Color::Gray),
+                ),
+                Span::styled("not available", Style::default().fg(Color::Red)),
+            ]));
         }
 
         lines.push(Line::from(""));

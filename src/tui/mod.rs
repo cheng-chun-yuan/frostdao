@@ -223,7 +223,10 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
         }
         KeyCode::Char('c') => {
             // Copy wallet address
-            let addr = app.selected_wallet().and_then(|w| w.address.clone());
+            let addr = app
+                .selected_wallet()
+                .and_then(|w| app::wallet_address_for_network(w, app.network))
+                .map(str::to_string);
             if let Some(addr) = addr {
                 app.copy_to_clipboard(&addr);
             } else {
@@ -676,7 +679,8 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
                 .wallets
                 .iter()
                 .find(|w| w.name == state.wallet_name)
-                .and_then(|w| w.address.clone());
+                .and_then(|w| app::wallet_address_for_network(w, app.network))
+                .map(str::to_string);
             if let Some(addr) = addr_to_copy {
                 app.copy_to_clipboard(&addr);
             }

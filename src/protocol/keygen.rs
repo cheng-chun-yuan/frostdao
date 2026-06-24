@@ -337,8 +337,15 @@ pub fn list_wallets() -> Result<Vec<WalletSummary>> {
                 }
             };
 
-        // Derive address from shared_key.bin
-        let address = if let Ok(shared_key_bytes) = std::fs::read(&shared_key_path) {
+        let group_info = path
+            .join("group_info.json")
+            .exists()
+            .then(|| std::fs::read_to_string(path.join("group_info.json")).ok())
+            .flatten()
+            .and_then(|content| serde_json::from_str::<GroupInfo>(&content).ok());
+
+        // Derive root addresses from shared_key.bin as a fallback for older wallets.
+        let derived_addresses = if let Ok(shared_key_bytes) = std::fs::read(&shared_key_path) {
             if let Ok(shared_key) = bincode::deserialize::<
                 schnorr_fun::frost::SharedKey<schnorr_fun::fun::marker::EvenY>,
             >(&shared_key_bytes)
@@ -346,13 +353,19 @@ pub fn list_wallets() -> Result<Vec<WalletSummary>> {
                 let pubkey_bytes: [u8; 32] = shared_key.public_key().to_xonly_bytes();
                 if let Ok(xonly_pubkey) = bitcoin::XOnlyPublicKey::from_slice(&pubkey_bytes) {
                     let secp = bitcoin::secp256k1::Secp256k1::new();
-                    let addr = bitcoin::Address::p2tr(
+                    let testnet_addr = bitcoin::Address::p2tr(
                         &secp,
                         xonly_pubkey,
                         None,
                         bitcoin::Network::Testnet,
                     );
-                    Some(addr.to_string())
+                    let mainnet_addr = bitcoin::Address::p2tr(
+                        &secp,
+                        xonly_pubkey,
+                        None,
+                        bitcoin::Network::Bitcoin,
+                    );
+                    Some((testnet_addr.to_string(), mainnet_addr.to_string()))
                 } else {
                     None
                 }
@@ -362,6 +375,15 @@ pub fn list_wallets() -> Result<Vec<WalletSummary>> {
         } else {
             None
         };
+        let address_testnet = group_info
+            .as_ref()
+            .map(|info| info.taproot_address_testnet.clone())
+            .or_else(|| derived_addresses.as_ref().map(|(addr, _)| addr.clone()));
+        let address_mainnet = group_info
+            .as_ref()
+            .map(|info| info.taproot_address_mainnet.clone())
+            .or_else(|| derived_addresses.as_ref().map(|(_, addr)| addr.clone()));
+        let address = address_testnet.clone();
 
         wallets.push(WalletSummary {
             name,
@@ -369,6 +391,8 @@ pub fn list_wallets() -> Result<Vec<WalletSummary>> {
             total_parties,
             hierarchical,
             address,
+            address_testnet,
+            address_mainnet,
             signing_requirement,
             party_ranks,
         });
@@ -387,7 +411,12 @@ pub struct WalletSummary {
     pub threshold: Option<u32>,
     pub total_parties: Option<u32>,
     pub hierarchical: Option<bool>,
+    /// Legacy root Taproot address field kept for older callers.
     pub address: Option<String>,
+    /// Root Taproot address for test-chain networks (testnet, signet, regtest).
+    pub address_testnet: Option<String>,
+    /// Root Taproot address for Bitcoin mainnet.
+    pub address_mainnet: Option<String>,
     /// Signing requirement per rank for HTSS (e.g., `[1,2,2]`)
     pub signing_requirement: Option<Vec<u32>>,
     /// Party ranks for HTSS (party_index -> rank)

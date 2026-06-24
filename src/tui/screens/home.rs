@@ -8,7 +8,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::tui::app::App;
+use crate::tui::app::{wallet_address_for_network, App};
 use crate::tui::state::NetworkSelection;
 
 /// Render the home screen
@@ -128,9 +128,11 @@ fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
         }
 
         lines.push(Line::from(""));
+        lines.extend(network_safety_lines(app.network));
+        lines.push(Line::from(""));
 
         // Address (network-specific)
-        if let Some(addr) = get_address_for_network(wallet, app.network) {
+        if let Some(addr) = wallet_address_for_network(wallet, app.network) {
             lines.push(Line::from(vec![Span::styled(
                 format!("Address ({}): ", app.network.display_name()),
                 Style::default().fg(Color::Gray),
@@ -139,6 +141,14 @@ fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
                 addr,
                 Style::default().fg(Color::Green),
             )]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("Address ({}): ", app.network.display_name()),
+                    Style::default().fg(Color::Gray),
+                ),
+                Span::styled("not available", Style::default().fg(Color::Red)),
+            ]));
         }
 
         lines.push(Line::from(""));
@@ -275,28 +285,84 @@ fn render_shortcuts(frame: &mut Frame, has_wallet: bool, area: Rect) {
     frame.render_widget(shortcuts_widget, area);
 }
 
-/// Get address for the selected network
-fn get_address_for_network(
-    wallet: &frostdao::protocol::keygen::WalletSummary,
-    network: NetworkSelection,
-) -> Option<String> {
-    // For now, return the stored address (testnet format)
-    // In a full implementation, we'd derive addresses for each network
-    // Testnet3, Testnet4, Signet, and Regtest all use test-chain address prefixes.
-    match network {
-        NetworkSelection::Testnet4 => wallet.address.clone(),
-        NetworkSelection::Testnet3 => wallet.address.clone(),
-        NetworkSelection::Signet => wallet.address.clone(), // Same format as testnet (tb1p...)
-        NetworkSelection::Regtest => wallet.address.clone(),
+fn network_safety_lines(network: NetworkSelection) -> Vec<Line<'static>> {
+    let policy = match network {
+        NetworkSelection::Testnet4 => "Policy: testnet4 remote UTXOs via mempool.space",
+        NetworkSelection::Testnet3 => "Policy: testnet3 remote UTXOs via mempool.space",
+        NetworkSelection::Signet => "Policy: signet remote UTXOs via mempool.space",
+        NetworkSelection::Regtest => "Policy: regtest uses local-node workflow; no mempool.space",
         NetworkSelection::Mainnet => {
-            // Mainnet would use bc1p... prefix - need to regenerate
-            wallet.address.as_ref().map(|addr| {
-                if let Some(stripped) = addr.strip_prefix("tb1p") {
-                    format!("bc1p{}", stripped)
-                } else {
-                    addr.clone()
-                }
-            })
+            "Policy: MAINNET real funds; guarded commands require explicit opt-in"
         }
+    };
+    let address_scope = match network {
+        NetworkSelection::Mainnet => "Address scope: Bitcoin mainnet root address",
+        NetworkSelection::Testnet4
+        | NetworkSelection::Testnet3
+        | NetworkSelection::Signet
+        | NetworkSelection::Regtest => {
+            "Address scope: test-chain root address for testnet/signet/regtest"
+        }
+    };
+    let policy_color = match network {
+        NetworkSelection::Regtest => Color::Cyan,
+        NetworkSelection::Mainnet => Color::Red,
+        _ => Color::Yellow,
+    };
+
+    vec![
+        Line::from(vec![
+            Span::styled("Network: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                network.display_name(),
+                Style::default()
+                    .fg(policy_color)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(vec![Span::styled(
+            policy,
+            Style::default().fg(policy_color),
+        )]),
+        Line::from(vec![Span::styled(
+            address_scope,
+            Style::default().fg(Color::DarkGray),
+        )]),
+    ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn lines_to_string(lines: Vec<Line<'_>>) -> String {
+        lines
+            .into_iter()
+            .map(|line| {
+                line.spans
+                    .into_iter()
+                    .map(|span| span.content.into_owned())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn network_safety_lines_warn_for_mainnet() {
+        let rendered = lines_to_string(network_safety_lines(NetworkSelection::Mainnet));
+
+        assert!(rendered.contains("MAINNET real funds"));
+        assert!(rendered.contains("explicit opt-in"));
+        assert!(rendered.contains("Bitcoin mainnet root address"));
+    }
+
+    #[test]
+    fn network_safety_lines_explain_regtest_local_node_policy() {
+        let rendered = lines_to_string(network_safety_lines(NetworkSelection::Regtest));
+
+        assert!(rendered.contains("regtest uses local-node workflow"));
+        assert!(rendered.contains("no mempool.space"));
+        assert!(rendered.contains("test-chain root address"));
     }
 }
