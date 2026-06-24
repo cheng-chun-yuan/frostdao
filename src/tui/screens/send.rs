@@ -1907,7 +1907,7 @@ fn review_action_help(network: bitcoin::Network) -> &'static str {
     if network == bitcoin::Network::Bitcoin {
         "Mainnet blocked in TUI | Esc: Back to edit"
     } else {
-        "y: Confirm and sign | Esc: Back to edit"
+        "y: Confirm only after every signer sees same review | Esc: Back to edit"
     }
 }
 
@@ -2620,11 +2620,11 @@ mod tests {
     fn review_action_help_keeps_test_chains_signable() {
         assert_eq!(
             review_action_help(bitcoin::Network::Signet),
-            "y: Confirm and sign | Esc: Back to edit"
+            "y: Confirm only after every signer sees same review | Esc: Back to edit"
         );
         assert_eq!(
             review_action_help(bitcoin::Network::Regtest),
-            "y: Confirm and sign | Esc: Back to edit"
+            "y: Confirm only after every signer sees same review | Esc: Back to edit"
         );
     }
 

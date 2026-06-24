@@ -184,10 +184,11 @@ key-path source or the full BIP-86 HD source path before transaction details.
 
 The transaction review labels the local-only boundary: share material stays on
 this device, and only the signed raw transaction or TXID leaves the signing
-flow. Pressing `y` signs locally and attempts the selected network API on test
-chains. Mainnet local sign and broadcast is blocked in the TUI; use CLI commands
-with explicit mainnet opt-in after offline review. If broadcast fails, use
-`c`/`C` to copy the raw transaction for manual broadcast.
+flow. The review help bar also says `y` confirms only after every signer sees
+the same review. Pressing `y` signs locally and attempts the selected network
+API on test chains. Mainnet local sign and broadcast is blocked in the TUI; use
+CLI commands with explicit mainnet opt-in after offline review. If broadcast
+fails, use `c`/`C` to copy the raw transaction for manual broadcast.
 
 ## Address List
 

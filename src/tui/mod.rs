@@ -3448,7 +3448,9 @@ fn send_help_bar_text(state: &SendState) -> String {
         SendState::EnterDetails { .. } => {
             "Tab:Next field | Enter:Prepare TX | Esc:Back".to_string()
         }
-        SendState::ReviewTransaction { .. } => "y:Confirm and sign | Esc:Back to edit".to_string(),
+        SendState::ReviewTransaction { .. } => {
+            "y:Confirm only after every signer sees same review | Esc:Back to edit".to_string()
+        }
         SendState::ShowSighash { .. } => {
             format!("{copy}:Copy | Enter:Generate Nonce | Esc:Back")
         }
@@ -4110,7 +4112,7 @@ mod tests {
             wallet_name: "wallet-help".to_string(),
         });
         let review_help = help_bar_text(&app);
-        assert!(review_help.contains("y:Confirm and sign"));
+        assert!(review_help.contains("y:Confirm only after every signer sees same review"));
         assert!(review_help.contains("Esc:Back to edit"));
 
         app.state = AppState::Send(SendState::ShowSighash {
