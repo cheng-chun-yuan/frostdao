@@ -649,6 +649,8 @@ frostdao dkg-verify-mnemonic --name <wallet_name> --words '<24 words>'
 
 **Checks:** BIP-39 checksum, share fingerprint, wallet metadata, party index, rank, group public key, and backup ID.
 
+This command verifies the written words but does not restore wallet files. Mnemonic restore/import is a separate pre-mainnet requirement.
+
 ---
 
 ## Wallet Management

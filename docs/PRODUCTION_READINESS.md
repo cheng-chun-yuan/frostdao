@@ -52,6 +52,7 @@ The relay smoke test publishes and receives both a public room join and a direct
 - Complete public relay-backed TUI room transport testing for relay-backed rooms.
 - Wire real cryptographic signing share generation, combination, and testnet transaction broadcast into the relay-backed TUI signing path.
 - Extend structured audit logs that exclude secret material to every live relay ceremony path.
+- Implement and test explicit mnemonic restore/import from the written words plus public backup manifest.
 - Complete an external cryptography/security review for FROST, HTSS, NIP-44 use, reshare, and recovery.
 - Default to testnet/signet until the user deliberately enables mainnet; DKG transaction build and broadcast require `FROSTDAO_ENABLE_MAINNET_BITCOIN=1` for mainnet.
 

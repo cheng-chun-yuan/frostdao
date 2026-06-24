@@ -550,6 +550,9 @@ def check_mnemonic_backup_ux():
     screen = read(Path("src/tui/screens/mnemonic.rs"))
     keymap = read(Path("docs/TUI_KEYMAP.md"))
     security = read(Path("docs/SECURITY_MODEL.md"))
+    backup = read(Path("docs/BACKUP.md"))
+    cli = read(Path("docs/CLI.md"))
+    production = read(Path("docs/PRODUCTION_READINESS.md"))
     required = [
         ("src/tui/mod.rs", read(Path("src/tui/mod.rs")), "mnemonic_help_bar_matches_party_selection_stage"),
         ("src/tui/mod.rs", read(Path("src/tui/mod.rs")), "↑/↓:Select party | Enter:Continue | Esc:Cancel"),
@@ -562,6 +565,9 @@ def check_mnemonic_backup_ux():
         ("src/tui/screens/mnemonic.rs", screen, "mnemonic_warning_explains_share_scope_and_no_clipboard"),
         ("docs/TUI_KEYMAP.md", keymap, "does not provide a mnemonic copy shortcut"),
         ("docs/TUI_KEYMAP.md", keymap, "dkg-verify-mnemonic"),
+        ("docs/BACKUP.md", backup, "do not rely on the mnemonic alone"),
+        ("docs/CLI.md", cli, "does not restore wallet files"),
+        ("docs/PRODUCTION_READINESS.md", production, "mnemonic restore/import"),
         ("docs/SECURITY_MODEL.md", security, "equivalent to that party's local secret share"),
     ]
     missing = [f"{path}: {marker}" for path, content, marker in required if marker not in content]

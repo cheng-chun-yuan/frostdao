@@ -60,16 +60,19 @@ Verification does not publish or restore the share.
 - Do not store all party mnemonics in one place.
 - Store at least one copy in a tamper-evident physical location.
 - For organizations, require two-person access to backup storage.
-- Run a testnet or signet restore drill before mainnet use.
+- Run a testnet or signet backup verification drill before mainnet use.
 
 ## Lost Device Path
 
 If a device is lost but the party has their mnemonic:
 
 1. Rebuild or reinstall FrostDAO.
-2. Restore the local share using the mnemonic restore path once implemented.
-3. Verify the wallet address against the manifest.
-4. Sign a small testnet/signet transaction before using mainnet.
+2. Verify the mnemonic against the public backup manifest.
+3. Restore the local share using the mnemonic restore command once implemented.
+4. Verify the wallet address against the manifest.
+5. Sign a small testnet/signet transaction before using mainnet.
+
+Until the restore command is implemented, do not rely on the mnemonic alone for disaster recovery. Keep a separate protected copy of the local wallet state, or use the threshold recovery flow with helper parties.
 
 If the mnemonic is lost too:
 
