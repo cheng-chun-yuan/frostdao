@@ -521,8 +521,9 @@ fn render_round2_input(frame: &mut Frame, form: &KeygenFormData, area: Rect) {
     }
 
     // Help
-    let help = Paragraph::new("Ctrl+V: Paste | Enter: Generate Shares | Esc: Back")
-        .style(Style::default().fg(Color::DarkGray));
+    let help =
+        Paragraph::new("Paste/type JSON | Ctrl+u: Clear | Enter: Generate Shares | Esc: Back")
+            .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[3]);
 }
 
@@ -600,8 +601,9 @@ fn render_finalize_input(frame: &mut Frame, form: &KeygenFormData, area: Rect) {
     }
 
     // Help
-    let help = Paragraph::new("Ctrl+V: Paste | Enter: Finalize Wallet | Esc: Back")
-        .style(Style::default().fg(Color::DarkGray));
+    let help =
+        Paragraph::new("Paste/type JSON | Ctrl+u: Clear | Enter: Finalize Wallet | Esc: Back")
+            .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[3]);
 }
 

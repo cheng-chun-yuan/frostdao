@@ -80,9 +80,9 @@ Applies to keygen, reshare, send, and Nostr room configuration.
 | `Enter` | Submit current step |
 | `Esc` | Back/cancel |
 | `Space` | Toggle focused binary option |
-| `Ctrl+u` | Clear focused text input |
+| `Ctrl+u` | Clear focused text input or paste area |
 
-Multiline paste areas accept typed text and paste. Screen help decides whether `Enter` submits the step or inserts a newline.
+Multiline paste areas accept typed text and terminal paste. Use `Ctrl+u` to clear a bad paste before retrying. Screen help decides whether `Enter` submits the step or inserts a newline.
 
 ## Text Editing
 
@@ -95,7 +95,7 @@ Applies when a single-line input or multiline paste area is focused.
 | `←/→` | Move cursor left/right |
 | `↑/↓` | Move cursor line in multiline paste areas |
 | `Home` / `End` | Move to start/end of current field or line |
-| `Ctrl+u` | Clear single-line input |
+| `Ctrl+u` | Clear focused field or paste area |
 
 ## Keygen
 

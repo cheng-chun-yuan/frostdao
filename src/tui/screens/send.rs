@@ -2195,8 +2195,9 @@ fn render_enter_nonces(frame: &mut Frame, form: &SendFormData, area: Rect) {
     let status = Paragraph::new(status_lines);
     frame.render_widget(status, chunks[2]);
 
-    let help = Paragraph::new("Enter: Generate Signature Share | Esc: Back")
-        .style(Style::default().fg(Color::DarkGray));
+    let help =
+        Paragraph::new("Paste/type JSON | Ctrl+u: Clear | Enter: Generate Share | Esc: Back")
+            .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[3]);
 }
 
@@ -2299,7 +2300,7 @@ fn render_combine_shares(frame: &mut Frame, form: &SendFormData, area: Rect) {
     let status = Paragraph::new(status_lines);
     frame.render_widget(status, chunks[2]);
 
-    let help = Paragraph::new("Enter: Combine & Complete | Esc: Back")
+    let help = Paragraph::new("Paste/type JSON | Ctrl+u: Clear | Enter: Combine | Esc: Back")
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[3]);
 }

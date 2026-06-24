@@ -85,8 +85,11 @@ impl TextArea {
     /// Handle key event
     pub fn handle_key(&mut self, key: KeyEvent) -> bool {
         match key.code {
+            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.clear();
+                true
+            }
             KeyCode::Char(c) => {
-                // Check for Ctrl+V paste (handled separately by caller)
                 if key.modifiers.contains(KeyModifiers::CONTROL) {
                     return false;
                 }
@@ -215,5 +218,35 @@ impl TextArea {
                 frame.set_cursor_position((cursor_x, cursor_y));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn key(code: KeyCode, modifiers: KeyModifiers) -> KeyEvent {
+        KeyEvent::new(code, modifiers)
+    }
+
+    #[test]
+    fn ctrl_u_clears_multiline_paste_area() {
+        let mut area = TextArea::new("Paste JSON");
+        area.handle_paste("{\"round\":1}\n{\"round\":2}");
+
+        assert!(!area.is_empty());
+
+        assert!(area.handle_key(key(KeyCode::Char('u'), KeyModifiers::CONTROL)));
+
+        assert!(area.is_empty());
+        assert_eq!(area.content(), "");
+    }
+
+    #[test]
+    fn control_shortcuts_other_than_clear_are_left_to_caller() {
+        let mut area = TextArea::new("Paste JSON");
+
+        assert!(!area.handle_key(key(KeyCode::Char('v'), KeyModifiers::CONTROL)));
+        assert!(area.is_empty());
     }
 }

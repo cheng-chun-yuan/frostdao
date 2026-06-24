@@ -501,8 +501,9 @@ fn render_finalize_input(frame: &mut Frame, form: &ReshareFormData, area: Rect) 
         frame.render_widget(error_para, chunks[6]);
     }
 
-    let help = Paragraph::new("Tab: Next | Space: Toggle | Enter: Finalize | Esc: Back")
-        .style(Style::default().fg(Color::DarkGray));
+    let help =
+        Paragraph::new("Tab: Next | Space: Toggle | Ctrl+u: Clear | Enter: Finalize | Esc: Back")
+            .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[7]);
 }
 
