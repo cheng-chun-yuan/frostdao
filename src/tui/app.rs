@@ -1343,6 +1343,11 @@ impl App {
 
     /// Copy text to clipboard
     pub fn copy_to_clipboard(&mut self, text: &str) {
+        if text.trim().is_empty() {
+            self.message = Some("Nothing to copy".to_string());
+            return;
+        }
+
         match arboard::Clipboard::new() {
             Ok(mut clipboard) => match clipboard.set_text(text) {
                 Ok(_) => {
@@ -1975,6 +1980,24 @@ mod tests {
         let message = app.message.as_deref().unwrap_or_default();
         assert!(message.contains("regtest uses local Esplora/mempool API"));
         assert!(message.contains("cleared pending send and Nostr ceremony state"));
+    }
+
+    #[test]
+    fn copy_to_clipboard_shows_helpful_message_for_empty_text() {
+        let mut app = App::new().unwrap();
+
+        app.copy_to_clipboard("");
+
+        assert_eq!(app.message.as_deref(), Some("Nothing to copy"));
+    }
+
+    #[test]
+    fn copy_to_clipboard_shows_helpful_message_for_whitespace_only_text() {
+        let mut app = App::new().unwrap();
+
+        app.copy_to_clipboard("   ");
+
+        assert_eq!(app.message.as_deref(), Some("Nothing to copy"));
     }
 
     #[test]
