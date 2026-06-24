@@ -48,6 +48,25 @@ impl NetworkSelection {
         }
     }
 
+    pub fn policy_hint(&self) -> &'static str {
+        match self {
+            Self::Testnet4 => "testnet4 remote UTXOs via mempool.space",
+            Self::Testnet3 => "testnet3 remote UTXOs via mempool.space",
+            Self::Signet => "signet remote UTXOs via mempool.space",
+            Self::Regtest => "regtest uses local-node workflow; no mempool.space",
+            Self::Mainnet => "MAINNET real funds; guarded commands require explicit opt-in",
+        }
+    }
+
+    pub fn address_scope_hint(&self) -> &'static str {
+        match self {
+            Self::Mainnet => "Bitcoin mainnet root address",
+            Self::Testnet4 | Self::Testnet3 | Self::Signet | Self::Regtest => {
+                "test-chain root address for testnet/signet/regtest"
+            }
+        }
+    }
+
     pub fn all() -> &'static [NetworkSelection] {
         &[
             Self::Testnet4,

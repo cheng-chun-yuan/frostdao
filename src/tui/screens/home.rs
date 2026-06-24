@@ -285,24 +285,6 @@ fn render_shortcuts(frame: &mut Frame, has_wallet: bool, area: Rect) {
 }
 
 fn network_safety_lines(network: NetworkSelection) -> Vec<Line<'static>> {
-    let policy = match network {
-        NetworkSelection::Testnet4 => "Policy: testnet4 remote UTXOs via mempool.space",
-        NetworkSelection::Testnet3 => "Policy: testnet3 remote UTXOs via mempool.space",
-        NetworkSelection::Signet => "Policy: signet remote UTXOs via mempool.space",
-        NetworkSelection::Regtest => "Policy: regtest uses local-node workflow; no mempool.space",
-        NetworkSelection::Mainnet => {
-            "Policy: MAINNET real funds; guarded commands require explicit opt-in"
-        }
-    };
-    let address_scope = match network {
-        NetworkSelection::Mainnet => "Address scope: Bitcoin mainnet root address",
-        NetworkSelection::Testnet4
-        | NetworkSelection::Testnet3
-        | NetworkSelection::Signet
-        | NetworkSelection::Regtest => {
-            "Address scope: test-chain root address for testnet/signet/regtest"
-        }
-    };
     let policy_color = match network {
         NetworkSelection::Regtest => Color::Cyan,
         NetworkSelection::Mainnet => Color::Red,
@@ -320,11 +302,11 @@ fn network_safety_lines(network: NetworkSelection) -> Vec<Line<'static>> {
             ),
         ]),
         Line::from(vec![Span::styled(
-            policy,
+            format!("Policy: {}", network.policy_hint()),
             Style::default().fg(policy_color),
         )]),
         Line::from(vec![Span::styled(
-            address_scope,
+            format!("Address scope: {}", network.address_scope_hint()),
             Style::default().fg(Color::DarkGray),
         )]),
     ]

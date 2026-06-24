@@ -67,6 +67,8 @@ Delete confirmation:
 | `Enter` | Confirm network |
 | `Esc` | Cancel |
 
+The selector shows the selected network policy before confirmation: testnet4/testnet3/signet use remote mempool.space UTXOs, regtest uses a local-node workflow, and mainnet requires explicit real-funds opt-in.
+
 ## Forms And Wizards
 
 Applies to keygen, reshare, send, and Nostr room configuration.

@@ -1244,8 +1244,9 @@ impl App {
         self.clear_network_volatile_state();
         self.state = AppState::Home;
         self.message = Some(format!(
-            "Switched to {}; cleared pending send and Nostr ceremony state",
-            self.network.display_name()
+            "Switched to {}; {}; cleared pending send and Nostr ceremony state",
+            self.network.display_name(),
+            self.network.policy_hint()
         ));
     }
 
@@ -1889,6 +1890,9 @@ mod tests {
 
         assert_eq!(app.network, NetworkSelection::Regtest);
         assert_eq!(app.network.to_bitcoin_network(), Network::Regtest);
+        let message = app.message.as_deref().unwrap_or_default();
+        assert!(message.contains("regtest uses local-node workflow"));
+        assert!(message.contains("cleared pending send and Nostr ceremony state"));
     }
 
     #[test]
