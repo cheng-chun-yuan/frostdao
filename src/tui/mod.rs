@@ -3262,6 +3262,7 @@ mod tests {
         assert!(help.contains("b/r/F5 (Refresh):Balance"));
         assert!(help.contains("Enter:Select"));
         assert!(help.contains("c/C:Copy"));
+        assert!(!help.contains("r:Balance"));
     }
 
     #[test]
@@ -3279,6 +3280,7 @@ mod tests {
 
         assert!(help.contains("b/r/F5 (Refresh):Balance"));
         assert!(help.contains("v:QR"));
+        assert!(!help.contains("r:Balance"));
     }
 
     #[test]
@@ -3299,6 +3301,7 @@ mod tests {
         assert!(help.contains("b/r/F5 (Refresh):Refresh"));
         assert!(help.contains("a:Add"));
         assert!(help.contains("x:Remove"));
+        assert!(!help.contains("r:Balance"));
     }
 
     #[test]
