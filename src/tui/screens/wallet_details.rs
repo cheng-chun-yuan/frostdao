@@ -204,11 +204,7 @@ fn render_wallet_info(frame: &mut Frame, app: &App, wallet_name: &str, area: Rec
 
         // Add hint for QR code
         lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled("Press ", Style::default().fg(Color::DarkGray)),
-            Span::styled("q", Style::default().fg(Color::Yellow)),
-            Span::styled(" for QR code", Style::default().fg(Color::DarkGray)),
-        ]));
+        lines.push(qr_open_hint_line());
 
         lines
     } else {
@@ -228,6 +224,14 @@ fn render_wallet_info(frame: &mut Frame, app: &App, wallet_name: &str, area: Rec
         .wrap(Wrap { trim: false });
 
     frame.render_widget(details, area);
+}
+
+fn qr_open_hint_line() -> Line<'static> {
+    Line::from(vec![
+        Span::styled("Press ", Style::default().fg(Color::DarkGray)),
+        Span::styled("v", Style::default().fg(Color::Yellow)),
+        Span::styled(" for QR code", Style::default().fg(Color::DarkGray)),
+    ])
 }
 
 /// Render QR code popup overlay
@@ -397,4 +401,24 @@ fn render_action_menu(frame: &mut Frame, state: &WalletDetailsState, area: Rect)
     .style(Style::default().fg(Color::DarkGray));
 
     frame.render_widget(help, help_area);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn line_to_string(line: Line<'_>) -> String {
+        line.spans
+            .into_iter()
+            .map(|span| span.content.into_owned())
+            .collect::<String>()
+    }
+
+    #[test]
+    fn qr_open_hint_matches_wallet_details_keymap() {
+        let rendered = line_to_string(qr_open_hint_line());
+
+        assert_eq!(rendered, "Press v for QR code");
+        assert!(!rendered.contains("Press q for QR code"));
+    }
 }

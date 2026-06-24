@@ -419,6 +419,7 @@ def check_transaction_review():
         ("src/tui/screens/home.rs", read(Path("src/tui/screens/home.rs")), "MAINNET real funds"),
         ("src/tui/screens/home.rs", read(Path("src/tui/screens/home.rs")), "regtest uses local-node workflow"),
         ("src/tui/screens/home.rs", read(Path("src/tui/screens/home.rs")), "Press r to fetch"),
+        ("src/tui/screens/wallet_details.rs", read(Path("src/tui/screens/wallet_details.rs")), "Press v for QR code"),
         ("src/tui/app.rs", read(Path("src/tui/app.rs")), "balance_cache_key"),
         ("src/tui/mod.rs", tui_keys, "r:Balance"),
         ("docs/RUN_GUIDE.md", docs, "must not fake a mainnet address"),
