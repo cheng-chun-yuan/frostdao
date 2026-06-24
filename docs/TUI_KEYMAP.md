@@ -181,6 +181,9 @@ Recovery boundaries:
 
 The address selection step shows the selected network and either the root
 key-path source or the full BIP-86 HD source path before transaction details.
+If no HD address is available, the screen names the active network and says
+whether the wallet is root-source-only or whether the user should add an
+HD-derived address first.
 
 The transaction review labels the local-only boundary: share material stays on
 this device, and only the signed raw transaction or TXID leaves the signing

@@ -549,6 +549,20 @@ fn selected_address_lines(form: &SendFormData, network: NetworkSelection) -> Vec
     ]
 }
 
+fn hd_address_empty_state_text(form: &SendFormData, network: NetworkSelection) -> String {
+    if form.hd_enabled {
+        format!(
+            "No HD-derived addresses on {}; use root source or add an address first",
+            network.display_name()
+        )
+    } else {
+        format!(
+            "Root source only on {}; wallet has no HD metadata",
+            network.display_name()
+        )
+    }
+}
+
 /// Render send wizard
 pub fn render_send(frame: &mut Frame, app: &App, form: &SendFormData, area: Rect) {
     if let crate::tui::state::AppState::Send(state) = &app.state {
@@ -1131,12 +1145,12 @@ fn render_select_address(frame: &mut Frame, app: &App, form: &SendFormData, area
     } else {
         Paragraph::new(vec![
             Line::from(vec![Span::styled(
-                "⚠️  HD derivation not available for this wallet",
+                "HD derivation is not enabled for this wallet",
                 Style::default().fg(Color::Red),
             )]),
             Line::from(""),
-            Line::from("   This wallet was created without HD support."),
-            Line::from("   Will use root address for signing."),
+            Line::from(format!("   Network: {}", app.network.display_name())),
+            Line::from("   Root source remains available when this network has an address."),
         ])
     };
     frame.render_widget(header, chunks[0]);
@@ -1196,7 +1210,7 @@ fn render_select_address(frame: &mut Frame, app: &App, form: &SendFormData, area
         );
         frame.render_widget(addr_list, chunks[1]);
     } else {
-        let no_hd = Paragraph::new("No HD addresses available")
+        let no_hd = Paragraph::new(hd_address_empty_state_text(form, app.network))
             .style(Style::default().fg(Color::DarkGray))
             .block(
                 Block::default()
@@ -2736,5 +2750,27 @@ mod tests {
         assert!(rendered.contains("Network: Regtest"));
         assert!(rendered.contains("Root Address (no HD tweak)"));
         assert!(rendered.contains("root MPC threshold shares"));
+    }
+
+    #[test]
+    fn hd_address_empty_state_explains_root_source_for_non_hd_wallet() {
+        let form = SendFormData::new();
+
+        let rendered = hd_address_empty_state_text(&form, NetworkSelection::Testnet4);
+
+        assert!(rendered.contains("Root source only on Testnet4"));
+        assert!(rendered.contains("wallet has no HD metadata"));
+        assert!(!rendered.contains("No HD addresses available"));
+    }
+
+    #[test]
+    fn hd_address_empty_state_explains_how_to_add_derived_addresses() {
+        let mut form = SendFormData::new();
+        form.hd_enabled = true;
+
+        let rendered = hd_address_empty_state_text(&form, NetworkSelection::Signet);
+
+        assert!(rendered.contains("No HD-derived addresses on Signet"));
+        assert!(rendered.contains("use root source or add an address first"));
     }
 }

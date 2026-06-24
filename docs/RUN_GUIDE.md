@@ -116,6 +116,7 @@ Control model:
 - Spending from the derived address still requires a valid TSS or HTSS signer set for that wallet.
 - The send review and TUI Nostr proposal review show the selected source path and source address so all devices can compare the same HD child before signing.
 - The TUI send flow also shows a child x-only pubkey fingerprint for HD sources. The path, address, and child pubkey fingerprint should match on every signer device before anyone confirms.
+- If no HD source is available in the TUI send address selector, the screen names the active network and says whether the wallet is root-source-only or needs an HD-derived address added first.
 
 ## 6. Back Up Your Share
 
