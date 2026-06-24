@@ -14,7 +14,7 @@ FrostDAO implements FROST threshold signatures with **Hierarchical TSS (HTSS)** 
 
 - **Threshold Signatures** - FROST-based t-of-n without trusted dealer
 - **Hierarchical TSS** - Rank-based signing (CEO must approve)
-- **HD Derivation** - BIP-32/44 addresses from one DKG wallet
+- **HD Derivation** - BIP-86 Taproot receive/change addresses from one DKG wallet
 - **Resharing** - Refresh shares without changing address
 - **Share Recovery** - Reconstruct lost shares from t parties
 - **BIP-39 Backup** - 24-word mnemonic for share recovery

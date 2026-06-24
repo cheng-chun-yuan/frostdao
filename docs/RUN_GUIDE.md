@@ -104,7 +104,17 @@ List the next addresses:
 frostdao dkg-list-addresses --name treasury --count 10 --network testnet
 ```
 
-These addresses are deterministic tweaks from the same root threshold key. You do not rerun DKG for every new receive address.
+These addresses are deterministic BIP-86 tweaks from the same root threshold key. You do not rerun DKG for every new receive address.
+
+Control model:
+
+- `change=0` is the external receive chain.
+- `change=1` is the internal change chain.
+- Only non-hardened child levels are supported after the account key.
+- A new address does not create a single-device private key.
+- Every signer derives the same public tweak and applies it to their own local share.
+- Spending from the derived address still requires a valid TSS or HTSS signer set for that wallet.
+- The send review shows the selected source path and source address so all devices can compare the same HD child before signing.
 
 ## 6. Back Up Your Share
 

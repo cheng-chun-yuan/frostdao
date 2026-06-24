@@ -343,6 +343,7 @@ mod hex_bytes {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::crypto::helpers::{construct_paired_secret_share, lagrange_coefficient_at_zero};
 
     fn random_keypair() -> (Scalar<Secret, NonZero>, Point<EvenY>) {
         let mut rng = rand::thread_rng();
@@ -354,6 +355,18 @@ mod tests {
             .into_point_with_even_y()
             .0;
         (secret, pubkey)
+    }
+
+    fn random_even_y_secret() -> (Scalar<Secret, NonZero>, Point<EvenY>) {
+        let mut rng = rand::thread_rng();
+        let secret = Scalar::<Secret, NonZero>::random(&mut rng);
+        let point = g!(secret * G).normalize().non_zero().unwrap();
+        let (pubkey, parity_flip) = point.into_point_with_even_y();
+        if parity_flip {
+            (s!(-secret), pubkey)
+        } else {
+            (secret, pubkey)
+        }
     }
 
     #[test]
@@ -456,6 +469,53 @@ mod tests {
             derived.public_key.to_xonly_bytes(),
             derived2.public_key.to_xonly_bytes()
         );
+    }
+
+    #[test]
+    fn test_derived_threshold_shares_reconstruct_child_key() {
+        let (master_secret, master_pubkey) = random_even_y_secret();
+        let coeff = Scalar::<Secret, NonZero>::random(&mut rand::thread_rng());
+        let context = HdContext {
+            chain_code: [7u8; 32],
+            master_pubkey_bytes: master_pubkey.to_xonly_bytes(),
+        };
+        let derived = derive_at_path(&context, &DerivationPath::receive(11)).unwrap();
+
+        let root_shares: Vec<_> = (1..=3)
+            .map(|index| {
+                let index_scalar: Scalar<Secret, Zero> = Scalar::from(index);
+                let share = s!(master_secret + coeff * index_scalar).non_zero().unwrap();
+                construct_paired_secret_share(index, share, &master_pubkey).unwrap()
+            })
+            .collect();
+        let derived_shares: Vec<_> = root_shares
+            .iter()
+            .map(|share| derive_share(share, &derived).unwrap())
+            .collect();
+
+        for signer_set in [[1u32, 2u32], [1, 3], [2, 3]] {
+            let mut reconstructed = Scalar::<Secret, Zero>::zero();
+
+            for signer_index in signer_set {
+                let share = derived_shares[(signer_index - 1) as usize].secret_share();
+                let coefficient = lagrange_coefficient_at_zero(signer_index, &signer_set).unwrap();
+                reconstructed = s!(reconstructed + share.share * coefficient);
+            }
+
+            let reconstructed_point = g!(reconstructed * G)
+                .normalize()
+                .non_zero()
+                .unwrap()
+                .into_point_with_even_y()
+                .0;
+
+            assert_eq!(
+                reconstructed_point.to_xonly_bytes(),
+                derived.public_key.to_xonly_bytes(),
+                "derived shares for {:?} must reconstruct the HD child key",
+                signer_set
+            );
+        }
     }
 
     #[test]
