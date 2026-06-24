@@ -358,9 +358,11 @@ def check_replay_cache_persistence():
         "Relay transport",
         "Scheme: ",
         "Rank: ",
+        "Multi-device signing room",
         "Room joins are public; signing nonce/share payloads are encrypted",
         "room_config_status_line",
         "room_config_status_shows_blocker_before_join",
+        "configure_info_labels_signing_room_and_keygen_boundary",
         "room_info_labels_local_simulation_transport",
         "local_waiting_help_uses_test_participant_wording",
         "Add local test participant",
@@ -397,6 +399,8 @@ def check_replay_cache_persistence():
         missing.append("RUN_GUIDE TUI Nostr room configure validation documentation")
     if "current TUI room joins are guarded as `Scheme: TSS` with `Rank: n/a`" not in run_guide:
         missing.append("RUN_GUIDE TUI Nostr room scheme/rank documentation")
+    if "TUI Nostr room configure screen labels this as a multi-device signing room" not in run_guide:
+        missing.append("RUN_GUIDE TUI Nostr room signing boundary documentation")
     if "Room joins are public metadata, while signing nonce/share payloads are encrypted" not in run_guide:
         missing.append("RUN_GUIDE TUI Nostr room public/encrypted boundary documentation")
     if "Nostr keygen status keeps room, party, threshold, scheme, rank, and transport visible" not in run_guide:
@@ -413,6 +417,8 @@ def check_replay_cache_persistence():
         missing.append("TUI_KEYMAP Nostr signing ceremony context documentation")
     if "The room info line shows room ID, party index, threshold, scheme, rank, and" not in keymap:
         missing.append("TUI_KEYMAP Nostr room ceremony state documentation")
+    if "The configure screen labels this as a multi-device signing room" not in keymap:
+        missing.append("TUI_KEYMAP Nostr room signing boundary documentation")
     if "The configure status line shows `Blocked` until the room ID, party index" not in keymap:
         missing.append("TUI_KEYMAP Nostr room configure validation documentation")
     if "Room joins are accepted only when the payload party, threshold, party count, scheme, and rank shape match the active room" not in run_guide:

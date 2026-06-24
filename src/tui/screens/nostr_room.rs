@@ -51,28 +51,7 @@ fn render_configure(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(title, chunks[0]);
 
     // Info box
-    let info_lines = vec![
-        Line::from(Span::styled(
-            "Distributed DKG - Each party runs on a different device.",
-            Style::default().fg(Color::Gray),
-        )),
-        Line::from(Span::styled(
-            "All parties must use the same Room ID to coordinate.",
-            Style::default().fg(Color::Gray),
-        )),
-        Line::from(Span::styled(
-            "Room joins are public; signing nonce/share payloads are encrypted.",
-            Style::default().fg(Color::DarkGray),
-        )),
-        Line::from(vec![
-            Span::styled("Transport: ", Style::default().fg(Color::DarkGray)),
-            Span::styled(
-                app.nostr_transport_label(),
-                Style::default().fg(Color::Green),
-            ),
-        ]),
-    ];
-    let info = Paragraph::new(info_lines);
+    let info = Paragraph::new(room_config_info_lines(app));
     frame.render_widget(info, chunks[1]);
 
     // Form fields
@@ -135,6 +114,34 @@ fn render_configure(frame: &mut Frame, app: &App, area: Rect) {
             .border_style(Style::default().fg(Color::DarkGray)),
     );
     frame.render_widget(help, chunks[8]);
+}
+
+fn room_config_info_lines(app: &App) -> Vec<Line<'static>> {
+    vec![
+        Line::from(Span::styled(
+            "Multi-device signing room - each party runs on a different device.",
+            Style::default().fg(Color::Gray),
+        )),
+        Line::from(Span::styled(
+            "All parties must use the same Room ID to coordinate.",
+            Style::default().fg(Color::Gray),
+        )),
+        Line::from(Span::styled(
+            "Room joins are public; signing nonce/share payloads are encrypted.",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(Span::styled(
+            "Relay keygen is unavailable here; create keys with CLI keygen first.",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(vec![
+            Span::styled("Transport: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                app.nostr_transport_label(),
+                Style::default().fg(Color::Green),
+            ),
+        ]),
+    ]
 }
 
 fn render_waiting(frame: &mut Frame, app: &App, area: Rect) {
@@ -478,6 +485,23 @@ mod tests {
         assert!(rendered.contains("Rank: n/a"));
         assert!(rendered.contains("Transport: local simulation"));
         assert!(!rendered.contains("demo"));
+    }
+
+    #[test]
+    fn configure_info_labels_signing_room_and_keygen_boundary() {
+        let app = App::new().unwrap();
+        let rendered = room_config_info_lines(&app)
+            .into_iter()
+            .map(line_to_string)
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(rendered.contains("Multi-device signing room"));
+        assert!(rendered.contains("Room joins are public"));
+        assert!(rendered.contains("signing nonce/share payloads are encrypted"));
+        assert!(rendered.contains("Relay keygen is unavailable"));
+        assert!(rendered.contains("CLI keygen"));
+        assert!(!rendered.contains("Distributed DKG"));
     }
 
     #[test]
