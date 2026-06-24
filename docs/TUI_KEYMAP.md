@@ -214,6 +214,10 @@ The policy input remains editable. Use the templates as starting points, then ty
 | Ready | `s` | Start distributed signing |
 | Ready | `Esc` | Leave room |
 
+The room info line shows room ID, party index, threshold, scheme, rank, and
+transport. Current TUI room joins are guarded as `Scheme: TSS` with `Rank: n/a`;
+room join metadata is public, while signing nonce/share payloads are encrypted.
+
 ## Nostr Keygen
 
 | Key | Action |

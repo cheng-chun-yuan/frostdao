@@ -342,6 +342,9 @@ def check_replay_cache_persistence():
         "Transport: ",
         "local simulation",
         "Relay transport",
+        "Scheme: ",
+        "Rank: ",
+        "Room joins are public; signing nonce/share payloads are encrypted",
         "room_info_labels_local_simulation_transport",
         "local_waiting_help_uses_test_participant_wording",
         "Add local test participant",
@@ -352,6 +355,12 @@ def check_replay_cache_persistence():
             missing.append(f"NOSTR_PROTOCOL {marker} documentation")
     if "TUI room screen creates a `NostrRoomRuntime`" not in run_guide:
         missing.append("RUN_GUIDE TUI NostrRoomRuntime documentation")
+    if "current TUI room joins are guarded as `Scheme: TSS` with `Rank: n/a`" not in run_guide:
+        missing.append("RUN_GUIDE TUI Nostr room scheme/rank documentation")
+    if "Room joins are public metadata, while signing nonce/share payloads are encrypted" not in run_guide:
+        missing.append("RUN_GUIDE TUI Nostr room public/encrypted boundary documentation")
+    if "The room info line shows room ID, party index, threshold, scheme, rank, and" not in keymap:
+        missing.append("TUI_KEYMAP Nostr room ceremony state documentation")
     if "Room joins are accepted only when the payload party, threshold, party count, scheme, and rank shape match the active room" not in run_guide:
         missing.append("RUN_GUIDE validated room join documentation")
     if "payload `party_index` must match the envelope `from` party" not in docs:

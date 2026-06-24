@@ -60,6 +60,10 @@ fn render_configure(frame: &mut Frame, app: &App, area: Rect) {
             "All parties must use the same Room ID to coordinate.",
             Style::default().fg(Color::Gray),
         )),
+        Line::from(Span::styled(
+            "Room joins are public; signing nonce/share payloads are encrypted.",
+            Style::default().fg(Color::DarkGray),
+        )),
         Line::from(vec![
             Span::styled("Transport: ", Style::default().fg(Color::DarkGray)),
             Span::styled(
@@ -313,6 +317,12 @@ fn room_info_line(app: &App) -> Line<'static> {
             Style::default().fg(Color::Yellow),
         ),
         Span::raw("  |  "),
+        Span::styled("Scheme: ", Style::default().fg(Color::Gray)),
+        Span::styled("TSS", Style::default().fg(Color::Cyan)),
+        Span::raw("  |  "),
+        Span::styled("Rank: ", Style::default().fg(Color::Gray)),
+        Span::styled("n/a", Style::default().fg(Color::DarkGray)),
+        Span::raw("  |  "),
         Span::styled("Transport: ", Style::default().fg(Color::Gray)),
         Span::styled(
             app.nostr_transport_label(),
@@ -431,6 +441,8 @@ mod tests {
         assert!(rendered.contains("Room: treasury-room"));
         assert!(rendered.contains("You are: Party 2"));
         assert!(rendered.contains("2-of-3"));
+        assert!(rendered.contains("Scheme: TSS"));
+        assert!(rendered.contains("Rank: n/a"));
         assert!(rendered.contains("Transport: local simulation"));
         assert!(!rendered.contains("demo"));
     }
