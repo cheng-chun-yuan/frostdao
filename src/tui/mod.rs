@@ -75,14 +75,16 @@ pub fn run_tui() -> Result<()> {
 }
 
 fn is_copy_key(code: &KeyCode) -> bool {
-    matches!(code, KeyCode::Char('c') | KeyCode::Char('C'))
+    matches!(code, KeyCode::Char(c) if c.eq_ignore_ascii_case(&'c'))
 }
 
 fn is_refresh_key(code: &KeyCode) -> bool {
-    matches!(
-        code,
-        KeyCode::Char('b') | KeyCode::Char('r') | KeyCode::F(5)
-    )
+    (matches!(code, KeyCode::Char(c) if c.eq_ignore_ascii_case(&'b') || c.eq_ignore_ascii_case(&'r')))
+        || matches!(code, KeyCode::F(5))
+}
+
+fn is_shortcut_key(code: &KeyCode, target: char) -> bool {
+    matches!(code, KeyCode::Char(c) if c.eq_ignore_ascii_case(&target))
 }
 
 fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> {
@@ -147,22 +149,22 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
             }
         }
         code if is_refresh_key(&code) => app.refresh_balance(),
-        KeyCode::Char('R') => app.reload_wallets(),
-        KeyCode::Char('n') => {
+        code if is_shortcut_key(&code, 'r') => app.reload_wallets(),
+        code if is_shortcut_key(&code, 'n') => {
             app.chain_selector_index = app.network.index();
             app.state = AppState::ChainSelect;
         }
-        KeyCode::Char('g') => {
+        code if is_shortcut_key(&code, 'g') => {
             app.state = AppState::Keygen(state::KeygenState::default());
         }
-        KeyCode::Char('h') => {
+        code if is_shortcut_key(&code, 'h') => {
             if app.selected_wallet().is_some() {
                 app.state = AppState::Reshare(state::ReshareState::default());
             } else {
                 app.set_message("Select a wallet first to reshare");
             }
         }
-        KeyCode::Char('s') => {
+        code if is_shortcut_key(&code, 's') => {
             if app.selected_wallet().is_some() {
                 if let Some(message) = app.utxo_source_unavailable_message() {
                     app.set_message(&message);
@@ -173,7 +175,7 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
                 app.set_message("Select a wallet first to send");
             }
         }
-        KeyCode::Char('a') => {
+        code if is_shortcut_key(&code, 'a') => {
             // HD Address list
             if let Some(wallet) = app.selected_wallet() {
                 let wallet_name = wallet.name.clone();
@@ -192,7 +194,7 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
                 app.set_message("Select a wallet first to view addresses");
             }
         }
-        KeyCode::Char('m') => {
+        code if is_shortcut_key(&code, 'm') => {
             // Mnemonic backup
             if let Some(wallet) = app.selected_wallet() {
                 let wallet_name = wallet.name.clone();
@@ -259,12 +261,12 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
                 app.set_message("Select a wallet first to copy address");
             }
         }
-        KeyCode::Char('o') | KeyCode::Char('N') => {
+        code if is_shortcut_key(&code, 'o') => {
             // Nostr room for distributed DKG/signing
             app.state = AppState::NostrRoom;
         }
         #[cfg(feature = "miniscript-policy")]
-        KeyCode::Char('p') => {
+        code if is_shortcut_key(&code, 'p') => {
             app.policy_preview_form = screens::PolicyPreviewFormData::new();
             app.state = AppState::PolicyPreview;
         }
@@ -527,7 +529,7 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
     // Handle QR code popup mode
     if state.show_qr {
         match code {
-            KeyCode::Esc | KeyCode::Char('q') => {
+            code if code == KeyCode::Esc || is_shortcut_key(&code, 'q') => {
                 if let AppState::WalletDetails(ref mut s) = app.state {
                     s.show_qr = false;
                 }
@@ -741,7 +743,7 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
                 app.refresh_balance();
             }
         }
-        KeyCode::Char('v') => {
+        code if is_shortcut_key(&code, 'v') => {
             // Show QR code popup
             if let AppState::WalletDetails(ref mut s) = app.state {
                 s.show_qr = true;
@@ -2260,7 +2262,7 @@ fn handle_address_list_keys(app: &mut App, code: KeyCode) {
                 }
             }
         }
-        KeyCode::Char('+') | KeyCode::Char('a') => {
+        KeyCode::Char('+') => {
             // Add new HD address
             let wallet_name = if let AppState::AddressList(ref state) = app.state {
                 Some(state.wallet_name.clone())
@@ -2271,7 +2273,29 @@ fn handle_address_list_keys(app: &mut App, code: KeyCode) {
                 app.add_hd_address(&name);
             }
         }
-        KeyCode::Char('-') | KeyCode::Char('x') => {
+        code if is_shortcut_key(&code, 'a') => {
+            // Add new HD address
+            let wallet_name = if let AppState::AddressList(ref state) = app.state {
+                Some(state.wallet_name.clone())
+            } else {
+                None
+            };
+            if let Some(name) = wallet_name {
+                app.add_hd_address(&name);
+            }
+        }
+        KeyCode::Char('-') => {
+            // Remove last HD address
+            let wallet_name = if let AppState::AddressList(ref state) = app.state {
+                Some(state.wallet_name.clone())
+            } else {
+                None
+            };
+            if let Some(name) = wallet_name {
+                app.remove_hd_address(&name);
+            }
+        }
+        code if is_shortcut_key(&code, 'x') => {
             // Remove last HD address
             let wallet_name = if let AppState::AddressList(ref state) = app.state {
                 Some(state.wallet_name.clone())
@@ -3518,6 +3542,49 @@ mod tests {
     }
 
     #[test]
+    fn home_and_detail_shortcuts_are_case_insensitive() {
+        assert!(is_copy_key(&KeyCode::Char('c')));
+        assert!(is_copy_key(&KeyCode::Char('C')));
+
+        assert!(is_refresh_key(&KeyCode::Char('b')));
+        assert!(is_refresh_key(&KeyCode::Char('B')));
+        assert!(is_refresh_key(&KeyCode::Char('r')));
+        assert!(is_refresh_key(&KeyCode::Char('R')));
+        assert!(is_refresh_key(&KeyCode::F(5)));
+
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Signet;
+        app.chain_selector_index = app.network.index();
+
+        handle_home_keys(&mut app, KeyCode::Char('N'));
+        assert!(matches!(app.state, AppState::ChainSelect));
+        assert_eq!(app.chain_selector_index, NetworkSelection::Signet.index());
+
+        app.network = NetworkSelection::Mainnet;
+        app.state = AppState::WalletDetails(WalletDetailsState {
+            wallet_name: "treasury".to_string(),
+            selected_action: 0,
+            confirm_delete: false,
+            delete_confirmation_input: String::new(),
+            show_qr: false,
+        });
+
+        handle_wallet_details_keys(&mut app, KeyCode::Char('V'));
+        if let AppState::WalletDetails(ref state) = app.state {
+            assert!(state.show_qr);
+        } else {
+            panic!("expected AppState::WalletDetails");
+        }
+
+        handle_wallet_details_keys(&mut app, KeyCode::Char('Q'));
+        if let AppState::WalletDetails(ref state) = app.state {
+            assert!(!state.show_qr);
+        } else {
+            panic!("expected AppState::WalletDetails");
+        }
+    }
+
+    #[test]
     #[serial]
     fn wallet_details_send_action_blocks_without_utxo_source() {
         std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
@@ -3568,6 +3635,45 @@ mod tests {
             app.message.as_deref(),
             Some("No address available to copy for this wallet")
         );
+    }
+
+    #[test]
+    #[serial]
+    fn address_list_uppercase_add_remove_triggers_same_paths() {
+        let original_dir = std::env::current_dir().unwrap();
+        let temp_dir =
+            std::env::temp_dir().join(format!("frostdao-test-address-list-{}", std::process::id()));
+
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        std::env::set_current_dir(&temp_dir).unwrap();
+
+        let mut app = App::new().unwrap();
+        app.state = AppState::AddressList(AddressListState {
+            wallet_name: "wallet-case-test".to_string(),
+            network: NetworkSelection::Testnet4,
+            addresses: vec![("tb1qtest".to_string(), "02".to_string(), 0)],
+            selected: 0,
+            error: None,
+            hd_enabled: true,
+            balance_cache: std::collections::HashMap::new(),
+        });
+
+        handle_address_list_keys(&mut app, KeyCode::Char('A'));
+        assert!(app
+            .message
+            .as_deref()
+            .unwrap_or("")
+            .starts_with("Error adding address"));
+
+        handle_address_list_keys(&mut app, KeyCode::Char('X'));
+        assert!(app
+            .message
+            .as_deref()
+            .unwrap_or("")
+            .starts_with("Error removing address"));
+
+        std::env::set_current_dir(original_dir).unwrap();
+        let _ = std::fs::remove_dir_all(temp_dir.join(".frost_state"));
     }
 
     #[test]

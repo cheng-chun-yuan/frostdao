@@ -18,6 +18,7 @@ This is the maintained keyboard convention for FrostDAO TUI.
 | `q` | Quit only from home; close QR popup when shown |
 
 Prefer lowercase shortcuts in help text.
+Core command shortcuts are case-insensitive (for example, `c` and `C` are treated the same).
 
 ## Home
 
