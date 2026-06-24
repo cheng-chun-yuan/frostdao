@@ -374,7 +374,7 @@ fn nostr_sign_status_lines<'a>(app: &'a App) -> Vec<Line<'a>> {
                 ]),
                 Line::from(""),
                 Line::from(Span::styled(
-                    "Waiting for real transaction broadcast confirmation...",
+                    "Waiting for matching tx_broadcast room announcement...",
                     Style::default().fg(Color::Yellow),
                 )),
                 Line::from(Span::styled(
@@ -382,7 +382,7 @@ fn nostr_sign_status_lines<'a>(app: &'a App) -> Vec<Line<'a>> {
                     Style::default().fg(Color::Gray),
                 )),
                 Line::from(Span::styled(
-                    "This screen completes only after a matching tx_broadcast arrives from the room.",
+                    "This is a room announcement, not an on-chain confirmation.",
                     Style::default().fg(Color::DarkGray),
                 )),
             ]
@@ -390,10 +390,14 @@ fn nostr_sign_status_lines<'a>(app: &'a App) -> Vec<Line<'a>> {
         NostrSignState::Complete { txid } => {
             vec![
                 Line::from(Span::styled(
-                    "✓ Transaction broadcast successfully!",
+                    "✓ Matching tx_broadcast announcement received",
                     Style::default()
                         .fg(Color::Green)
                         .add_modifier(Modifier::BOLD),
+                )),
+                Line::from(Span::styled(
+                    "Check the selected network explorer or node for on-chain confirmation.",
+                    Style::default().fg(Color::DarkGray),
                 )),
                 Line::from(""),
                 Line::from(vec![
@@ -1164,8 +1168,23 @@ mod tests {
         assert!(rendered.contains("Combine handoff"));
         assert!(rendered.contains("frostdao combine"));
         assert!(rendered.contains("matching tx_broadcast"));
+        assert!(rendered.contains("not an on-chain confirmation"));
         assert!(help.contains("CLI handoff"));
         assert!(help.contains("combine + broadcast"));
+    }
+
+    #[test]
+    fn complete_status_distinguishes_room_announcement_from_chain_confirmation() {
+        let mut app = app_with_room_context();
+        app.nostr_sign_state = NostrSignState::Complete {
+            txid: "txid-test".to_string(),
+        };
+
+        let rendered = lines_to_string(nostr_sign_status_lines(&app));
+
+        assert!(rendered.contains("Matching tx_broadcast announcement received"));
+        assert!(rendered.contains("on-chain confirmation"));
+        assert!(rendered.contains("txid-test"));
     }
 
     #[test]

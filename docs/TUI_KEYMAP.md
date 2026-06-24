@@ -284,7 +284,8 @@ keygen is intentionally unavailable in the TUI; create keys with CLI keygen,
 then use the room for distributed signing.
 When the Nostr signing coordinator reaches threshold, the TUI shows a CLI
 handoff: export the collected signing shares, run `frostdao combine`, broadcast
-with CLI, and wait for a matching `tx_broadcast` announcement in the room.
+with CLI, and wait for a matching `tx_broadcast` announcement in the room. A
+matching `tx_broadcast` is a room announcement, not an on-chain confirmation.
 
 ## Nostr Keygen
 
