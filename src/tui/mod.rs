@@ -2594,14 +2594,25 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                 NostrSignState::WaitingForConsent {
                     wallet_name,
                     session_id,
+                    proposal,
                     consents,
-                    ..
                 } => {
                     // Check if we have enough consents (including proposer)
                     if consents.len() + 1 >= app.nostr_threshold as usize {
+                        let wallet_name = wallet_name.clone();
+                        let session_id = session_id.clone();
+                        let sighash_fingerprint = proposal.review.sighash_fingerprint.clone();
+                        if let Err(e) = app.start_nostr_signing_attempt(
+                            &wallet_name,
+                            &session_id,
+                            &sighash_fingerprint,
+                        ) {
+                            app.message = Some(format!("Cannot start signing attempt: {}", e));
+                            return;
+                        }
                         app.nostr_sign_state = NostrSignState::CollectingShares {
-                            wallet_name: wallet_name.clone(),
-                            session_id: session_id.clone(),
+                            wallet_name,
+                            session_id,
                             received_shares: std::collections::HashMap::new(),
                         };
                         app.set_message("Threshold reached! Collecting signature shares...");
@@ -2639,9 +2650,24 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                     session_id,
                 } => {
                     // Transition to collecting shares when proposer initiates
+                    let Some(proposal) = app.nostr_pending_proposals.get(session_id) else {
+                        app.set_message("Cannot execute: proposal context is missing");
+                        return;
+                    };
+                    let wallet_name = wallet_name.clone();
+                    let session_id = session_id.clone();
+                    let sighash_fingerprint = proposal.review.sighash_fingerprint.clone();
+                    if let Err(e) = app.start_nostr_signing_attempt(
+                        &wallet_name,
+                        &session_id,
+                        &sighash_fingerprint,
+                    ) {
+                        app.message = Some(format!("Cannot start signing attempt: {}", e));
+                        return;
+                    }
                     app.nostr_sign_state = NostrSignState::CollectingShares {
-                        wallet_name: wallet_name.clone(),
-                        session_id: session_id.clone(),
+                        wallet_name,
+                        session_id,
                         received_shares: std::collections::HashMap::new(),
                     };
                 }
@@ -2650,7 +2676,11 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                     session_id,
                     received_shares,
                 } => {
-                    if received_shares.len() >= app.nostr_threshold as usize {
+                    let ready_to_combine = app
+                        .nostr_signing_coordinators
+                        .get(session_id)
+                        .is_some_and(|coordinator| coordinator.ready_to_combine());
+                    if ready_to_combine {
                         app.nostr_sign_state = NostrSignState::Combining {
                             wallet_name: wallet_name.clone(),
                             session_id: session_id.clone(),
@@ -2658,6 +2688,8 @@ fn handle_nostr_sign_keys(app: &mut App, code: KeyCode) {
                         app.set_message(
                             "Threshold reached; waiting for real transaction broadcast...",
                         );
+                    } else if received_shares.len() >= app.nostr_threshold as usize {
+                        app.set_message("Waiting for nonce-checked coordinator threshold...");
                     } else {
                         app.set_message("Waiting for more shares...");
                     }
