@@ -978,6 +978,7 @@ pub fn dkg_broadcast_core(
 pub struct AutoSignResult {
     pub txid: String,
     pub raw_tx: String,
+    pub broadcast_status: String,
     pub from_address: String,
     pub to_address: String,
     pub amount_sats: u64,
@@ -1451,6 +1452,7 @@ pub fn frost_sign_all_local(
     let output = AutoSignResult {
         txid: txid.to_string(),
         raw_tx,
+        broadcast_status: broadcast_status.to_string(),
         from_address: from_address.to_string(),
         to_address: dest_address.to_string(),
         amount_sats,

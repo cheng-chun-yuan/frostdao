@@ -309,7 +309,11 @@ pub enum SendState {
     /// Combine shares (aggregator)
     CombineShares { wallet_name: String },
     /// Transaction complete
-    Complete { txid: String },
+    Complete {
+        txid: String,
+        broadcast_status: Option<String>,
+        raw_tx: Option<String>,
+    },
 }
 
 /// Form field focus for multi-field forms

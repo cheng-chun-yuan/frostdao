@@ -1827,14 +1827,22 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 ) {
                     Ok(result) => {
                         app.send_form.error_message = None;
-                        let txid = if let Ok(parsed) =
+                        let (txid, broadcast_status, raw_tx) = if let Ok(parsed) =
                             serde_json::from_str::<serde_json::Value>(&result.result)
                         {
-                            parsed["txid"].as_str().unwrap_or("unknown").to_string()
+                            (
+                                parsed["txid"].as_str().unwrap_or("unknown").to_string(),
+                                parsed["broadcast_status"].as_str().map(str::to_string),
+                                parsed["raw_tx"].as_str().map(str::to_string),
+                            )
                         } else {
-                            result.result.clone()
+                            (result.result.clone(), None, None)
                         };
-                        app.state = AppState::Send(SendState::Complete { txid });
+                        app.state = AppState::Send(SendState::Complete {
+                            txid,
+                            broadcast_status,
+                            raw_tx,
+                        });
                     }
                     Err(e) => {
                         app.send_form.error_message = Some(format!("Error: {}", e));
@@ -2032,6 +2040,8 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                             app.send_form.error_message = None;
                             app.state = AppState::Send(SendState::Complete {
                                 txid: result.result,
+                                broadcast_status: None,
+                                raw_tx: None,
                             });
                         }
                         Err(e) => {
@@ -2047,13 +2057,13 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 app.send_form.shares_input.handle_key(key);
             }
         },
-        AppState::Send(SendState::Complete { txid }) => match key.code {
+        AppState::Send(SendState::Complete { txid, raw_tx, .. }) => match key.code {
             KeyCode::Esc | KeyCode::Enter => {
                 app.send_form = SendFormData::new();
                 app.state = AppState::Home;
             }
             KeyCode::Char('c') => {
-                app.copy_to_clipboard(&txid);
+                app.copy_to_clipboard(raw_tx.as_deref().unwrap_or(&txid));
             }
             _ => {}
         },

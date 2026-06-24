@@ -131,11 +131,11 @@ Applies when a single-line input or multiline paste area is focused.
 | Script config | `Tab` | Move script option field |
 | Script config | `m` | Toggle relative timelock mode |
 | Transaction details | `Tab`, `Shift-Tab` | Move address/amount fields |
-| Transaction review | `y` | Confirm and sign/broadcast |
+| Transaction review | `y` | Confirm, locally sign, and attempt broadcast |
 | Sighash | `c` | Copy sighash |
 | Nonce output | `c` | Copy nonce JSON |
 | Signature share | `c` | Copy signature share JSON |
-| Complete | `c` | Copy TXID or final result |
+| Complete | `c` | Copy TXID, or raw transaction when broadcast failed |
 | Any phase | `Enter` | Continue/submit |
 | Any phase | `Esc` | Back/cancel |
 

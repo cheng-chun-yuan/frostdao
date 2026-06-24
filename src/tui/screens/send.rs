@@ -395,7 +395,17 @@ pub fn render_send(frame: &mut Frame, app: &App, form: &SendFormData, area: Rect
                 render_generate_share(frame, share_output, area)
             }
             SendState::CombineShares { .. } => render_combine_shares(frame, form, area),
-            SendState::Complete { txid } => render_complete(frame, txid, area),
+            SendState::Complete {
+                txid,
+                broadcast_status,
+                raw_tx,
+            } => render_complete(
+                frame,
+                txid,
+                broadcast_status.as_deref(),
+                raw_tx.as_deref(),
+                area,
+            ),
         }
     }
 }
@@ -1404,7 +1414,7 @@ fn render_enter_details(frame: &mut Frame, form: &SendFormData, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan))
-        .title(" Send - Step 4: Transaction Details ");
+        .title(" Send - Step 5: Transaction Details ");
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -1550,7 +1560,7 @@ fn render_review_transaction(
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Yellow))
-        .title(" Send - Step 5: Review Transaction ");
+        .title(" Send - Step 6: Review Transaction ");
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -1587,7 +1597,7 @@ fn render_review_transaction(
 
     let title = Paragraph::new(Line::from(vec![
         Span::styled(
-            "Confirm before signing and broadcasting",
+            "Confirm before local signing and broadcast attempt",
             Style::default()
                 .fg(Color::Yellow)
                 .add_modifier(Modifier::BOLD),
@@ -1678,7 +1688,7 @@ fn render_review_transaction(
 
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        "This local flow signs and attempts to broadcast after confirmation.",
+        "This local flow signs first; broadcast may still fail or require manual relay.",
         Style::default().fg(Color::Yellow),
     )));
 
@@ -2099,7 +2109,60 @@ fn render_combine_shares(frame: &mut Frame, form: &SendFormData, area: Rect) {
     frame.render_widget(help, chunks[3]);
 }
 
-fn render_complete(frame: &mut Frame, txid: &str, area: Rect) {
+fn complete_status_lines(
+    txid: &str,
+    broadcast_status: Option<&str>,
+    raw_tx: Option<&str>,
+) -> Vec<Line<'static>> {
+    let mut lines = vec![
+        Line::from(vec![Span::styled(
+            "TXID: ",
+            Style::default().fg(Color::Gray),
+        )]),
+        Line::from(vec![Span::styled(
+            txid.to_string(),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(""),
+    ];
+
+    match broadcast_status {
+        Some("broadcast") => {
+            lines.push(Line::from("Network accepted the broadcast."));
+            lines.push(Line::from("Use the TXID to verify confirmation status."));
+        }
+        Some("broadcast_failed") => {
+            lines.push(Line::from("Signed transaction created; broadcast failed."));
+            if raw_tx.is_some() {
+                lines.push(Line::from(
+                    "Press c to copy the raw transaction for manual broadcast.",
+                ));
+            } else {
+                lines.push(Line::from(
+                    "Use the CLI output or audit trail to recover the raw transaction.",
+                ));
+            }
+        }
+        _ => {
+            lines.push(Line::from("Threshold signature complete."));
+            lines.push(Line::from(
+                "Transaction assembly or broadcast may still be required.",
+            ));
+        }
+    }
+
+    lines
+}
+
+fn render_complete(
+    frame: &mut Frame,
+    txid: &str,
+    broadcast_status: Option<&str>,
+    raw_tx: Option<&str>,
+    area: Rect,
+) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Green))
@@ -2117,10 +2180,15 @@ fn render_complete(frame: &mut Frame, txid: &str, area: Rect) {
         ])
         .split(inner);
 
+    let success_label = match broadcast_status {
+        Some("broadcast") => "Transaction broadcast accepted",
+        Some("broadcast_failed") => "Transaction signed, broadcast pending",
+        _ => "Threshold signature complete",
+    };
     let success = Paragraph::new(Line::from(vec![
         Span::styled("✓ ", Style::default().fg(Color::Green)),
         Span::styled(
-            "Threshold signature complete!",
+            success_label,
             Style::default()
                 .fg(Color::Green)
                 .add_modifier(Modifier::BOLD),
@@ -2132,31 +2200,75 @@ fn render_complete(frame: &mut Frame, txid: &str, area: Rect) {
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan))
         .title("Result");
-    let info = Paragraph::new(vec![
-        Line::from(vec![Span::styled(
-            "Signature/TXID: ",
-            Style::default().fg(Color::Gray),
-        )]),
-        Line::from(vec![Span::styled(
-            txid,
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        )]),
-        Line::from(""),
-        Line::from("Threshold signers contributed their shares to create this signature."),
-        Line::from("In a real transaction, this would be broadcast to the network."),
-    ])
-    .block(info_block)
-    .wrap(Wrap { trim: false });
+    let info = Paragraph::new(complete_status_lines(txid, broadcast_status, raw_tx))
+        .block(info_block)
+        .wrap(Wrap { trim: false });
     frame.render_widget(info, chunks[1]);
 
     let help = Paragraph::new(Line::from(vec![
         Span::styled("c", Style::default().fg(Color::Yellow)),
-        Span::raw(": Copy TXID | "),
+        Span::raw(if raw_tx.is_some() {
+            ": Copy raw TX | "
+        } else {
+            ": Copy TXID | "
+        }),
         Span::styled("Enter/Esc", Style::default().fg(Color::Yellow)),
         Span::raw(": Return to wallet list"),
     ]))
     .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[2]);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn lines_to_string(lines: Vec<Line<'_>>) -> String {
+        lines
+            .into_iter()
+            .map(|line| {
+                line.spans
+                    .into_iter()
+                    .map(|span| span.content.into_owned())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn complete_status_distinguishes_broadcast_success() {
+        let rendered = lines_to_string(complete_status_lines(
+            "abc123",
+            Some("broadcast"),
+            Some("rawtx"),
+        ));
+
+        assert!(rendered.contains("Network accepted the broadcast"));
+        assert!(rendered.contains("verify confirmation status"));
+        assert!(!rendered.contains("manual broadcast"));
+        assert!(!rendered.contains("would be broadcast"));
+    }
+
+    #[test]
+    fn complete_status_tells_user_to_copy_raw_tx_when_broadcast_fails() {
+        let rendered = lines_to_string(complete_status_lines(
+            "abc123",
+            Some("broadcast_failed"),
+            Some("rawtx"),
+        ));
+
+        assert!(rendered.contains("Signed transaction created; broadcast failed"));
+        assert!(rendered.contains("copy the raw transaction"));
+        assert!(!rendered.contains("would be broadcast"));
+    }
+
+    #[test]
+    fn complete_status_keeps_manual_signature_flow_explicit() {
+        let rendered = lines_to_string(complete_status_lines("signature-json", None, None));
+
+        assert!(rendered.contains("Threshold signature complete"));
+        assert!(rendered.contains("Transaction assembly or broadcast may still be required"));
+        assert!(!rendered.contains("would be broadcast"));
+    }
 }
