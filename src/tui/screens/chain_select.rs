@@ -32,7 +32,7 @@ pub fn render_chain_select(frame: &mut Frame, app: &App, area: Rect) {
         .constraints([
             Constraint::Length(1),
             Constraint::Min(5),
-            Constraint::Length(4),
+            Constraint::Length(5),
             Constraint::Length(4),
         ])
         .split(inner);
@@ -149,11 +149,25 @@ pub(crate) fn chain_select_policy_lines(network: NetworkSelection) -> Vec<Line<'
                 Style::default().fg(Color::DarkGray),
             ),
         ]),
+        Line::from(vec![
+            Span::styled("UTXO API: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                network_utxo_api_hint(network),
+                Style::default().fg(policy_color),
+            ),
+        ]),
         Line::from(Span::styled(
             "Confirming clears pending send form data and volatile Nostr ceremony state.",
             Style::default().fg(Color::DarkGray),
         )),
     ]
+}
+
+fn network_utxo_api_hint(network: NetworkSelection) -> String {
+    match network.mempool_api_base() {
+        Ok(endpoint) => endpoint,
+        Err(err) => err.to_string(),
+    }
 }
 
 /// Create a centered rectangle of given percentage width and height
@@ -201,6 +215,7 @@ mod tests {
         assert!(rendered.contains("Selected policy: MAINNET real funds"));
         assert!(rendered.contains("explicit opt-in"));
         assert!(rendered.contains("Bitcoin mainnet root address"));
+        assert!(rendered.contains("UTXO API: https://mempool.space/api"));
     }
 
     #[test]
@@ -210,6 +225,7 @@ mod tests {
         assert!(rendered.contains("regtest uses local Esplora/mempool API"));
         assert!(rendered.contains("FROSTDAO_REGTEST_MEMPOOL_API"));
         assert!(rendered.contains("local regtest root address with bcrt prefix"));
+        assert!(rendered.contains("UTXO API: regtest needs a local Esplora/mempool API endpoint"));
     }
 
     #[test]
@@ -217,6 +233,7 @@ mod tests {
         let rendered = lines_to_string(chain_select_policy_lines(NetworkSelection::Signet));
 
         assert!(rendered.contains("signet remote UTXOs via mempool.space"));
+        assert!(rendered.contains("UTXO API: https://mempool.space/signet/api"));
         assert!(rendered.contains("Confirming clears pending send form data"));
     }
 }
