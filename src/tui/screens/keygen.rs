@@ -153,7 +153,7 @@ fn render_mode_select(frame: &mut Frame, form: &KeygenFormData, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan))
-        .title(" Demo Keygen - All parties generated locally ");
+        .title(" Local Keygen - All parties generated on this device ");
 
     let inner = block.inner(area);
     frame.render_widget(block, area);

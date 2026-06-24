@@ -213,7 +213,7 @@ fn render_shortcuts(frame: &mut Frame, has_wallet: bool, area: Rect) {
     let mut shortcuts = vec![
         Line::from(vec![
             Span::styled("g", Style::default().fg(Color::Yellow)),
-            Span::raw(" Demo Keygen  "),
+            Span::raw(" Local Keygen  "),
             Span::styled("o", Style::default().fg(Color::Magenta)),
             Span::raw(" Nostr Room  "),
             Span::styled("n", Style::default().fg(Color::Yellow)),

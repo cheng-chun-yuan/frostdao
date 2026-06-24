@@ -44,7 +44,7 @@ Example output:
 
 ## Common Agent Payment Policies
 
-The TUI includes common templates for hackathon/demo agent payments:
+The TUI includes common templates for local agent-payment drafts:
 
 | Template | Policy |
 |----------|--------|

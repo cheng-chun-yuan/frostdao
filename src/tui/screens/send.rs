@@ -1,6 +1,6 @@
-//! Send wizard screens (demo-send flow)
+//! Send wizard screens
 //!
-//! This implements a multi-party threshold signing demonstration flow.
+//! This implements the multi-party threshold signing flow used by the TUI.
 
 use std::cmp::Reverse;
 
@@ -327,7 +327,7 @@ impl SendFormData {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis();
-        format!("demo_{}", timestamp)
+        format!("local_{}", timestamp)
     }
 
     /// Get party label (A, B, C, ...)

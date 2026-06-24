@@ -65,7 +65,7 @@ The relay smoke test publishes and receives both a public room join and a direct
 
 ## Documentation Map
 
-- [Showcase](SHOWCASE.md): demo and code tour.
+- [Showcase](SHOWCASE.md): walkthrough and code tour.
 - [Run Guide](RUN_GUIDE.md): current commands and end-to-end dry runs.
 - [Backup Guide](BACKUP.md): share mnemonic, manifest, verification, and storage guidance.
 - [User Flow](USER_FLOW.md): task-oriented multi-device flow.

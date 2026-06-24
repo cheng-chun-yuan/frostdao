@@ -1340,7 +1340,7 @@ pub fn regenerate_group_info(name: &str) -> Result<()> {
     Ok(())
 }
 
-/// Generate all parties' keys at once (for demo/single-user mode)
+/// Generate all parties' keys at once for local single-device setup.
 /// This runs the complete DKG protocol locally, creating keys for all parties
 pub fn generate_all_parties(
     name: &str,

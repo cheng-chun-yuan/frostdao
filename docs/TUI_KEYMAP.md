@@ -24,7 +24,7 @@ Avoid function keys for required actions. Use lowercase shortcuts in help text. 
 |-----|--------|
 | `↑/↓`, `j/k` | Select wallet |
 | `Enter` | Open selected wallet |
-| `g` | Create demo/local wallet |
+| `g` | Create local wallet |
 | `n` | Select network |
 | `o` | Open Nostr room |
 | `p` | Open Miniscript agent payment policy, only with `miniscript-policy` feature |
@@ -97,7 +97,7 @@ Applies when a single-line input or multiline paste area is focused.
 | Mode select | `2` | Select HTSS |
 | Mode select | `Enter` | Continue |
 | Parameters | `Tab`, `Shift-Tab` | Move fields |
-| Parameters | `Enter` | Generate local demo wallet or continue distributed flow |
+| Parameters | `Enter` | Generate local wallet or continue distributed flow |
 | Round output | `c` | Copy JSON output |
 | Round output | `Enter` | Continue |
 | Any phase | `Esc` | Back/cancel |
