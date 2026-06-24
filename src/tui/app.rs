@@ -46,6 +46,21 @@ pub(crate) fn balance_cache_key(wallet_name: &str, network: NetworkSelection) ->
     format!("{}:{:?}", wallet_name, network)
 }
 
+fn copied_preview_message(text: &str) -> String {
+    // Use char_indices for safe UTF-8 slicing.
+    let preview = if text.chars().count() > 20 {
+        let end_byte = text
+            .char_indices()
+            .nth(20)
+            .map(|(i, _)| i)
+            .unwrap_or(text.len());
+        format!("{}...", &text[..end_byte])
+    } else {
+        text.to_string()
+    };
+    format!("Copied: {}", preview)
+}
+
 pub enum TuiNostrRuntime {
     LocalSimulation(frostdao::nostr::NostrRoomRuntime<frostdao::nostr::InMemoryRoomTransport>),
     Relay(frostdao::nostr::NostrRoomRuntime<frostdao::nostr::RelayRoomTransport>),
@@ -1439,6 +1454,12 @@ impl App {
 
     /// Copy text to clipboard
     pub fn copy_to_clipboard(&mut self, text: &str) {
+        let success_message = copied_preview_message(text);
+        self.copy_to_clipboard_with_message(text, success_message);
+    }
+
+    /// Copy text to clipboard with a caller-provided success message.
+    pub fn copy_to_clipboard_with_message(&mut self, text: &str, success_message: String) {
         if text.trim().is_empty() {
             self.message = Some("Nothing to copy".to_string());
             return;
@@ -1447,18 +1468,7 @@ impl App {
         match arboard::Clipboard::new() {
             Ok(mut clipboard) => match clipboard.set_text(text) {
                 Ok(_) => {
-                    // Use char_indices for safe UTF-8 slicing (avoids panic on multi-byte chars)
-                    let preview = if text.chars().count() > 20 {
-                        let end_byte = text
-                            .char_indices()
-                            .nth(20)
-                            .map(|(i, _)| i)
-                            .unwrap_or(text.len());
-                        format!("{}...", &text[..end_byte])
-                    } else {
-                        text.to_string()
-                    };
-                    self.message = Some(format!("Copied: {}", preview));
+                    self.message = Some(success_message);
                 }
                 Err(e) => {
                     self.message = Some(format!("Clipboard error: {}", e));

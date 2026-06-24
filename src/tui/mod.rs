@@ -256,7 +256,10 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
                 .and_then(|w| app::wallet_address_for_network(w, app.network))
                 .map(str::to_string);
             if let Some(addr) = addr {
-                app.copy_to_clipboard(&addr);
+                app.copy_to_clipboard_with_message(
+                    &addr,
+                    root_address_copy_message(app.network, &addr),
+                );
             } else {
                 app.set_message("Select a wallet first to copy address");
             }
@@ -730,7 +733,10 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
                 .and_then(|w| app::wallet_address_for_network(w, app.network))
                 .map(str::to_string);
             if let Some(addr) = addr_to_copy {
-                app.copy_to_clipboard(&addr);
+                app.copy_to_clipboard_with_message(
+                    &addr,
+                    root_address_copy_message(app.network, &addr),
+                );
             } else {
                 app.set_message("No address available to copy for this wallet");
             }
@@ -2218,15 +2224,25 @@ fn handle_address_list_keys(app: &mut App, code: KeyCode) {
         code if is_copy_key(&code) => {
             // Copy selected address to clipboard
             let addr_to_copy = if let AppState::AddressList(ref state) = app.state {
-                state
-                    .addresses
-                    .get(state.selected)
-                    .map(|(addr, _, _)| addr.clone())
+                state.addresses.get(state.selected).map(|(addr, _, index)| {
+                    (
+                        addr.clone(),
+                        state.network,
+                        frostdao::crypto::hd::format_bip86_path(
+                            state.network.to_bitcoin_network(),
+                            0,
+                            *index,
+                        ),
+                    )
+                })
             } else {
                 None
             };
-            if let Some(addr) = addr_to_copy {
-                app.copy_to_clipboard(&addr);
+            if let Some((addr, network, path)) = addr_to_copy {
+                app.copy_to_clipboard_with_message(
+                    &addr,
+                    hd_address_copy_message(network, &path, &addr),
+                );
             } else {
                 app.set_message("No address selected to copy");
             }
@@ -2330,6 +2346,23 @@ fn handle_address_list_keys(app: &mut App, code: KeyCode) {
         }
         _ => {}
     }
+}
+
+fn root_address_copy_message(network: state::NetworkSelection, address: &str) -> String {
+    format!(
+        "Copied {} root address: {}",
+        network.display_name(),
+        address
+    )
+}
+
+fn hd_address_copy_message(network: state::NetworkSelection, path: &str, address: &str) -> String {
+    format!(
+        "Copied {} HD address {}: {}",
+        network.display_name(),
+        path,
+        address
+    )
 }
 
 fn handle_mnemonic_keys(app: &mut App, code: KeyCode) {
@@ -3777,6 +3810,15 @@ mod tests {
         handle_address_list_keys(&mut app, KeyCode::Char('c'));
 
         assert_eq!(app.message.as_deref(), Some("No address selected to copy"));
+    }
+
+    #[test]
+    fn address_copy_messages_include_network_and_source_scope() {
+        let root = root_address_copy_message(NetworkSelection::Regtest, "bcrt1proot");
+        assert_eq!(root, "Copied Regtest root address: bcrt1proot");
+
+        let hd = hd_address_copy_message(NetworkSelection::Signet, "m/86'/1'/0'/0/7", "tb1phd");
+        assert_eq!(hd, "Copied Signet HD address m/86'/1'/0'/0/7: tb1phd");
     }
 
     #[test]
