@@ -672,7 +672,10 @@ def check_audit_logging():
 def check_recovery_boundary_docs():
     run_guide = read(Path("docs/RUN_GUIDE.md"))
     keymap = read(Path("docs/TUI_KEYMAP.md"))
+    home = read(Path("src/tui/screens/home.rs"))
     required = [
+        ("src/tui/screens/home.rs", home, "Recovery: CLI-only; restores one lost party share"),
+        ("src/tui/screens/home.rs", home, "restores one lost party share"),
         ("docs/TUI_KEYMAP.md", keymap, "Share recovery is CLI-only in the current TUI build"),
         ("docs/TUI_KEYMAP.md", keymap, "Recovery reconstructs one lost party share, not the full wallet private key"),
         ("docs/TUI_KEYMAP.md", keymap, "For HTSS, use the recovered party's original rank"),

@@ -370,6 +370,10 @@ fn wallet_readiness_lines(app: &App, wallet: &WalletSummary) -> Vec<Line<'static
         "Nostr: relay transport configured for signing; use CLI keygen first"
     };
     lines.push(status_line(nostr_text.to_string(), Color::Magenta));
+    lines.push(status_line(
+        "Recovery: CLI-only; restores one lost party share".to_string(),
+        Color::Cyan,
+    ));
 
     lines
 }
@@ -502,6 +506,8 @@ mod tests {
         assert!(rendered.contains("Signing: TSS 2-of-3"));
         assert!(rendered.contains("HD: Addresses screen derives paths"));
         assert!(rendered.contains("Nostr: local rehearsal ready"));
+        assert!(rendered.contains("Recovery: CLI-only"));
+        assert!(rendered.contains("restores one lost party share"));
     }
 
     #[test]
