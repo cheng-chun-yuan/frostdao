@@ -762,12 +762,7 @@ fn signing_progress_counts(
 }
 
 fn render_help(frame: &mut Frame, app: &App, area: Rect) {
-    let help_text = match &app.nostr_sign_state {
-        NostrSignState::SelectRole { .. } => "p: Propose | c: Consent | Enter: Propose | Esc: Back",
-        NostrSignState::ReviewProposal { .. } => "y: Consent | r: Reject | Esc: Back",
-        NostrSignState::Complete { .. } => "Enter: Done | c: Copy TXID",
-        _ => "Enter: Continue | Esc: Cancel",
-    };
+    let help_text = nostr_sign_help_text(&app.nostr_sign_state);
 
     let help = Paragraph::new(Line::from(vec![Span::styled(
         help_text,
@@ -780,6 +775,15 @@ fn render_help(frame: &mut Frame, app: &App, area: Rect) {
     );
 
     frame.render_widget(help, area);
+}
+
+pub(crate) fn nostr_sign_help_text(state: &NostrSignState) -> &'static str {
+    match state {
+        NostrSignState::SelectRole { .. } => "p: Propose | c: Consent | Enter: Propose | Esc: Back",
+        NostrSignState::ReviewProposal { .. } => "y: Consent | r: Reject | Esc: Back",
+        NostrSignState::Complete { .. } => "Enter: Done | c: Copy TXID",
+        _ => "Enter: Continue | Esc: Cancel",
+    }
 }
 
 /// Format unix timestamp as relative time or short date

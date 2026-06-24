@@ -21,6 +21,7 @@ pub use keygen::{render_keygen, KeygenFormData};
 pub use mnemonic::render_mnemonic;
 pub use nostr_keygen::render_nostr_keygen;
 pub use nostr_room::render_nostr_room;
+pub(crate) use nostr_sign::nostr_sign_help_text;
 pub use nostr_sign::render_nostr_sign;
 #[cfg(feature = "miniscript-policy")]
 pub use policy_preview::{render_policy_preview, PolicyPreviewField, PolicyPreviewFormData};

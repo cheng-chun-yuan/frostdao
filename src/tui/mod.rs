@@ -2967,7 +2967,7 @@ fn help_bar_text(app: &App) -> String {
             NostrRoomPhase::Ready => "k:Keygen | s:Sign | Esc:Leave".to_string(),
         },
         AppState::NostrKeygen => "Enter:Continue | r:Retry | Esc:Cancel".to_string(),
-        AppState::NostrSign => "Enter:Continue | ↑/↓:Navigate | Esc:Cancel".to_string(),
+        AppState::NostrSign => screens::nostr_sign_help_text(&app.nostr_sign_state).to_string(),
         #[cfg(feature = "miniscript-policy")]
         AppState::PolicyPreview => {
             "Enter:Init draft | [/]:Template | Tab:Field | c:Copy | Esc:Back".to_string()
@@ -3036,6 +3036,38 @@ mod tests {
         app.message = Some("Balance updated for treasury".to_string());
 
         assert_eq!(help_bar_text(&app), "Balance updated for treasury");
+    }
+
+    #[test]
+    fn nostr_sign_help_bar_matches_review_actions() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::NostrSign;
+        app.nostr_sign_state = NostrSignState::ReviewProposal {
+            wallet_name: "wallet-test".to_string(),
+            proposal: reviewable_proposal(),
+        };
+
+        let help = help_bar_text(&app);
+
+        assert!(help.contains("y: Consent"));
+        assert!(help.contains("r: Reject"));
+        assert!(help.contains("Esc: Back"));
+        assert!(!help.contains("Enter:Continue"));
+    }
+
+    #[test]
+    fn nostr_sign_help_bar_matches_role_actions() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::NostrSign;
+        app.nostr_sign_state = NostrSignState::SelectRole {
+            wallet_name: "wallet-test".to_string(),
+        };
+
+        let help = help_bar_text(&app);
+
+        assert!(help.contains("p: Propose"));
+        assert!(help.contains("c: Consent"));
+        assert!(help.contains("Enter: Propose"));
     }
 
     #[test]
