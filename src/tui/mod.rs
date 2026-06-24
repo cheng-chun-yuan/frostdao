@@ -3116,6 +3116,11 @@ fn centered_popup_rect(
 fn global_help_lines(app: &App) -> Vec<Line<'static>> {
     let copy = COPY_KEY_LABEL;
     let refresh = REFRESH_KEY_LABEL;
+    #[cfg(feature = "miniscript-policy")]
+    let home_policy_line = " | p:Policy".to_string();
+    #[cfg(not(feature = "miniscript-policy"))]
+    let home_policy_line = String::new();
+
     let mut lines = vec![
         Line::from(Span::styled(
             "Global",
@@ -3126,9 +3131,9 @@ fn global_help_lines(app: &App) -> Vec<Line<'static>> {
         Line::from("F1:Show help | Esc:Close | q:Quit (Home only)"),
         Line::from(""),
         Line::from("Home"),
-        Line::from(
-            "j/k/↑/↓:Navigate | Enter:Select | g:New wallet | n:Network | h:Reshare | s:Send",
-        ),
+        Line::from(format!(
+            "j/k/↑/↓:Navigate | Enter:Select | g:New wallet | n:Network | h:Reshare | s:Send{home_policy_line}"
+        )),
         format!("o:Nostr | a:Address list | m:Mnemonic backup | {copy}:Copy address").into(),
         format!("{refresh} (Refresh):Refresh balances | R:Reload wallets").into(),
         Line::from(""),
@@ -3147,7 +3152,7 @@ fn global_help_lines(app: &App) -> Vec<Line<'static>> {
             lines.push(Line::from(keygen_help_bar_text(app, state)));
             match state {
                 KeygenState::ParamsSetup => lines.push(Line::from(
-                    "↑/↓/j/k/1/2:Select | p/P:Paste | ␠:Toggle (in config/JSON fields)",
+                    "↑/↓/j/k/1/2:Select | Tab/Enter to move | Esc:Back",
                 )),
                 KeygenState::Round1Output { .. } | KeygenState::Round2Output { .. } => {
                     lines.push(Line::from(format!(
@@ -3160,12 +3165,12 @@ fn global_help_lines(app: &App) -> Vec<Line<'static>> {
         AppState::Reshare(state) => {
             lines.push(Line::from("Reshare"));
             lines.push(Line::from(reshare_help_bar_text(state)));
-            lines.push(Line::from("↑/↓/j/k:Select | p/P:Paste | ␠:Toggle"));
+            lines.push(Line::from("↑/↓/j/k:Select | Tab/Enter/Space/Ctrl+u"));
         }
         AppState::Send(state) => {
             lines.push(Line::from("Send"));
             lines.push(Line::from(send_help_bar_text(state)));
-            lines.push(Line::from("↑/↓/j/k:Navigate | p/P:Paste | ␠:Toggle"));
+            lines.push(Line::from("↑/↓/j/k:Navigate | Tab/Space/Ctrl+u"));
         }
         _ => {
             lines.push(Line::from("Flow"));
@@ -3674,6 +3679,24 @@ mod tests {
 
         assert!(rendered.contains("Send"));
         assert!(rendered.contains("Select wallet"));
+    }
+
+    #[test]
+    fn global_help_overlay_shows_feature_gated_home_shortcuts() {
+        let app = App::new().unwrap();
+        let rendered = lines_to_string(&global_help_lines(&app));
+
+        assert!(rendered.contains("g:New wallet"));
+        assert!(rendered.contains("n:Network"));
+        assert!(rendered.contains("m:Mnemonic backup"));
+        assert!(rendered.contains("Home"));
+        assert!(!rendered.contains("p/P:Paste"));
+
+        #[cfg(feature = "miniscript-policy")]
+        assert!(rendered.contains("p:Policy"));
+
+        #[cfg(not(feature = "miniscript-policy"))]
+        assert!(!rendered.contains("p:Policy"));
     }
 
     #[test]
