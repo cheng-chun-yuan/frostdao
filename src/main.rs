@@ -247,7 +247,7 @@ enum Commands {
         #[arg(long, default_value = "0")]
         index: u32,
 
-        /// Network (testnet, testnet4, signet, regtest, mainnet)
+        /// Network (testnet/testnet3, testnet4/test4, signet, regtest/local, mainnet)
         #[arg(long, default_value = "testnet")]
         network: String,
     },
@@ -262,7 +262,7 @@ enum Commands {
         #[arg(long, default_value = "10")]
         count: u32,
 
-        /// Network (testnet, testnet4, signet, regtest, mainnet)
+        /// Network (testnet/testnet3, testnet4/test4, signet, regtest/local, mainnet)
         #[arg(long, default_value = "testnet")]
         network: String,
     },
@@ -468,7 +468,7 @@ enum Commands {
         #[arg(long)]
         fee_rate: Option<u64>,
 
-        /// Network (testnet, testnet4, signet, regtest, mainnet)
+        /// Network (testnet/testnet3, testnet4/test4, signet, regtest/local, mainnet)
         #[arg(long, default_value = "testnet")]
         network: String,
     },
@@ -521,7 +521,7 @@ enum Commands {
         #[arg(long)]
         data: String,
 
-        /// Network (testnet, testnet4, signet, regtest, mainnet)
+        /// Network (testnet/testnet3, testnet4/test4, signet, regtest/local, mainnet)
         #[arg(long, default_value = "testnet")]
         network: String,
     },
@@ -737,7 +737,7 @@ fn parse_dkg_network(network: &str) -> Result<bitcoin::Network> {
         "regtest" | "local" => Ok(bitcoin::Network::Regtest),
         "mainnet" | "bitcoin" => Ok(bitcoin::Network::Bitcoin),
         other => anyhow::bail!(
-            "unknown network '{}'; use testnet, testnet4, signet, regtest, or mainnet",
+            "unknown network '{}'; use testnet/testnet3, testnet4/test4, signet, regtest/local, or mainnet",
             other
         ),
     }
@@ -1099,7 +1099,10 @@ mod tests {
             parse_dkg_network("mainnet").unwrap(),
             bitcoin::Network::Bitcoin
         );
-        assert!(parse_dkg_network("typo-net").is_err());
+        let err = parse_dkg_network("typo-net").unwrap_err().to_string();
+        assert!(err.contains("testnet/testnet3"));
+        assert!(err.contains("testnet4/test4"));
+        assert!(err.contains("regtest/local"));
     }
 
     #[test]

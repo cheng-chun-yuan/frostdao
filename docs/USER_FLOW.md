@@ -175,7 +175,7 @@ tx_consent
 CLI equivalent:
 
 ```bash
-frostdao dkg-build-tx --name treasury --to <address> --amount <sats> --network testnet
+frostdao dkg-build-tx --name treasury --to <address> --amount <sats> --network testnet4
 ```
 
 ## Flow 5: Sign Transaction

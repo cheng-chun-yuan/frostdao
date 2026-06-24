@@ -304,7 +304,7 @@ pub fn parse_network(network_str: &str) -> Result<Network> {
         "signet" => Ok(Network::Signet),
         "regtest" | "local" => Ok(Network::Regtest),
         _ => anyhow::bail!(
-            "Unknown network '{}'. Use: mainnet, testnet, testnet4, signet, or regtest",
+            "Unknown network '{}'. Use: mainnet, testnet/testnet3, testnet4/test4, signet, or regtest/local",
             network_str
         ),
     }
@@ -333,7 +333,16 @@ mod tests {
             parse_network("MAINNET").unwrap(),
             Network::Bitcoin
         ));
-        assert!(parse_network("invalid").is_err());
+        assert!(matches!(parse_network("test4").unwrap(), Network::Testnet4));
+        assert!(matches!(
+            parse_network("testnet3").unwrap(),
+            Network::Testnet
+        ));
+        assert!(matches!(parse_network("local").unwrap(), Network::Regtest));
+        let err = parse_network("invalid").unwrap_err().to_string();
+        assert!(err.contains("testnet/testnet3"));
+        assert!(err.contains("testnet4/test4"));
+        assert!(err.contains("regtest/local"));
 
         // Derivation paths
         let receive = DerivationPath::receive(5);

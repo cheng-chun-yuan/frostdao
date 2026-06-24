@@ -59,8 +59,8 @@ The invariant is: any valid threshold signer set can interpolate the tweaked sha
 For operator review, compare the selected path, derived address, and child x-only pubkey fingerprint across devices. All three identify the same threshold-controlled HD child without revealing any secret share.
 
 ```bash
-frostdao dkg-derive-address --name treasury --change 0 --index 0 --network testnet
-frostdao dkg-list-addresses --name treasury --count 10 --network testnet
+frostdao dkg-derive-address --name treasury --change 0 --index 0 --network testnet4
+frostdao dkg-list-addresses --name treasury --count 10 --network testnet4
 ```
 
 Only non-hardened child derivation is supported in the threshold setting. Hardened child derivation would require private parent material that the threshold wallet intentionally never reconstructs.
@@ -85,15 +85,15 @@ The mnemonic is secret. The backup manifest is public metadata containing wallet
 4. Combine and broadcast.
 
 ```bash
-frostdao dkg-build-tx --name treasury --to <address> --amount <sats> --network testnet
+frostdao dkg-build-tx --name treasury --to <address> --amount <sats> --network testnet4
 frostdao dkg-nonce --name treasury --session <session_id>
 frostdao dkg-sign --name treasury --session <session_id> --sighash <hex> --data '<nonce_outputs>'
-frostdao dkg-broadcast --name treasury --session <session_id> --unsigned-tx <hex> --data '<signature_share_outputs>' --network testnet
+frostdao dkg-broadcast --name treasury --session <session_id> --unsigned-tx <hex> --data '<signature_share_outputs>' --network testnet4
 ```
 
 Never reuse a nonce or signing session nonce output.
 
-For regtest transaction build or broadcast, set `FROSTDAO_REGTEST_MEMPOOL_API` to a local Esplora/mempool API endpoint. Testnet, testnet4, signet, and mainnet use their selected public mempool API endpoints, with mainnet still requiring explicit opt-in where commands guard real funds.
+Network flags accept `testnet`/`testnet3`, `testnet4`/`test4`, `signet`, `regtest`/`local`, or `mainnet`. For regtest transaction build or broadcast, set `FROSTDAO_REGTEST_MEMPOOL_API` to a local Esplora/mempool API endpoint. Testnet3, testnet4, signet, and mainnet use their selected public mempool API endpoints, with mainnet still requiring explicit opt-in where commands guard real funds.
 
 ## Reshare
 

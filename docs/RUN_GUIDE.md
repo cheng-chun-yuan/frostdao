@@ -95,13 +95,13 @@ Then run the same `keygen-round2` and `keygen-finalize` flow as TSS.
 Generate a deterministic receive address from the same threshold wallet:
 
 ```bash
-frostdao dkg-derive-address --name treasury --change 0 --index 0 --network testnet
+frostdao dkg-derive-address --name treasury --change 0 --index 0 --network testnet4
 ```
 
 List the next addresses:
 
 ```bash
-frostdao dkg-list-addresses --name treasury --count 10 --network testnet
+frostdao dkg-list-addresses --name treasury --count 10 --network testnet4
 ```
 
 These addresses are deterministic BIP-86 tweaks from the same root threshold key. You do not rerun DKG for every new receive address.
@@ -140,10 +140,10 @@ Build an unsigned transaction:
 ```bash
 frostdao dkg-build-tx \
   --name treasury \
-  --to <recipient_testnet_address> \
+  --to <recipient_testnet4_address> \
   --amount <satoshis> \
   --fee-rate <sats_per_vbyte> \
-  --network testnet
+  --network testnet4
 ```
 
 Use the returned `session_id` and `sighash` to generate nonces:
@@ -172,10 +172,10 @@ frostdao dkg-broadcast \
   --session <session_id> \
   --unsigned-tx <unsigned_tx_hex> \
   --data '<signature_share_outputs>' \
-  --network testnet
+  --network testnet4
 ```
 
-DKG transaction build and broadcast commands accept `testnet`, `testnet3`, `testnet4`, `signet`, `regtest`, `local`, or `mainnet`. Testnet remains the default. `regtest`/`local` are for local-node rehearsal; set `FROSTDAO_REGTEST_MEMPOOL_API` to a local Esplora/mempool API endpoint such as `http://127.0.0.1:3002/api` before fetching UTXOs, building transactions, or broadcasting on regtest. Mainnet DKG transaction commands are blocked unless `FROSTDAO_ENABLE_MAINNET_BITCOIN=1` is set for that command.
+DKG transaction build and broadcast commands accept `testnet`/`testnet3`, `testnet4`/`test4`, `signet`, `regtest`/`local`, or `mainnet`. `testnet` remains the CLI default and means testnet3; the TUI defaults to explicit testnet4. `regtest`/`local` are for local-node rehearsal; set `FROSTDAO_REGTEST_MEMPOOL_API` to a local Esplora/mempool API endpoint such as `http://127.0.0.1:3002/api` before fetching UTXOs, building transactions, or broadcasting on regtest. Mainnet DKG transaction commands are blocked unless `FROSTDAO_ENABLE_MAINNET_BITCOIN=1` is set for that command.
 
 Never reuse a signing session nonce.
 
