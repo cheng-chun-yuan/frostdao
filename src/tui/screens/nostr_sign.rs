@@ -377,6 +377,14 @@ fn nostr_sign_status_lines<'a>(app: &'a App) -> Vec<Line<'a>> {
                     "Waiting for real transaction broadcast confirmation...",
                     Style::default().fg(Color::Yellow),
                 )),
+                Line::from(Span::styled(
+                    "Combine handoff: export collected signing shares, run `frostdao combine`, then broadcast with CLI.",
+                    Style::default().fg(Color::Gray),
+                )),
+                Line::from(Span::styled(
+                    "This screen completes only after a matching tx_broadcast arrives from the room.",
+                    Style::default().fg(Color::DarkGray),
+                )),
             ]
         }
         NostrSignState::Complete { txid } => {
@@ -946,6 +954,9 @@ pub(crate) fn nostr_sign_help_text(state: &NostrSignState) -> String {
             String::from("Tab:Field | Enter:Publish proposal | Ctrl+u:Clear field | Esc:Back")
         }
         NostrSignState::ReviewProposal { .. } => String::from("y: Consent | r: Reject | Esc: Back"),
+        NostrSignState::Combining { .. } => {
+            String::from("CLI handoff: combine + broadcast | Esc: Back")
+        }
         NostrSignState::Complete { .. } => {
             format!("Enter: Done | {COPY_KEY_LABEL}: Copy TXID")
         }
@@ -1095,6 +1106,24 @@ mod tests {
 
         assert!(rendered.contains("proposals are public metadata"));
         assert!(rendered.contains("signing nonce/share payloads are encrypted"));
+    }
+
+    #[test]
+    fn combining_status_explains_cli_handoff_and_broadcast_wait() {
+        let mut app = app_with_room_context();
+        app.nostr_sign_state = NostrSignState::Combining {
+            wallet_name: "treasury".to_string(),
+            session_id: "session-a".to_string(),
+        };
+
+        let rendered = lines_to_string(nostr_sign_status_lines(&app));
+        let help = nostr_sign_help_text(&app.nostr_sign_state);
+
+        assert!(rendered.contains("Combine handoff"));
+        assert!(rendered.contains("frostdao combine"));
+        assert!(rendered.contains("matching tx_broadcast"));
+        assert!(help.contains("CLI handoff"));
+        assert!(help.contains("combine + broadcast"));
     }
 
     #[test]

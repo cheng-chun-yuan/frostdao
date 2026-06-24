@@ -242,6 +242,9 @@ threshold, and party count form a valid room.
 In local simulation, `k` starts a local keygen rehearsal. In relay transport,
 keygen is intentionally unavailable in the TUI; create keys with CLI keygen,
 then use the room for distributed signing.
+When the Nostr signing coordinator reaches threshold, the TUI shows a CLI
+handoff: export the collected signing shares, run `frostdao combine`, broadcast
+with CLI, and wait for a matching `tx_broadcast` announcement in the room.
 
 ## Nostr Keygen
 
