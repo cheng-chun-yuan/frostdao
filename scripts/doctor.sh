@@ -369,6 +369,7 @@ def check_transaction_review():
     transaction = read(Path("src/btc/transaction.rs"))
     tui_state = read(Path("src/tui/state.rs"))
     tui_keys = read(Path("src/tui/mod.rs"))
+    tui_chain_select = read(Path("src/tui/screens/chain_select.rs"))
     main_rs = read(Path("src/main.rs"))
     docs = read(Path("docs/RUN_GUIDE.md"))
     required = [
@@ -380,12 +381,16 @@ def check_transaction_review():
         ("src/btc/transaction.rs", transaction, "mempool_explorer_url_matches_network"),
         ("src/btc/transaction.rs", transaction, "regtest does not have a mempool.space API endpoint"),
         ("src/btc/transaction.rs", transaction, "mempool_api_base_rejects_unsupported_networks"),
+        ("src/tui/state.rs", tui_state, "Regtest"),
+        ("src/tui/screens/chain_select.rs", tui_chain_select, "local node workflow"),
         ("src/tui/state.rs", tui_state, "ReviewTransaction"),
         ("src/tui/mod.rs", tui_keys, "KeyCode::Char('y')"),
         ("src/main.rs", main_rs, "parse_dkg_network"),
+        ("src/main.rs", main_rs, "\"regtest\" | \"local\""),
         ("src/main.rs", main_rs, "FROSTDAO_ENABLE_MAINNET_BITCOIN"),
         ("src/main.rs", main_rs, "mainnet DKG transaction commands require"),
         ("docs/RUN_GUIDE.md", docs, "compare the returned `review` fields"),
+        ("docs/RUN_GUIDE.md", docs, "`regtest`, `local`"),
         ("docs/RUN_GUIDE.md", docs, "FROSTDAO_ENABLE_MAINNET_BITCOIN=1"),
     ]
     missing = [f"{path}: {marker}" for path, content, marker in required if marker not in content]

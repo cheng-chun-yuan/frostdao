@@ -282,11 +282,12 @@ fn get_address_for_network(
 ) -> Option<String> {
     // For now, return the stored address (testnet format)
     // In a full implementation, we'd derive addresses for each network
-    // Testnet3, Testnet4, and Signet all use tb1p... prefix
+    // Testnet3, Testnet4, Signet, and Regtest all use test-chain address prefixes.
     match network {
         NetworkSelection::Testnet4 => wallet.address.clone(),
         NetworkSelection::Testnet3 => wallet.address.clone(),
         NetworkSelection::Signet => wallet.address.clone(), // Same format as testnet (tb1p...)
+        NetworkSelection::Regtest => wallet.address.clone(),
         NetworkSelection::Mainnet => {
             // Mainnet would use bc1p... prefix - need to regenerate
             wallet.address.as_ref().map(|addr| {

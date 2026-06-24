@@ -59,14 +59,21 @@ pub fn render_chain_select(frame: &mut Frame, app: &App, area: Rect) {
             };
 
             let suffix = match network {
+                NetworkSelection::Regtest => " (local node workflow)",
                 NetworkSelection::Mainnet => " (CAUTION: Real funds!)",
                 _ => "",
+            };
+
+            let suffix_color = match network {
+                NetworkSelection::Regtest => Color::Cyan,
+                NetworkSelection::Mainnet => Color::Red,
+                _ => Color::White,
             };
 
             ListItem::new(Line::from(vec![
                 Span::styled(prefix, style),
                 Span::styled(network.display_name(), style),
-                Span::styled(suffix, Style::default().fg(Color::Red)),
+                Span::styled(suffix, Style::default().fg(suffix_color)),
             ]))
         })
         .collect();

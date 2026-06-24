@@ -164,7 +164,7 @@ frostdao dkg-broadcast \
   --network testnet
 ```
 
-DKG transaction build and broadcast commands accept only `testnet`, `testnet3`, `signet`, or `mainnet`. Testnet remains the default. Mainnet DKG transaction commands are blocked unless `FROSTDAO_ENABLE_MAINNET_BITCOIN=1` is set for that command.
+DKG transaction build and broadcast commands accept `testnet`, `testnet3`, `signet`, `regtest`, `local`, or `mainnet`. Testnet remains the default. `regtest`/`local` are for local-node rehearsal; mempool.space balance, UTXO, and broadcast APIs are not available for regtest. Mainnet DKG transaction commands are blocked unless `FROSTDAO_ENABLE_MAINNET_BITCOIN=1` is set for that command.
 
 Never reuse a signing session nonce.
 

@@ -362,9 +362,9 @@ impl App {
         let btc_network = self.network.to_bitcoin_network();
         let address = Address::p2tr(&secp, xonly_pubkey, None, btc_network).to_string();
 
-        // Fetch UTXOs from mempool.space
+        // Fetch UTXOs from mempool.space where the selected network supports it.
         let client = reqwest::blocking::Client::new();
-        let api_base = self.network.mempool_api_base();
+        let api_base = self.network.mempool_api_base()?;
         let url = format!("{}/address/{}/utxo", api_base, address);
         let response = client.get(&url).send()?;
         let utxos: Vec<serde_json::Value> = response.json()?;
@@ -384,7 +384,20 @@ impl App {
     pub fn fetch_utxos_for_send(&mut self, address: &str) {
         use super::screens::{TxDisplay, UtxoDisplay};
 
-        let api_base = self.network.mempool_api_base();
+        let api_base = match self.network.mempool_api_base() {
+            Ok(api_base) => api_base,
+            Err(e) => {
+                self.set_message(&format!(
+                    "Cannot fetch UTXOs on {}: {}",
+                    self.network.display_name(),
+                    e
+                ));
+                self.send_form.utxos.clear();
+                self.send_form.recent_txs.clear();
+                self.send_form.total_balance = 0;
+                return;
+            }
+        };
         let client = reqwest::blocking::Client::new();
 
         // Fetch fee estimates
@@ -1143,13 +1156,13 @@ impl App {
 
     /// Toggle to next network in chain selector
     pub fn next_network(&mut self) {
-        self.chain_selector_index = (self.chain_selector_index + 1) % 3;
+        self.chain_selector_index = (self.chain_selector_index + 1) % NetworkSelection::all().len();
     }
 
     /// Toggle to previous network in chain selector
     pub fn prev_network(&mut self) {
         self.chain_selector_index = if self.chain_selector_index == 0 {
-            2
+            NetworkSelection::all().len() - 1
         } else {
             self.chain_selector_index - 1
         };
@@ -1161,7 +1174,8 @@ impl App {
             0 => NetworkSelection::Testnet4,
             1 => NetworkSelection::Testnet3,
             2 => NetworkSelection::Signet,
-            3 => NetworkSelection::Mainnet,
+            3 => NetworkSelection::Regtest,
+            4 => NetworkSelection::Mainnet,
             _ => NetworkSelection::Testnet4,
         };
         self.state = AppState::Home;
@@ -1698,6 +1712,38 @@ mod tests {
         app.nostr_to_address = test_address(Network::Testnet);
         app.nostr_amount_sats = 50_000;
         app
+    }
+
+    #[test]
+    fn chain_selector_cycles_all_supported_networks() {
+        let mut app = App::new().unwrap();
+        let network_count = NetworkSelection::all().len();
+
+        for _ in 0..network_count {
+            app.next_network();
+        }
+        assert_eq!(app.chain_selector_index, 0);
+
+        app.prev_network();
+        assert_eq!(app.chain_selector_index, network_count - 1);
+    }
+
+    #[test]
+    fn chain_selector_can_confirm_regtest() {
+        let mut app = App::new().unwrap();
+        app.chain_selector_index = 3;
+
+        app.confirm_network();
+
+        assert_eq!(app.network, NetworkSelection::Regtest);
+        assert_eq!(app.network.to_bitcoin_network(), Network::Regtest);
+    }
+
+    #[test]
+    fn regtest_rejects_mempool_api_fetches() {
+        let err = NetworkSelection::Regtest.mempool_api_base().unwrap_err();
+
+        assert!(err.to_string().contains("local node workflow"));
     }
 
     fn valid_remote_proposal_event(proposer_index: u32) -> frostdao::nostr::TxProposalEvent {

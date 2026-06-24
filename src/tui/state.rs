@@ -11,6 +11,7 @@ pub enum NetworkSelection {
     Testnet4,
     Testnet3,
     Signet,
+    Regtest,
     Mainnet,
 }
 
@@ -20,16 +21,20 @@ impl NetworkSelection {
             Self::Testnet4 => Network::Testnet4,
             Self::Testnet3 => Network::Testnet,
             Self::Signet => Network::Signet,
+            Self::Regtest => Network::Regtest,
             Self::Mainnet => Network::Bitcoin,
         }
     }
 
-    pub fn mempool_api_base(&self) -> &'static str {
+    pub fn mempool_api_base(&self) -> anyhow::Result<&'static str> {
         match self {
-            Self::Testnet4 => "https://mempool.space/testnet4/api",
-            Self::Testnet3 => "https://mempool.space/testnet/api",
-            Self::Signet => "https://mempool.space/signet/api",
-            Self::Mainnet => "https://mempool.space/api",
+            Self::Testnet4 => Ok("https://mempool.space/testnet4/api"),
+            Self::Testnet3 => Ok("https://mempool.space/testnet/api"),
+            Self::Signet => Ok("https://mempool.space/signet/api"),
+            Self::Regtest => anyhow::bail!(
+                "regtest does not have a mempool.space API endpoint; use a local node workflow"
+            ),
+            Self::Mainnet => Ok("https://mempool.space/api"),
         }
     }
 
@@ -38,12 +43,19 @@ impl NetworkSelection {
             Self::Testnet4 => "Testnet4",
             Self::Testnet3 => "Testnet3",
             Self::Signet => "Signet",
+            Self::Regtest => "Regtest",
             Self::Mainnet => "Mainnet",
         }
     }
 
     pub fn all() -> &'static [NetworkSelection] {
-        &[Self::Testnet4, Self::Testnet3, Self::Signet, Self::Mainnet]
+        &[
+            Self::Testnet4,
+            Self::Testnet3,
+            Self::Signet,
+            Self::Regtest,
+            Self::Mainnet,
+        ]
     }
 }
 

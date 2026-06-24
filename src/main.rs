@@ -565,9 +565,10 @@ fn parse_dkg_network(network: &str) -> Result<bitcoin::Network> {
     match network {
         "testnet" | "testnet3" => Ok(bitcoin::Network::Testnet),
         "signet" => Ok(bitcoin::Network::Signet),
+        "regtest" | "local" => Ok(bitcoin::Network::Regtest),
         "mainnet" | "bitcoin" => Ok(bitcoin::Network::Bitcoin),
         other => anyhow::bail!(
-            "unknown network '{}'; use testnet, signet, or mainnet",
+            "unknown network '{}'; use testnet, signet, regtest, or mainnet",
             other
         ),
     }
@@ -901,6 +902,14 @@ mod tests {
         assert_eq!(
             parse_dkg_network("signet").unwrap(),
             bitcoin::Network::Signet
+        );
+        assert_eq!(
+            parse_dkg_network("regtest").unwrap(),
+            bitcoin::Network::Regtest
+        );
+        assert_eq!(
+            parse_dkg_network("local").unwrap(),
+            bitcoin::Network::Regtest
         );
         assert_eq!(
             parse_dkg_network("mainnet").unwrap(),

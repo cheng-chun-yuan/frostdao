@@ -2,7 +2,7 @@
 //!
 //! Provides an interactive terminal interface for:
 //! - Viewing and managing DKG wallets
-//! - Chain/network selection (Testnet, Signet, Mainnet)
+//! - Chain/network selection (Testnet, Signet, Regtest, Mainnet)
 //! - Keygen wizard for creating new wallets
 //! - Reshare wizard for resharing existing wallets
 //! - Send wizard for threshold signing transactions
@@ -125,7 +125,8 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
                 state::NetworkSelection::Testnet4 => 0,
                 state::NetworkSelection::Testnet3 => 1,
                 state::NetworkSelection::Signet => 2,
-                state::NetworkSelection::Mainnet => 3,
+                state::NetworkSelection::Regtest => 3,
+                state::NetworkSelection::Mainnet => 4,
             };
             app.state = AppState::ChainSelect;
         }
@@ -2107,8 +2108,18 @@ fn handle_address_list_keys(app: &mut App, code: KeyCode) {
             if let Some((addr, idx)) = addr_info {
                 app.set_message(&format!("Fetching balance for address {}...", idx));
 
-                // Fetch balance from mempool.space
-                let api_base = app.network.mempool_api_base();
+                // Fetch balance from mempool.space where the selected network supports it.
+                let api_base = match app.network.mempool_api_base() {
+                    Ok(api_base) => api_base,
+                    Err(e) => {
+                        app.set_message(&format!(
+                            "Cannot fetch address balance on {}: {}",
+                            app.network.display_name(),
+                            e
+                        ));
+                        return;
+                    }
+                };
                 let url = format!("{}/address/{}/utxo", api_base, addr);
 
                 match reqwest::blocking::Client::new().get(&url).send() {
@@ -2822,6 +2833,7 @@ fn render_title(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
         state::NetworkSelection::Testnet4 => Color::Yellow,
         state::NetworkSelection::Testnet3 => Color::LightYellow,
         state::NetworkSelection::Signet => Color::Magenta,
+        state::NetworkSelection::Regtest => Color::Cyan,
         state::NetworkSelection::Mainnet => Color::Red,
     };
 
