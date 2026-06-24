@@ -56,7 +56,7 @@ impl NetworkSelection {
         match self {
             Self::Mainnet => "Bitcoin mainnet root address",
             Self::Testnet4 | Self::Testnet3 | Self::Signet | Self::Regtest => {
-                "test-chain root address for testnet/signet/regtest"
+                "test-chain root address for testnet3/testnet4/signet/regtest"
             }
         }
     }

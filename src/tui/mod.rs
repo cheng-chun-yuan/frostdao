@@ -3113,10 +3113,10 @@ fn global_help_lines() -> Vec<Line<'static>> {
     lines.push(Line::from(""));
     lines.push(Line::from("Nostr"));
     lines.push(Line::from(
-        "n:Room config | k:Keygen (local only in test mode) | s:Sign",
+        "k/K:Start keygen (local rehearsal in local mode) | s/S:Sign | Esc:Leave room",
     ));
     lines.push(Line::from(
-        "p:Propose | y/ r: Consent/Reject | v:Copy share",
+        "p/P:Propose | c/C:Consent role or copy TXID in complete | y:Consent | r/R:Reject",
     ));
 
     #[cfg(feature = "miniscript-policy")]
