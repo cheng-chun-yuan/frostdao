@@ -2337,7 +2337,7 @@ fn complete_status_lines(
             lines.push(Line::from("Signed transaction created; broadcast failed."));
             if raw_tx.is_some() {
                 lines.push(Line::from(
-                    "Press c to copy the raw transaction for manual broadcast.",
+                    "Press c/C to copy the raw transaction for manual broadcast.",
                 ));
             } else {
                 lines.push(Line::from(

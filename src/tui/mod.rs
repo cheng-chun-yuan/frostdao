@@ -706,7 +706,7 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
                 app.copy_to_clipboard(&addr);
             }
         }
-        KeyCode::Char('b') => {
+        KeyCode::Char('b') | KeyCode::Char('r') | KeyCode::F(5) => {
             // Quick fetch balance
             let wallet_name = state.wallet_name.clone();
             if let Some(idx) = app.wallets.iter().position(|w| w.name == wallet_name) {
@@ -2996,7 +2996,8 @@ fn help_bar_text(app: &App) -> String {
             if state.confirm_delete {
                 "Type wallet name | Enter:Delete | Backspace:Edit | Esc:Cancel".to_string()
             } else {
-                "↑/↓:Navigate | Enter:Select | b:Balance | c/C:Copy | v:QR | Esc:Back".to_string()
+                "↑/↓:Navigate | Enter:Select | b/r/F5:Balance | c/C:Copy | v:QR | Esc:Back"
+                    .to_string()
             }
         }
         AppState::ChainSelect => "↑/↓:Select | Enter:Confirm | Esc:Cancel".to_string(),

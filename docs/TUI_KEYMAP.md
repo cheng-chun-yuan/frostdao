@@ -46,7 +46,7 @@ Prefer lowercase shortcuts in help text. Uppercase/layered aliases are compatibi
 |-----|--------|
 | `↑/↓`, `j/k` | Select action |
 | `Enter` | Run selected action |
-| `b` | Fetch balance |
+| `b` / `r` / `F5` | Fetch balance |
 | `c` / `C` | Copy wallet address |
 | `v` | Show QR code |
 | `Esc` | Back |
