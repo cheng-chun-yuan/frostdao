@@ -3134,7 +3134,7 @@ fn global_help_lines(app: &App) -> Vec<Line<'static>> {
         Line::from(format!(
             "j/k/↑/↓:Navigate | Enter:Select | g:New wallet | n:Network | h:Reshare | s:Send{home_policy_line}"
         )),
-        format!("o:Nostr | a:Address list | m:Mnemonic backup | {copy}:Copy address").into(),
+        format!("o:Nostr (or N) | a:Address list | m:Mnemonic backup | {copy}:Copy address").into(),
         format!("{refresh} (Refresh):Refresh balances | R:Reload wallets").into(),
         Line::from(""),
         Line::from("Wallet Details"),
@@ -3189,7 +3189,7 @@ fn global_help_lines(app: &App) -> Vec<Line<'static>> {
         "k/K:Start keygen (local rehearsal in local mode) | s/S:Sign | Esc:Leave room",
     ));
     lines.push(Line::from(format!(
-        "p/P:Propose | {copy}:Consent role or copy TXID in complete | y:Consent | r/R:Reject"
+        "p/P:Propose | {copy}:Consent role / copy TXID in complete | y:Consent | r/R:Reject"
     )));
 
     #[cfg(feature = "miniscript-policy")]
@@ -3375,7 +3375,7 @@ fn home_help_bar_text() -> String {
     #[cfg(not(feature = "miniscript-policy"))]
     {
         format!(
-            "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | {0} (Refresh):Balance | {1}:Copy | q:Quit | F1:Help",
+            "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr (or N) | {0} (Refresh):Balance | {1}:Copy | q:Quit | F1:Help",
             REFRESH_KEY_LABEL,
             COPY_KEY_LABEL
         )
@@ -3460,6 +3460,18 @@ mod tests {
         assert!(help.contains("Enter:Select"));
         assert!(help.contains("c/C:Copy"));
         assert!(!help.contains("r:Balance"));
+    }
+
+    #[test]
+    fn home_help_bar_uses_nostr_aliases() {
+        let app = App::new().unwrap();
+        let help = help_bar_text(&app);
+
+        assert!(help.contains("o:Nostr"));
+        #[cfg(feature = "miniscript-policy")]
+        assert!(help.contains("p:Policy"));
+        #[cfg(not(feature = "miniscript-policy"))]
+        assert!(!help.contains("p:Policy"));
     }
 
     #[test]
@@ -3639,6 +3651,7 @@ mod tests {
         assert!(rendered.contains("Networks supported"));
         assert!(rendered.contains("Testnet4/Testnet3/Signet"));
         assert!(rendered.contains("FROSTDAO_REGTEST_MEMPOOL_API"));
+        assert!(rendered.contains("o:Nostr"));
         assert!(rendered.contains("Global"));
         assert!(rendered.contains("Home"));
         assert!(rendered.contains("Wallet Details"));
