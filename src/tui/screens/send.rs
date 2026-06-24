@@ -1776,6 +1776,10 @@ fn render_review_transaction(
             Span::raw(wallet_name.to_string()),
         ]),
         Line::from(vec![
+            Span::styled("Network: ", Style::default().fg(Color::Gray)),
+            Span::raw(app.network.display_name().to_string()),
+        ]),
+        Line::from(vec![
             Span::styled("Source path: ", Style::default().fg(Color::Gray)),
             Span::raw(source_path),
         ]),
@@ -1891,7 +1895,7 @@ fn local_review_guard_lines() -> Vec<Line<'static>> {
     vec![
         Line::from(""),
         Line::from(Span::styled(
-            "Before signing, compare source path, source address, destination, amount, fee, and signers on every device.",
+            "Before signing, compare wallet, network, source path, source address, destination, amount, fee, and signers on every device.",
             Style::default()
                 .fg(Color::White)
                 .add_modifier(Modifier::BOLD),
@@ -2609,6 +2613,8 @@ mod tests {
         let rendered = lines_to_string(local_review_guard_lines());
 
         assert!(rendered.contains("Before signing"));
+        assert!(rendered.contains("wallet"));
+        assert!(rendered.contains("network"));
         assert!(rendered.contains("source path"));
         assert!(rendered.contains("source address"));
         assert!(rendered.contains("destination"));
