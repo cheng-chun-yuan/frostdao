@@ -1896,7 +1896,11 @@ fn local_review_guard_lines() -> Vec<Line<'static>> {
             ),
         ]),
         Line::from(Span::styled(
-            "This local flow signs first; broadcast may still fail or require manual relay.",
+            "Boundary: local share material stays on this device; only the signed raw transaction or TXID leaves the signing flow.",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(Span::styled(
+            "Broadcast: y signs locally and attempts the selected network API; failure keeps raw transaction copy available.",
             Style::default().fg(Color::Yellow),
         )),
     ]
@@ -2578,6 +2582,9 @@ mod tests {
         assert!(rendered.contains("signers"));
         assert!(rendered.contains("on every device"));
         assert!(rendered.contains("Only press y when every signer sees the same review"));
+        assert!(rendered.contains("local share material stays on this device"));
+        assert!(rendered.contains("only the signed raw transaction or TXID leaves"));
+        assert!(rendered.contains("attempts the selected network API"));
     }
 
     #[test]

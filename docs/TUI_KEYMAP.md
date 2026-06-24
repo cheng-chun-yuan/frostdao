@@ -148,6 +148,11 @@ Applies when a single-line input or multiline paste area is focused.
 | Any phase | `Enter` | Continue/submit |
 | Any phase | `Esc` | Back/cancel |
 
+The transaction review labels the local-only boundary: share material stays on
+this device, and only the signed raw transaction or TXID leaves the signing
+flow. Pressing `y` signs locally and attempts the selected network API; if
+broadcast fails, use `c` to copy the raw transaction for manual broadcast.
+
 ## Address List
 
 | Key | Action |
