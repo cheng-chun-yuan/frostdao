@@ -32,13 +32,13 @@ pub(crate) fn wallet_address_for_network(
 ) -> Option<&str> {
     match network {
         NetworkSelection::Mainnet => wallet.address_mainnet.as_deref(),
-        NetworkSelection::Testnet4
-        | NetworkSelection::Testnet3
-        | NetworkSelection::Signet
-        | NetworkSelection::Regtest => wallet
-            .address_testnet
-            .as_deref()
-            .or(wallet.address.as_deref()),
+        NetworkSelection::Regtest => wallet.address_regtest.as_deref(),
+        NetworkSelection::Testnet4 | NetworkSelection::Testnet3 | NetworkSelection::Signet => {
+            wallet
+                .address_testnet
+                .as_deref()
+                .or(wallet.address.as_deref())
+        }
     }
 }
 
@@ -1952,6 +1952,7 @@ mod tests {
 
     fn wallet_summary(name: &str, address: Option<String>) -> WalletSummary {
         let address_mainnet = address.as_ref().map(|_| test_address(Network::Bitcoin));
+        let address_regtest = address.as_ref().map(|_| test_address(Network::Regtest));
         WalletSummary {
             name: name.to_string(),
             threshold: Some(2),
@@ -1960,6 +1961,7 @@ mod tests {
             address: address.clone(),
             address_testnet: address,
             address_mainnet,
+            address_regtest,
             signing_requirement: None,
             party_ranks: None::<BTreeMap<u32, u32>>,
         }
@@ -1988,6 +1990,7 @@ mod tests {
     fn wallet_address_for_network_uses_explicit_mainnet_address() {
         let testnet = test_address(Network::Testnet);
         let mainnet = test_address(Network::Bitcoin);
+        let regtest = test_address(Network::Regtest);
         let wallet = WalletSummary {
             name: "wallet-test".to_string(),
             threshold: Some(2),
@@ -1996,6 +1999,7 @@ mod tests {
             address: Some(testnet.clone()),
             address_testnet: Some(testnet.clone()),
             address_mainnet: Some(mainnet.clone()),
+            address_regtest: Some(regtest.clone()),
             signing_requirement: None,
             party_ranks: None::<BTreeMap<u32, u32>>,
         };
@@ -2010,7 +2014,7 @@ mod tests {
         );
         assert_eq!(
             super::wallet_address_for_network(&wallet, NetworkSelection::Regtest),
-            Some(testnet.as_str())
+            Some(regtest.as_str())
         );
         assert_eq!(
             super::wallet_address_for_network(&wallet, NetworkSelection::Mainnet),
@@ -2028,11 +2032,31 @@ mod tests {
             address: Some(test_address(Network::Testnet)),
             address_testnet: None,
             address_mainnet: None,
+            address_regtest: None,
             signing_requirement: None,
             party_ranks: None::<BTreeMap<u32, u32>>,
         };
 
         assert!(super::wallet_address_for_network(&wallet, NetworkSelection::Mainnet).is_none());
+    }
+
+    #[test]
+    fn wallet_address_for_network_does_not_reuse_testnet_address_for_regtest() {
+        let testnet = test_address(Network::Testnet);
+        let wallet = WalletSummary {
+            name: "wallet-test".to_string(),
+            threshold: Some(2),
+            total_parties: Some(3),
+            hierarchical: Some(false),
+            address: Some(testnet.clone()),
+            address_testnet: Some(testnet),
+            address_mainnet: None,
+            address_regtest: None,
+            signing_requirement: None,
+            party_ranks: None::<BTreeMap<u32, u32>>,
+        };
+
+        assert!(super::wallet_address_for_network(&wallet, NetworkSelection::Regtest).is_none());
     }
 
     #[test]

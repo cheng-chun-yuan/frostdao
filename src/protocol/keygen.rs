@@ -365,7 +365,17 @@ pub fn list_wallets() -> Result<Vec<WalletSummary>> {
                         None,
                         bitcoin::Network::Bitcoin,
                     );
-                    Some((testnet_addr.to_string(), mainnet_addr.to_string()))
+                    let regtest_addr = bitcoin::Address::p2tr(
+                        &secp,
+                        xonly_pubkey,
+                        None,
+                        bitcoin::Network::Regtest,
+                    );
+                    Some((
+                        testnet_addr.to_string(),
+                        mainnet_addr.to_string(),
+                        regtest_addr.to_string(),
+                    ))
                 } else {
                     None
                 }
@@ -378,11 +388,12 @@ pub fn list_wallets() -> Result<Vec<WalletSummary>> {
         let address_testnet = group_info
             .as_ref()
             .map(|info| info.taproot_address_testnet.clone())
-            .or_else(|| derived_addresses.as_ref().map(|(addr, _)| addr.clone()));
+            .or_else(|| derived_addresses.as_ref().map(|(addr, _, _)| addr.clone()));
         let address_mainnet = group_info
             .as_ref()
             .map(|info| info.taproot_address_mainnet.clone())
-            .or_else(|| derived_addresses.as_ref().map(|(_, addr)| addr.clone()));
+            .or_else(|| derived_addresses.as_ref().map(|(_, addr, _)| addr.clone()));
+        let address_regtest = derived_addresses.as_ref().map(|(_, _, addr)| addr.clone());
         let address = address_testnet.clone();
 
         wallets.push(WalletSummary {
@@ -393,6 +404,7 @@ pub fn list_wallets() -> Result<Vec<WalletSummary>> {
             address,
             address_testnet,
             address_mainnet,
+            address_regtest,
             signing_requirement,
             party_ranks,
         });
@@ -417,6 +429,8 @@ pub struct WalletSummary {
     pub address_testnet: Option<String>,
     /// Root Taproot address for Bitcoin mainnet.
     pub address_mainnet: Option<String>,
+    /// Root Taproot address for local regtest (`bcrt...`).
+    pub address_regtest: Option<String>,
     /// Signing requirement per rank for HTSS (e.g., `[1,2,2]`)
     pub signing_requirement: Option<Vec<u32>>,
     /// Party ranks for HTSS (party_index -> rank)

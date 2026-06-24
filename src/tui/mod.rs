@@ -3491,6 +3491,7 @@ mod tests {
             address: None,
             address_testnet: None,
             address_mainnet: None,
+            address_regtest: None,
             signing_requirement: None,
             party_ranks: Some(BTreeMap::new()),
         }

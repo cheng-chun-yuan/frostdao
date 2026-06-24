@@ -1048,6 +1048,7 @@ mod tests {
             address: Some(address.to_string()),
             address_testnet: Some(address.to_string()),
             address_mainnet: None,
+            address_regtest: None,
             signing_requirement: None,
             party_ranks: None::<BTreeMap<u32, u32>>,
         }

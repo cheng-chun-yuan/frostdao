@@ -55,8 +55,9 @@ impl NetworkSelection {
     pub fn address_scope_hint(&self) -> &'static str {
         match self {
             Self::Mainnet => "Bitcoin mainnet root address",
-            Self::Testnet4 | Self::Testnet3 | Self::Signet | Self::Regtest => {
-                "test-chain root address for testnet3/testnet4/signet/regtest"
+            Self::Regtest => "local regtest root address with bcrt prefix",
+            Self::Testnet4 | Self::Testnet3 | Self::Signet => {
+                "test-chain root address for testnet3/testnet4/signet"
             }
         }
     }

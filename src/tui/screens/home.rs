@@ -445,6 +445,9 @@ mod tests {
             address: address_testnet.map(str::to_string),
             address_testnet: address_testnet.map(str::to_string),
             address_mainnet: address_mainnet.map(str::to_string),
+            address_regtest: address_testnet
+                .filter(|address| address.starts_with("bcrt"))
+                .map(str::to_string),
             signing_requirement: None,
             party_ranks: Some(BTreeMap::new()),
         }
@@ -465,7 +468,7 @@ mod tests {
 
         assert!(rendered.contains("regtest uses local Esplora/mempool API"));
         assert!(rendered.contains("FROSTDAO_REGTEST_MEMPOOL_API"));
-        assert!(rendered.contains("test-chain root address"));
+        assert!(rendered.contains("local regtest root address with bcrt prefix"));
     }
 
     #[test]

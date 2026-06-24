@@ -737,6 +737,7 @@ mod tests {
             address: testnet_address.map(str::to_string),
             address_testnet: testnet_address.map(str::to_string),
             address_mainnet: None,
+            address_regtest: None,
             signing_requirement: None,
             party_ranks: Some(BTreeMap::new()),
         }

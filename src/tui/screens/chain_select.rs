@@ -209,7 +209,7 @@ mod tests {
 
         assert!(rendered.contains("regtest uses local Esplora/mempool API"));
         assert!(rendered.contains("FROSTDAO_REGTEST_MEMPOOL_API"));
-        assert!(rendered.contains("test-chain root address"));
+        assert!(rendered.contains("local regtest root address with bcrt prefix"));
     }
 
     #[test]
