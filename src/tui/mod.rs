@@ -1765,6 +1765,11 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     app.send_form.error_message = Some("Enter valid amount".to_string());
                     return;
                 }
+                if let Some(fetch_error) = app.send_form.utxo_fetch_error.clone() {
+                    app.send_form.error_message =
+                        Some(format!("Cannot prepare transaction: {}", fetch_error));
+                    return;
+                }
 
                 // Collect selected party indices (1-based)
                 let selected_parties: Vec<u32> = app
@@ -1789,6 +1794,27 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 }
 
                 app.send_form.estimate_fee();
+                let confirmed_balance: u64 = app
+                    .send_form
+                    .utxos
+                    .iter()
+                    .filter(|utxo| utxo.confirmed)
+                    .map(|utxo| utxo.value)
+                    .sum();
+                if confirmed_balance == 0 {
+                    app.send_form.error_message = Some(
+                        "No confirmed UTXOs available for the selected source address".to_string(),
+                    );
+                    return;
+                }
+                let total_needed = amount.saturating_add(app.send_form.estimated_fee);
+                if total_needed > confirmed_balance {
+                    app.send_form.error_message = Some(format!(
+                        "Insufficient confirmed balance: need {} sats, have {} sats",
+                        total_needed, confirmed_balance
+                    ));
+                    return;
+                }
                 app.send_form.error_message = None;
                 app.state = AppState::Send(SendState::ReviewTransaction { wallet_name });
             }
@@ -2958,6 +2984,11 @@ fn render_help_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
 mod tests {
     use super::*;
     use crate::tui::state::{NetworkSelection, TxProposal};
+    use crossterm::event::KeyModifiers;
+
+    fn enter_key() -> KeyEvent {
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)
+    }
 
     fn reviewable_proposal() -> TxProposal {
         TxProposal {
@@ -3018,5 +3049,99 @@ mod tests {
             .unwrap_or("")
             .contains("Rejection sent"));
         let _ = std::fs::remove_file(&cache_path);
+    }
+
+    fn app_ready_to_prepare_send() -> App {
+        let mut app = App::new().unwrap();
+        app.state = AppState::Send(SendState::EnterDetails {
+            wallet_name: "wallet-test".to_string(),
+        });
+        app.send_form.to_address.set_value("tb1qrecipient");
+        app.send_form.amount.set_value("1000");
+        app.send_form.threshold = 1;
+        app.send_form.total_parties = 1;
+        app.send_form.selected_parties = vec![true];
+        app
+    }
+
+    #[test]
+    fn send_enter_details_blocks_when_utxo_source_unavailable() {
+        let mut app = app_ready_to_prepare_send();
+        app.send_form.utxo_fetch_error =
+            Some("Cannot fetch UTXOs on Regtest: local node workflow".to_string());
+
+        handle_send_keys(&mut app, enter_key());
+
+        assert!(matches!(
+            app.state,
+            AppState::Send(SendState::EnterDetails { .. })
+        ));
+        assert!(app
+            .send_form
+            .error_message
+            .as_deref()
+            .unwrap_or("")
+            .contains("Cannot prepare transaction"));
+    }
+
+    #[test]
+    fn send_enter_details_blocks_without_confirmed_utxos() {
+        let mut app = app_ready_to_prepare_send();
+
+        handle_send_keys(&mut app, enter_key());
+
+        assert!(matches!(
+            app.state,
+            AppState::Send(SendState::EnterDetails { .. })
+        ));
+        assert!(app
+            .send_form
+            .error_message
+            .as_deref()
+            .unwrap_or("")
+            .contains("No confirmed UTXOs"));
+    }
+
+    #[test]
+    fn send_enter_details_blocks_insufficient_confirmed_balance() {
+        let mut app = app_ready_to_prepare_send();
+        app.send_form.utxos = vec![screens::UtxoDisplay {
+            txid: "00".repeat(32),
+            vout: 0,
+            value: 500,
+            confirmed: true,
+        }];
+
+        handle_send_keys(&mut app, enter_key());
+
+        assert!(matches!(
+            app.state,
+            AppState::Send(SendState::EnterDetails { .. })
+        ));
+        assert!(app
+            .send_form
+            .error_message
+            .as_deref()
+            .unwrap_or("")
+            .contains("Insufficient confirmed balance"));
+    }
+
+    #[test]
+    fn send_enter_details_advances_with_confirmed_balance() {
+        let mut app = app_ready_to_prepare_send();
+        app.send_form.utxos = vec![screens::UtxoDisplay {
+            txid: "00".repeat(32),
+            vout: 0,
+            value: 2_000,
+            confirmed: true,
+        }];
+
+        handle_send_keys(&mut app, enter_key());
+
+        assert!(matches!(
+            app.state,
+            AppState::Send(SendState::ReviewTransaction { .. })
+        ));
+        assert!(app.send_form.error_message.is_none());
     }
 }

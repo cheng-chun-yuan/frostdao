@@ -388,17 +388,24 @@ impl App {
     pub fn fetch_utxos_for_send(&mut self, address: &str) {
         use super::screens::{TxDisplay, UtxoDisplay};
 
+        self.send_form.utxo_fetch_error = None;
+
         let api_base = match self.network.mempool_api_base() {
             Ok(api_base) => api_base,
             Err(e) => {
-                self.set_message(&format!(
+                let message = format!(
                     "Cannot fetch UTXOs on {}: {}",
                     self.network.display_name(),
                     e
-                ));
+                );
+                self.set_message(&message);
+                self.send_form.error_message = Some(message.clone());
+                self.send_form.utxo_fetch_error = Some(message);
                 self.send_form.utxos.clear();
                 self.send_form.recent_txs.clear();
                 self.send_form.total_balance = 0;
+                self.send_form.estimated_fee = 0;
+                self.send_form.utxos_needed = 0;
                 return;
             }
         };
@@ -1771,6 +1778,31 @@ mod tests {
         let err = NetworkSelection::Regtest.mempool_api_base().unwrap_err();
 
         assert!(err.to_string().contains("local node workflow"));
+    }
+
+    #[test]
+    fn regtest_utxo_fetch_marks_send_form_unavailable() {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Regtest;
+
+        app.fetch_utxos_for_send("bcrt1qexample");
+
+        assert!(app.send_form.utxos.is_empty());
+        assert_eq!(app.send_form.total_balance, 0);
+        assert_eq!(app.send_form.estimated_fee, 0);
+        assert_eq!(app.send_form.utxos_needed, 0);
+        assert!(app
+            .send_form
+            .utxo_fetch_error
+            .as_deref()
+            .unwrap_or("")
+            .contains("local node workflow"));
+        assert!(app
+            .send_form
+            .error_message
+            .as_deref()
+            .unwrap_or("")
+            .contains("Cannot fetch UTXOs on Regtest"));
     }
 
     fn valid_remote_proposal_event(proposer_index: u32) -> frostdao::nostr::TxProposalEvent {

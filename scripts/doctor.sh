@@ -400,6 +400,9 @@ def check_transaction_review():
         ("src/tui/screens/chain_select.rs", tui_chain_select, "local node workflow"),
         ("src/tui/state.rs", tui_state, "ReviewTransaction"),
         ("src/tui/state.rs", tui_state, "broadcast_status"),
+        ("src/tui/screens/send.rs", read(Path("src/tui/screens/send.rs")), "utxo_fetch_error"),
+        ("src/tui/mod.rs", tui_keys, "No confirmed UTXOs available"),
+        ("src/tui/mod.rs", tui_keys, "Insufficient confirmed balance"),
         ("src/tui/screens/send.rs", read(Path("src/tui/screens/send.rs")), "copy the raw transaction"),
         ("src/tui/mod.rs", tui_keys, "KeyCode::Char('y')"),
         ("src/tui/mod.rs", tui_keys, "parsed[\"broadcast_status\"]"),
@@ -409,6 +412,7 @@ def check_transaction_review():
         ("src/main.rs", main_rs, "mainnet DKG transaction commands require"),
         ("docs/RUN_GUIDE.md", docs, "compare the returned `review` fields"),
         ("docs/RUN_GUIDE.md", docs, "`regtest`, `local`"),
+        ("docs/RUN_GUIDE.md", docs, "confirmed UTXOs and enough confirmed balance"),
         ("docs/RUN_GUIDE.md", docs, "FROSTDAO_ENABLE_MAINNET_BITCOIN=1"),
     ]
     missing = [f"{path}: {marker}" for path, content, marker in required if marker not in content]

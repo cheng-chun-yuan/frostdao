@@ -209,6 +209,7 @@ pub struct SendFormData {
     pub shares_input: TextArea,
     pub final_signature: String,
     pub error_message: Option<String>,
+    pub utxo_fetch_error: Option<String>,
     // Party selection
     pub my_party_index: u32,
     pub total_parties: u32,
@@ -257,6 +258,7 @@ impl SendFormData {
             shares_input: TextArea::new("Paste signature shares from other parties"),
             final_signature: String::new(),
             error_message: None,
+            utxo_fetch_error: None,
             my_party_index: 1,
             total_parties: 3,
             threshold: 2,
