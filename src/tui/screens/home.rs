@@ -8,7 +8,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::tui::app::{wallet_address_for_network, App};
+use crate::tui::app::{balance_cache_key, wallet_address_for_network, App};
 use crate::tui::state::NetworkSelection;
 
 /// Render the home screen
@@ -49,7 +49,9 @@ fn render_wallet_list(frame: &mut Frame, app: &App, area: Rect) {
                 _ => "?".to_string(),
             };
 
-            let has_balance = app.balance_cache.contains_key(&wallet.name);
+            let has_balance = app
+                .balance_cache
+                .contains_key(&balance_cache_key(&wallet.name, app.network));
             let balance_indicator = if has_balance { " $" } else { "" };
 
             ListItem::new(format!(
@@ -154,7 +156,7 @@ fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
         lines.push(Line::from(""));
 
         // Balance (if cached)
-        let cache_key = format!("{}:{:?}", wallet.name, app.network);
+        let cache_key = balance_cache_key(&wallet.name, app.network);
         if let Some(info) = app.balance_cache.get(&cache_key) {
             lines.push(Line::from(vec![
                 Span::styled("Balance: ", Style::default().fg(Color::Gray)),
@@ -183,10 +185,7 @@ fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
                 ),
             ]));
         } else {
-            lines.push(Line::from(vec![
-                Span::styled("Balance: ", Style::default().fg(Color::Gray)),
-                Span::styled("Press Enter to fetch", Style::default().fg(Color::DarkGray)),
-            ]));
+            lines.push(balance_fetch_hint_line());
         }
 
         lines
@@ -331,6 +330,13 @@ fn network_safety_lines(network: NetworkSelection) -> Vec<Line<'static>> {
     ]
 }
 
+fn balance_fetch_hint_line() -> Line<'static> {
+    Line::from(vec![
+        Span::styled("Balance: ", Style::default().fg(Color::Gray)),
+        Span::styled("Press r to fetch", Style::default().fg(Color::DarkGray)),
+    ])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -364,5 +370,13 @@ mod tests {
         assert!(rendered.contains("regtest uses local-node workflow"));
         assert!(rendered.contains("no mempool.space"));
         assert!(rendered.contains("test-chain root address"));
+    }
+
+    #[test]
+    fn balance_fetch_hint_matches_home_refresh_shortcut() {
+        let rendered = lines_to_string(vec![balance_fetch_hint_line()]);
+
+        assert!(rendered.contains("Press r to fetch"));
+        assert!(!rendered.contains("Press Enter to fetch"));
     }
 }

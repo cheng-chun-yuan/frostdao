@@ -40,6 +40,10 @@ pub(crate) fn wallet_address_for_network(
     }
 }
 
+pub(crate) fn balance_cache_key(wallet_name: &str, network: NetworkSelection) -> String {
+    format!("{}:{:?}", wallet_name, network)
+}
+
 pub enum TuiNostrRuntime {
     LocalSimulation(frostdao::nostr::NostrRoomRuntime<frostdao::nostr::InMemoryRoomTransport>),
     Relay(frostdao::nostr::NostrRoomRuntime<frostdao::nostr::RelayRoomTransport>),
@@ -356,7 +360,7 @@ impl App {
 
             match self.fetch_balance(&wallet.name) {
                 Ok(info) => {
-                    let cache_key = format!("{}:{:?}", wallet.name, self.network);
+                    let cache_key = balance_cache_key(&wallet.name, self.network);
                     self.balance_cache.insert(cache_key, info);
                     self.message = Some(format!("Balance updated for {}", wallet.name));
                 }
@@ -1819,6 +1823,22 @@ mod tests {
         };
 
         assert!(super::wallet_address_for_network(&wallet, NetworkSelection::Mainnet).is_none());
+    }
+
+    #[test]
+    fn balance_cache_key_is_network_scoped() {
+        assert_eq!(
+            super::balance_cache_key("treasury", NetworkSelection::Testnet3),
+            "treasury:Testnet3"
+        );
+        assert_eq!(
+            super::balance_cache_key("treasury", NetworkSelection::Signet),
+            "treasury:Signet"
+        );
+        assert_ne!(
+            super::balance_cache_key("treasury", NetworkSelection::Testnet3),
+            super::balance_cache_key("treasury", NetworkSelection::Mainnet)
+        );
     }
 
     #[test]

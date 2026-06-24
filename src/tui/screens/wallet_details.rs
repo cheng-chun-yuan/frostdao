@@ -9,7 +9,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::tui::app::{wallet_address_for_network, App};
+use crate::tui::app::{balance_cache_key, wallet_address_for_network, App};
 use crate::tui::state::{WalletAction, WalletDetailsState};
 
 /// Render the wallet details screen
@@ -167,7 +167,7 @@ fn render_wallet_info(frame: &mut Frame, app: &App, wallet_name: &str, area: Rec
         lines.push(Line::from(""));
 
         // Balance (if cached)
-        let cache_key = format!("{}:{:?}", wallet.name, app.network);
+        let cache_key = balance_cache_key(&wallet.name, app.network);
         if let Some(info) = app.balance_cache.get(&cache_key) {
             lines.push(Line::from(vec![
                 Span::styled("Balance: ", Style::default().fg(Color::Gray)),
