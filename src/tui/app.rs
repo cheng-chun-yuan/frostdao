@@ -490,24 +490,40 @@ impl App {
     pub fn fetch_utxos_for_send(&mut self, address: &str) {
         use super::screens::{TxDisplay, UtxoDisplay};
 
+        let clear_send_refresh_state = |send_form: &mut crate::tui::screens::SendFormData| {
+            send_form.utxos.clear();
+            send_form.recent_txs.clear();
+            send_form.total_balance = 0;
+            send_form.estimated_fee = 0;
+            send_form.utxos_needed = 0;
+            send_form.fee_rate = 1;
+        };
+
+        let set_fetch_error = |app: &mut App, message: &str| {
+            let message = message.to_string();
+            app.set_message(&message);
+            app.send_form.error_message = Some(message.clone());
+            app.send_form.utxo_fetch_error = Some(message);
+            clear_send_refresh_state(&mut app.send_form);
+        };
+
         self.send_form.utxo_fetch_error = None;
+        self.send_form.error_message = None;
+        self.send_form.fee_rate = 1;
+        self.send_form.utxos.clear();
+        self.send_form.recent_txs.clear();
 
         let api_base = match self.network.mempool_api_base() {
             Ok(api_base) => api_base,
             Err(e) => {
-                let message = format!(
-                    "Cannot fetch UTXOs on {}: {}",
-                    self.network.display_name(),
-                    e
+                set_fetch_error(
+                    self,
+                    &format!(
+                        "Cannot fetch UTXOs on {}: {}",
+                        self.network.display_name(),
+                        e
+                    ),
                 );
-                self.set_message(&message);
-                self.send_form.error_message = Some(message.clone());
-                self.send_form.utxo_fetch_error = Some(message);
-                self.send_form.utxos.clear();
-                self.send_form.recent_txs.clear();
-                self.send_form.total_balance = 0;
-                self.send_form.estimated_fee = 0;
-                self.send_form.utxos_needed = 0;
                 return;
             }
         };
@@ -523,38 +539,80 @@ impl App {
                     .and_then(|f| f.as_u64())
                     .unwrap_or(1);
             }
+        } else {
+            set_fetch_error(
+                self,
+                &format!(
+                    "Cannot fetch fee estimates on {}",
+                    self.network.display_name()
+                ),
+            );
+            return;
         }
 
         // Fetch UTXOs
         let utxo_url = format!("{}/address/{}/utxo", api_base, address);
-        if let Ok(response) = client.get(&utxo_url).send() {
-            if let Ok(utxos) = response.json::<Vec<serde_json::Value>>() {
-                self.send_form.utxos = utxos
-                    .iter()
-                    .filter_map(|u| {
-                        Some(UtxoDisplay {
-                            txid: u.get("txid")?.as_str()?.to_string(),
-                            vout: u.get("vout")?.as_u64()? as u32,
-                            value: u.get("value")?.as_u64()?,
-                            confirmed: u
-                                .get("status")
-                                .and_then(|s| s.get("confirmed"))
-                                .and_then(|c| c.as_bool())
-                                .unwrap_or(false),
-                        })
-                    })
-                    .collect();
-
-                self.send_form.total_balance = self.send_form.utxos.iter().map(|u| u.value).sum();
-                // Update fee estimate
-                self.send_form.estimate_fee();
+        let response = match client.get(&utxo_url).send() {
+            Ok(response) => response,
+            Err(_) => {
+                set_fetch_error(
+                    self,
+                    &format!("Cannot fetch UTXOs on {}", self.network.display_name()),
+                );
+                return;
             }
-        }
+        };
+        let utxos = match response.json::<Vec<serde_json::Value>>() {
+            Ok(utxos) => utxos,
+            Err(_) => {
+                set_fetch_error(
+                    self,
+                    &format!(
+                        "Cannot parse UTXO data from {} explorer",
+                        self.network.display_name()
+                    ),
+                );
+                return;
+            }
+        };
+
+        self.send_form.utxos = utxos
+            .iter()
+            .filter_map(|u| {
+                Some(UtxoDisplay {
+                    txid: u.get("txid")?.as_str()?.to_string(),
+                    vout: u.get("vout")?.as_u64()? as u32,
+                    value: u.get("value")?.as_u64()?,
+                    confirmed: u
+                        .get("status")
+                        .and_then(|s| s.get("confirmed"))
+                        .and_then(|c| c.as_bool())
+                        .unwrap_or(false),
+                })
+            })
+            .collect();
+
+        self.send_form.total_balance = self.send_form.utxos.iter().map(|u| u.value).sum();
+        // Update fee estimate
+        self.send_form.estimate_fee();
 
         // Fetch recent transactions
         let txs_url = format!("{}/address/{}/txs", api_base, address);
-        if let Ok(response) = client.get(&txs_url).send() {
-            if let Ok(txs) = response.json::<Vec<serde_json::Value>>() {
+        let response = match client.get(&txs_url).send() {
+            Ok(response) => response,
+            Err(_) => {
+                set_fetch_error(
+                    self,
+                    &format!(
+                        "Cannot fetch recent transactions on {}",
+                        self.network.display_name()
+                    ),
+                );
+                return;
+            }
+        };
+        match response.json::<Vec<serde_json::Value>>() {
+            Ok(txs) => {
                 self.send_form.recent_txs = txs
                     .iter()
                     .take(10)
@@ -612,6 +670,15 @@ impl App {
                         })
                     })
                     .collect();
+            }
+            Err(_) => {
+                set_fetch_error(
+                    self,
+                    &format!(
+                        "Cannot parse recent transaction data on {}",
+                        self.network.display_name()
+                    ),
+                );
             }
         }
     }
@@ -1838,6 +1905,7 @@ fn mainnet_nostr_enabled() -> bool {
 #[cfg(test)]
 mod tests {
     use super::{App, BalanceInfo};
+    use crate::tui::screens::{TxDisplay, UtxoDisplay};
     use crate::tui::state::{
         AppState, NetworkSelection, NostrKeygenState, NostrRoomPhase, NostrSignState, TxProposal,
     };
@@ -2132,6 +2200,53 @@ mod tests {
             .as_deref()
             .unwrap_or("")
             .contains("Cannot fetch UTXOs on Regtest"));
+    }
+
+    #[test]
+    #[serial]
+    fn fetch_utxos_clears_stale_data_on_transport_failure() {
+        std::env::set_var(
+            frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV,
+            "http://127.0.0.1:1/api/",
+        );
+
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Regtest;
+        app.send_form.utxos = vec![UtxoDisplay {
+            txid: "00".repeat(32),
+            vout: 0,
+            value: 10_000,
+            confirmed: true,
+        }];
+        app.send_form.recent_txs = vec![TxDisplay {
+            txid: "11".repeat(32),
+            amount: 1_000,
+            confirmed: true,
+            time: None,
+        }];
+        app.send_form.total_balance = 10_000;
+        app.send_form.estimated_fee = 100;
+        app.send_form.utxos_needed = 1;
+        app.send_form.error_message = Some("stale send error".to_string());
+
+        app.fetch_utxos_for_send("bcrt1qexample");
+
+        assert!(app.send_form.utxos.is_empty());
+        assert!(app.send_form.recent_txs.is_empty());
+        assert_eq!(app.send_form.total_balance, 0);
+        assert_eq!(app.send_form.estimated_fee, 0);
+        assert_eq!(app.send_form.utxos_needed, 0);
+        assert_eq!(app.send_form.fee_rate, 1);
+        assert_eq!(
+            app.send_form.utxo_fetch_error.as_deref().unwrap_or(""),
+            "Cannot fetch fee estimates on Regtest"
+        );
+        assert_eq!(
+            app.send_form.error_message.as_deref().unwrap_or(""),
+            "Cannot fetch fee estimates on Regtest"
+        );
+
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
     }
 
     fn valid_remote_proposal_event(proposer_index: u32) -> frostdao::nostr::TxProposalEvent {
