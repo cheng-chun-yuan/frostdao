@@ -368,18 +368,35 @@ fn wallet_readiness_lines(app: &App, wallet: &WalletSummary) -> Vec<Line<'static
     };
     lines.push(status_line(hd_text.to_string(), Color::Yellow));
 
-    let nostr_text = if app.nostr_local_simulation_transport_active() {
-        "Nostr: local rehearsal ready; relay signing is opt-in"
-    } else {
-        "Nostr: relay transport configured for signing; use CLI keygen first"
-    };
-    lines.push(status_line(nostr_text.to_string(), Color::Magenta));
+    let (nostr_text, nostr_color) = nostr_readiness_status(app);
+    lines.push(status_line(nostr_text.to_string(), nostr_color));
     lines.push(status_line(
         "Recovery: CLI-only; restores one lost party share".to_string(),
         Color::Cyan,
     ));
 
     lines
+}
+
+fn nostr_readiness_status(app: &App) -> (&'static str, Color) {
+    if app.nostr_runtime.is_none() {
+        return (
+            "Nostr: configure and join a room before multi-device signing",
+            Color::Yellow,
+        );
+    }
+
+    if app.nostr_local_simulation_transport_active() {
+        (
+            "Nostr: local room active for rehearsal; relay signing is opt-in",
+            Color::Magenta,
+        )
+    } else {
+        (
+            "Nostr: relay room active for signing; use CLI keygen first",
+            Color::Magenta,
+        )
+    }
 }
 
 fn status_line(text: String, color: Color) -> Line<'static> {
@@ -504,7 +521,7 @@ mod tests {
     }
 
     #[test]
-    fn wallet_readiness_lines_show_testnet_send_and_nostr_status() {
+    fn wallet_readiness_lines_show_testnet_send_and_nostr_setup_status() {
         let app = App::new().unwrap();
         let wallet = wallet_summary(Some("tb1qsource"), None);
 
@@ -514,9 +531,43 @@ mod tests {
         assert!(rendered.contains("Send: Ready"));
         assert!(rendered.contains("Signing: TSS 2-of-3"));
         assert!(rendered.contains("HD: Addresses screen derives paths"));
-        assert!(rendered.contains("Nostr: local rehearsal ready"));
+        assert!(rendered.contains("Nostr: configure and join a room"));
         assert!(rendered.contains("Recovery: CLI-only"));
         assert!(rendered.contains("restores one lost party share"));
+    }
+
+    #[test]
+    fn nostr_readiness_status_distinguishes_active_local_room() {
+        let mut app = App::new().unwrap();
+        app.nostr_room_id = format!("home-local-room-{}", std::process::id());
+
+        app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
+
+        let (text, color) = nostr_readiness_status(&app);
+        assert_eq!(
+            text,
+            "Nostr: local room active for rehearsal; relay signing is opt-in"
+        );
+        assert_eq!(color, Color::Magenta);
+
+        let _ = std::fs::remove_file(app.nostr_replay_cache_path());
+    }
+
+    #[test]
+    fn nostr_readiness_status_distinguishes_active_relay_room() {
+        let mut app = App::new().unwrap();
+        app.nostr_room_id = format!("home-relay-room-{}", std::process::id());
+        app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
+        app.force_relay_transport_for_tests = true;
+
+        let (text, color) = nostr_readiness_status(&app);
+        assert_eq!(
+            text,
+            "Nostr: relay room active for signing; use CLI keygen first"
+        );
+        assert_eq!(color, Color::Magenta);
+
+        let _ = std::fs::remove_file(app.nostr_replay_cache_path());
     }
 
     #[test]
