@@ -3297,7 +3297,7 @@ fn global_help_lines(app: &App) -> Vec<Line<'static>> {
         "k/K:Start keygen (local rehearsal in local mode) | s/S:Sign | Esc:Leave room",
     ));
     lines.push(Line::from(format!(
-        "p/P:Propose | {copy}:Consent role / copy TXID in complete | y:Consent | r/R:Reject"
+        "p/P:Propose | {copy}:Consent role / copy TXID | y:Consent after review match | r/R:Reject"
     )));
 
     #[cfg(feature = "miniscript-policy")]
@@ -3910,6 +3910,16 @@ mod tests {
         assert!(rendered.contains("Global"));
         assert!(rendered.contains("Home"));
         assert!(rendered.contains("Wallet Details"));
+    }
+
+    #[test]
+    fn global_help_overlay_hardens_nostr_consent_prompt() {
+        let app = App::new().unwrap();
+        let rendered = lines_to_string(&global_help_lines(&app));
+
+        assert!(rendered.contains("Nostr"));
+        assert!(rendered.contains("y:Consent after review match"));
+        assert!(!rendered.contains("y:Consent |"));
     }
 
     #[test]
