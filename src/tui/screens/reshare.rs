@@ -173,7 +173,7 @@ fn render_local_setup(frame: &mut Frame, app: &App, form: &ReshareFormData, area
             Constraint::Length(3), // Target name
             Constraint::Length(3), // New threshold
             Constraint::Length(3), // New n_parties
-            Constraint::Min(3),    // Info
+            Constraint::Min(6),    // Info
             Constraint::Length(2), // Error
             Constraint::Length(2), // Help
         ])
@@ -226,7 +226,7 @@ fn render_local_setup(frame: &mut Frame, app: &App, form: &ReshareFormData, area
     );
 
     // Info about local reshare
-    let info = Paragraph::new(vec![
+    let mut info_lines = vec![
         Line::from(""),
         Line::from(vec![Span::styled(
             "Local reshare will:",
@@ -248,7 +248,9 @@ fn render_local_setup(frame: &mut Frame, app: &App, form: &ReshareFormData, area
             "  • Invalidate old shares",
             Style::default().fg(Color::DarkGray),
         )]),
-    ]);
+    ];
+    info_lines.extend(reshare_local_boundary_lines());
+    let info = Paragraph::new(info_lines);
     frame.render_widget(info, chunks[4]);
 
     // Error
@@ -292,7 +294,7 @@ fn render_local_complete(frame: &mut Frame, wallet_name: &str, area: Rect) {
     ]));
     frame.render_widget(success, chunks[0]);
 
-    let info = Paragraph::new(vec![
+    let mut info_lines = vec![
         Line::from(vec![
             Span::styled("New Wallet: ", Style::default().fg(Color::Gray)),
             Span::styled(
@@ -306,11 +308,14 @@ fn render_local_complete(frame: &mut Frame, wallet_name: &str, area: Rect) {
         Line::from("All new shares created in party1/, party2/, ... folders."),
         Line::from(""),
         Line::from(vec![Span::styled(
-            "⚠️  Old shares are now INVALIDATED!",
+            "WARNING: old shares are now INVALIDATED!",
             Style::default().fg(Color::Yellow),
         )]),
-        Line::from("The public key and address remain the SAME."),
-    ]);
+        Line::from("Local shares should never be pasted from this step."),
+        Line::from("Only the wallet's public key and address remain unchanged."),
+    ];
+    info_lines.extend(reshare_address_stability_lines());
+    let info = Paragraph::new(info_lines);
     frame.render_widget(info, chunks[1]);
 
     let help = Paragraph::new("Enter/Esc: Return to wallet list")
@@ -333,7 +338,7 @@ fn render_round1_setup(frame: &mut Frame, app: &App, form: &ReshareFormData, are
             Constraint::Length(5), // Source wallet selector
             Constraint::Length(3), // New threshold
             Constraint::Length(3), // New n_parties
-            Constraint::Min(1),    // Spacer
+            Constraint::Min(6),    // Context
             Constraint::Length(2), // Error
             Constraint::Length(2), // Help
         ])
@@ -373,6 +378,10 @@ fn render_round1_setup(frame: &mut Frame, app: &App, form: &ReshareFormData, are
         form.focused_field == ReshareFormField::NewNParties,
     );
 
+    let setup_context = Paragraph::new(reshare_distributed_boundary_lines())
+        .style(Style::default().fg(Color::Gray));
+    frame.render_widget(setup_context, chunks[3]);
+
     // Error
     if let Some(error) = &form.error_message {
         let error_para = Paragraph::new(error.as_str()).style(Style::default().fg(Color::Red));
@@ -398,13 +407,14 @@ fn render_round1_output(frame: &mut Frame, output_json: &str, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(2),
-            Constraint::Min(5),
+            Constraint::Min(4),
+            Constraint::Min(2),
             Constraint::Length(2),
         ])
         .split(inner);
 
     let instructions =
-        Paragraph::new("Share this with NEW parties:").style(Style::default().fg(Color::Yellow));
+        Paragraph::new("Share this with NEW parties only.").style(Style::default().fg(Color::Yellow));
     frame.render_widget(instructions, chunks[0]);
 
     let output_block = Block::default()
@@ -416,10 +426,13 @@ fn render_round1_output(frame: &mut Frame, output_json: &str, area: Rect) {
         .wrap(Wrap { trim: false });
     frame.render_widget(output_para, chunks[1]);
 
+    let boundary = Paragraph::new(reshare_distributed_output_boundary_lines());
+    frame.render_widget(boundary, chunks[2]);
+
     let help =
         Paragraph::new("c: Copy | Enter: Go to Finalize (if new party) | Esc: Done (if old party)")
             .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(help, chunks[2]);
+    frame.render_widget(help, chunks[3]);
 }
 
 fn render_finalize_input(frame: &mut Frame, form: &ReshareFormData, area: Rect) {
@@ -439,7 +452,8 @@ fn render_finalize_input(frame: &mut Frame, form: &ReshareFormData, area: Rect) 
             Constraint::Length(3), // My rank
             Constraint::Length(3), // Hierarchical
             Constraint::Length(2), // Instructions
-            Constraint::Min(5),    // Input area
+            Constraint::Length(2), // Input context
+            Constraint::Min(4),    // Input area
             Constraint::Length(2), // Error
             Constraint::Length(2), // Help
         ])
@@ -490,21 +504,27 @@ fn render_finalize_input(frame: &mut Frame, form: &ReshareFormData, area: Rect) 
         .style(Style::default().fg(Color::Yellow));
     frame.render_widget(instructions, chunks[4]);
 
+    let finalize_context = Paragraph::new(
+        "Only paste JSON for this ceremony's source wallet and your target wallet.",
+    )
+    .style(Style::default().fg(Color::Gray));
+    frame.render_widget(finalize_context, chunks[5]);
+
     form.finalize_input.render(
         frame,
-        chunks[5],
+        chunks[6],
         form.finalize_field == ReshareFinalizeField::DataInput,
     );
 
     if let Some(error) = &form.error_message {
         let error_para = Paragraph::new(error.as_str()).style(Style::default().fg(Color::Red));
-        frame.render_widget(error_para, chunks[6]);
+        frame.render_widget(error_para, chunks[7]);
     }
 
     let help =
         Paragraph::new("Tab: Next | Space: Toggle | Ctrl+u: Clear | Enter: Finalize | Esc: Back")
             .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(help, chunks[7]);
+    frame.render_widget(help, chunks[8]);
 }
 
 fn render_complete(frame: &mut Frame, wallet_name: &str, area: Rect) {
@@ -536,7 +556,7 @@ fn render_complete(frame: &mut Frame, wallet_name: &str, area: Rect) {
     ]));
     frame.render_widget(success, chunks[0]);
 
-    let info = Paragraph::new(vec![
+    let mut distributed_info_lines = vec![
         Line::from(vec![
             Span::styled("New Wallet: ", Style::default().fg(Color::Gray)),
             Span::styled(
@@ -549,10 +569,47 @@ fn render_complete(frame: &mut Frame, wallet_name: &str, area: Rect) {
         Line::from(""),
         Line::from("The public key and address are the SAME as before."),
         Line::from("Funds are still accessible with the new shares."),
-    ]);
+    ];
+    distributed_info_lines.extend(reshare_address_stability_lines());
+    let info = Paragraph::new(distributed_info_lines);
     frame.render_widget(info, chunks[1]);
 
     let help = Paragraph::new("Enter/Esc: Return to wallet list")
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[2]);
+}
+
+fn reshare_local_boundary_lines() -> Vec<Line<'static>> {
+    vec![
+        Line::from(""),
+        Line::from("Boundary: old share material stays on this device."),
+        Line::from("All shares are regenerated once and replaced as a unit."),
+        Line::from("Address and group public key do not change in this step."),
+    ]
+}
+
+fn reshare_distributed_boundary_lines() -> Vec<Line<'static>> {
+    vec![
+        Line::from(""),
+        Line::from("Only share Round 1 sub-shares for this new wallet."),
+        Line::from("Payloads are party-bound and not full secret material."),
+        Line::from("The ceremony must preserve source wallet identity."),
+    ]
+}
+
+fn reshare_distributed_output_boundary_lines() -> Vec<Line<'static>> {
+    vec![
+        Line::from("Boundary: copy only"),
+        Line::from("- This output is for a single recipient party."),
+        Line::from("- Verify recipient identity before transfer."),
+    ]
+}
+
+fn reshare_address_stability_lines() -> Vec<Line<'static>> {
+    vec![
+        Line::from(""),
+        Line::from(
+            "Address continuity: public key and root address should match source wallet after finalization.",
+        ),
+    ]
 }

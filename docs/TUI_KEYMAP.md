@@ -119,13 +119,21 @@ Applies when a single-line input or multiline paste area is focused.
 | Mode select | `Enter` | Continue |
 | Local setup | `Tab`, `Shift-Tab` | Move fields |
 | Local setup | `↑/↓` | Select source wallet when wallet field is focused |
+| Local setup | `Enter` | Generate local refresh shares (secret material stays local) |
 | Distributed setup | `Tab`, `Shift-Tab` | Move fields |
 | Distributed setup | `j/k` | Select source wallet when wallet field is focused |
+| Distributed setup | `Enter` | Generate round1 sub-shares for new parties |
 | Round output | `c` | Copy JSON output |
 | Round output | `Enter` | Go to finalize as new party |
+| Round output | `c` | Copy only to intended recipient channel |
 | Finalize | `Space` | Toggle HTSS when hierarchy field is focused |
 | Finalize | `Enter` | Finalize new share |
 | Any phase | `Esc` | Back/cancel |
+
+Reshare boundaries:
+- Local reshare does not leave secret share material on copy; only new local share files are written.
+- Distributed round1 output is party-bound sub-shares; do not mix outputs or paste them into unrelated ceremonies.
+- Reshare and recover should keep wallet key/address continuity; compare source pubkey and root address on all parties before use.
 
 ## Send
 

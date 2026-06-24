@@ -213,6 +213,12 @@ frostdao dkg-address --name treasury
 frostdao dkg-address --name treasury_v2
 ```
 
+In every reshare ceremony:
+
+- Local refresh mode keeps secret share material on each signing device and rewrites that device's full local share set.
+- Distributed round1 outputs are sub-shares only and are required for one target wallet and one recipient party index.
+- The target wallet root public key and root address remain the same as the source wallet, so verify the shared key/address on every participant before signing after the operation.
+
 ## 9. Recover A Lost Share
 
 Helper parties create recovery outputs:
