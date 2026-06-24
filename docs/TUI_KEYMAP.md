@@ -34,7 +34,7 @@ Prefer lowercase shortcuts in help text.
 | `a` | View derived addresses |
 | `m` | Show mnemonic backup flow |
 | `c` / `C` | Copy selected wallet address |
-| `b` / `r` | Refresh selected wallet balance |
+| `b` / `r` / `F5` | Refresh selected wallet balance |
 | `R` | Reload wallet list |
 | `q` | Quit |
 
@@ -46,7 +46,7 @@ Prefer lowercase shortcuts in help text.
 |-----|--------|
 | `↑/↓`, `j/k` | Select action |
 | `Enter` | Run selected action |
-| `b` / `r` | Fetch balance |
+| `b` / `r` / `F5` | Fetch balance |
 | `c` / `C` | Copy wallet address |
 | `v` | Show QR code |
 | `Esc` | Back |
@@ -170,7 +170,7 @@ broadcast fails, use `c`/`C` to copy the raw transaction for manual broadcast.
 |-----|--------|
 | `↑/↓`, `j/k` | Select derived address |
 | `c` / `C` | Copy selected wallet address |
-| `b` / `r` | Fetch selected address balance |
+| `b` / `r` / `F5` | Fetch selected address balance |
 | `+`, `a` | Add next derived address |
 | `-`, `x` | Remove last derived address |
 | `Esc` | Back |
