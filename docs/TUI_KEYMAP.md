@@ -217,6 +217,8 @@ The policy input remains editable. Use the templates as starting points, then ty
 The room info line shows room ID, party index, threshold, scheme, rank, and
 transport. Current TUI room joins are guarded as `Scheme: TSS` with `Rank: n/a`;
 room join metadata is public, while signing nonce/share payloads are encrypted.
+The configure status line shows `Blocked` until the room ID, party index,
+threshold, and party count form a valid room.
 
 ## Nostr Keygen
 

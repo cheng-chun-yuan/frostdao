@@ -254,6 +254,23 @@ impl App {
             .and_then(|i| self.wallets.get(i))
     }
 
+    /// Validate the active Nostr room form before joining a ceremony.
+    pub fn nostr_room_config_error(&self) -> Option<&'static str> {
+        if self.nostr_room_id.trim().is_empty() {
+            return Some("Enter a room ID first");
+        }
+        if self.nostr_n_parties < 2 {
+            return Some("Parties must be at least 2");
+        }
+        if self.nostr_my_index == 0 || self.nostr_my_index > self.nostr_n_parties {
+            return Some("My Index must be between 1 and Parties");
+        }
+        if self.nostr_threshold == 0 || self.nostr_threshold > self.nostr_n_parties {
+            return Some("Threshold must be between 1 and Parties");
+        }
+        None
+    }
+
     /// Build a locally proposed TUI Nostr transaction after validating the draft fields.
     pub fn build_nostr_tx_proposal(&self, wallet_name: &str, timestamp: u64) -> Result<TxProposal> {
         let amount_sats = self.nostr_amount_sats()?;
@@ -3708,5 +3725,36 @@ mod tests {
         assert_eq!(app.audit_events[0].fields["party_index"], 2);
 
         let _ = std::fs::remove_file(&cache_path);
+    }
+
+    #[test]
+    fn nostr_room_config_validation_blocks_invalid_ceremony_shape() {
+        let mut app = App::new().unwrap();
+        app.nostr_room_id.clear();
+        assert_eq!(app.nostr_room_config_error(), Some("Enter a room ID first"));
+
+        app.nostr_room_id = "treasury-room".to_string();
+        app.nostr_n_parties = 1;
+        assert_eq!(
+            app.nostr_room_config_error(),
+            Some("Parties must be at least 2")
+        );
+
+        app.nostr_n_parties = 3;
+        app.nostr_my_index = 4;
+        assert_eq!(
+            app.nostr_room_config_error(),
+            Some("My Index must be between 1 and Parties")
+        );
+
+        app.nostr_my_index = 2;
+        app.nostr_threshold = 4;
+        assert_eq!(
+            app.nostr_room_config_error(),
+            Some("Threshold must be between 1 and Parties")
+        );
+
+        app.nostr_threshold = 2;
+        assert_eq!(app.nostr_room_config_error(), None);
     }
 }

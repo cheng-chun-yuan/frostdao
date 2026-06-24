@@ -108,27 +108,16 @@ fn render_configure(frame: &mut Frame, app: &App, area: Rect) {
         app.nostr_room_focus == NostrRoomField::NParties,
     );
 
-    // Connection status
-    let status_style = if app.nostr_connected {
-        Style::default().fg(Color::Green)
-    } else {
-        Style::default().fg(Color::Yellow)
-    };
-    let status_text = if app.nostr_connected {
-        "● Runtime guard active"
-    } else {
-        "○ Not connected"
-    };
-    let status = Paragraph::new(Line::from(vec![
-        Span::styled("Status: ", Style::default().fg(Color::Gray)),
-        Span::styled(status_text, status_style),
-        Span::raw("  "),
-        Span::styled("Cache: ", Style::default().fg(Color::DarkGray)),
-        Span::styled(
-            app.nostr_replay_cache_path().display().to_string(),
-            Style::default().fg(Color::DarkGray),
-        ),
-    ]));
+    let status = Paragraph::new(vec![
+        room_config_status_line(app),
+        Line::from(vec![
+            Span::styled("Cache: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                app.nostr_replay_cache_path().display().to_string(),
+                Style::default().fg(Color::DarkGray),
+            ),
+        ]),
+    ]);
     frame.render_widget(status, chunks[6]);
 
     // Help
@@ -228,6 +217,28 @@ fn local_waiting_help_line() -> Line<'static> {
         Span::raw(": Add local test participant  "),
         Span::styled("Esc", Style::default().fg(Color::Yellow)),
         Span::raw(": Leave room"),
+    ])
+}
+
+fn room_config_status_line(app: &App) -> Line<'static> {
+    if let Some(error) = app.nostr_room_config_error() {
+        return Line::from(vec![
+            Span::styled("Blocked: ", Style::default().fg(Color::Red)),
+            Span::styled(error, Style::default().fg(Color::Yellow)),
+        ]);
+    }
+
+    let status_text = if app.nostr_connected {
+        "Runtime guard active"
+    } else {
+        "Ready to join"
+    };
+    Line::from(vec![
+        Span::styled("Status: ", Style::default().fg(Color::Gray)),
+        Span::styled(
+            format!("OK - {}", status_text),
+            Style::default().fg(Color::Green),
+        ),
     ])
 }
 
@@ -454,5 +465,28 @@ mod tests {
         assert!(rendered.contains("Space: Add local test participant"));
         assert!(!rendered.contains("Simulate participant"));
         assert!(!rendered.contains("demo"));
+    }
+
+    #[test]
+    fn room_config_status_shows_blocker_before_join() {
+        let mut app = App::new().unwrap();
+        app.nostr_room_id.clear();
+
+        let rendered = line_to_string(room_config_status_line(&app));
+
+        assert!(rendered.contains("Blocked: Enter a room ID first"));
+    }
+
+    #[test]
+    fn room_config_status_shows_ready_when_valid() {
+        let mut app = App::new().unwrap();
+        app.nostr_room_id = "treasury-room".to_string();
+        app.nostr_my_index = 2;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 3;
+
+        let rendered = line_to_string(room_config_status_line(&app));
+
+        assert!(rendered.contains("Status: OK - Ready to join"));
     }
 }

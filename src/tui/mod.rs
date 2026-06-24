@@ -2356,16 +2356,8 @@ fn handle_nostr_room_configure(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Enter => {
             // Validate and join room
-            if app.nostr_room_id.is_empty() {
-                app.set_message("Enter a room ID first");
-                return;
-            }
-            if app.nostr_my_index == 0 || app.nostr_my_index > app.nostr_n_parties {
-                app.set_message("My Index must be between 1 and N");
-                return;
-            }
-            if app.nostr_threshold == 0 || app.nostr_threshold > app.nostr_n_parties {
-                app.set_message("Invalid threshold");
+            if let Some(error) = app.nostr_room_config_error() {
+                app.set_message(error);
                 return;
             }
 

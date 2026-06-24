@@ -334,6 +334,8 @@ def check_replay_cache_persistence():
         "accept_nostr_party_ciphertext",
         "tui_nostr_poll_rejects_mismatched_ciphertext_payload_parties",
         "nostr_replay_cache_path",
+        "nostr_room_config_error",
+        "nostr_room_config_validation_blocks_invalid_ceremony_shape",
         "tui_nostr_room_uses_runtime_and_replay_cache",
     ]
     missing.extend([f"src/tui/app.rs: {item}" for item in app_required if item not in app])
@@ -345,6 +347,8 @@ def check_replay_cache_persistence():
         "Scheme: ",
         "Rank: ",
         "Room joins are public; signing nonce/share payloads are encrypted",
+        "room_config_status_line",
+        "room_config_status_shows_blocker_before_join",
         "room_info_labels_local_simulation_transport",
         "local_waiting_help_uses_test_participant_wording",
         "Add local test participant",
@@ -355,12 +359,16 @@ def check_replay_cache_persistence():
             missing.append(f"NOSTR_PROTOCOL {marker} documentation")
     if "TUI room screen creates a `NostrRoomRuntime`" not in run_guide:
         missing.append("RUN_GUIDE TUI NostrRoomRuntime documentation")
+    if "room configure status line shows `Blocked` until the room ID, party index, threshold, and party count form a valid room" not in run_guide:
+        missing.append("RUN_GUIDE TUI Nostr room configure validation documentation")
     if "current TUI room joins are guarded as `Scheme: TSS` with `Rank: n/a`" not in run_guide:
         missing.append("RUN_GUIDE TUI Nostr room scheme/rank documentation")
     if "Room joins are public metadata, while signing nonce/share payloads are encrypted" not in run_guide:
         missing.append("RUN_GUIDE TUI Nostr room public/encrypted boundary documentation")
     if "The room info line shows room ID, party index, threshold, scheme, rank, and" not in keymap:
         missing.append("TUI_KEYMAP Nostr room ceremony state documentation")
+    if "The configure status line shows `Blocked` until the room ID, party index" not in keymap:
+        missing.append("TUI_KEYMAP Nostr room configure validation documentation")
     if "Room joins are accepted only when the payload party, threshold, party count, scheme, and rank shape match the active room" not in run_guide:
         missing.append("RUN_GUIDE validated room join documentation")
     if "payload `party_index` must match the envelope `from` party" not in docs:
