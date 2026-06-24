@@ -75,6 +75,13 @@ fn is_copy_key(code: &KeyCode) -> bool {
     matches!(code, KeyCode::Char('c') | KeyCode::Char('C'))
 }
 
+fn is_refresh_key(code: &KeyCode) -> bool {
+    matches!(
+        code,
+        KeyCode::Char('b') | KeyCode::Char('r') | KeyCode::F(5)
+    )
+}
+
 fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> {
     loop {
         terminal.draw(|f| ui(f, app))?;
@@ -136,7 +143,7 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
                 app.set_message("No wallet selected");
             }
         }
-        KeyCode::Char('b') | KeyCode::Char('r') | KeyCode::F(5) => app.refresh_balance(),
+        code if is_refresh_key(&code) => app.refresh_balance(),
         KeyCode::Char('R') => app.reload_wallets(),
         KeyCode::Char('n') => {
             app.chain_selector_index = app.network.index();
@@ -712,7 +719,7 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
                 app.copy_to_clipboard(&addr);
             }
         }
-        KeyCode::Char('b') | KeyCode::Char('r') | KeyCode::F(5) => {
+        code if is_refresh_key(&code) => {
             // Quick fetch balance
             let wallet_name = state.wallet_name.clone();
             if let Some(idx) = app.wallets.iter().position(|w| w.name == wallet_name) {
@@ -2160,7 +2167,7 @@ fn handle_address_list_keys(app: &mut App, code: KeyCode) {
                 app.copy_to_clipboard(&addr);
             }
         }
-        KeyCode::Char('b') | KeyCode::Char('r') | KeyCode::F(5) => {
+        code if is_refresh_key(&code) => {
             // Fetch balance for selected address
             let addr_info = if let AppState::AddressList(ref state) = app.state {
                 state
@@ -3140,7 +3147,7 @@ fn help_bar_text(app: &App) -> String {
             if state.confirm_delete {
                 "Type wallet name | Enter:Delete | Backspace:Edit | Esc:Cancel".to_string()
             } else {
-                "j/k/↑/↓:Navigate | Enter:Select | b/r:Balance | c/C:Copy | v:QR | Esc:Back"
+                "j/k/↑/↓:Navigate | Enter:Select | b/r/F5 (Refresh):Balance | r:Balance | c/C:Copy | v:QR | Esc:Back"
                     .to_string()
             }
         }
@@ -3149,7 +3156,8 @@ fn help_bar_text(app: &App) -> String {
         AppState::Reshare(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
         AppState::Send(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
         AppState::AddressList(_) => {
-            "j/k/↑/↓:Navigate | c/C:Copy | b/r:Balance | a:Add | x:Remove | Esc:Back".to_string()
+            "j/k/↑/↓:Navigate | c/C:Copy | b/r/F5 (Refresh):Balance | r:Balance | a:Add | x:Remove | Esc:Back"
+                .to_string()
         }
         AppState::MnemonicBackup(state) => {
             if state.revealed {
@@ -3185,12 +3193,12 @@ fn help_bar_text(app: &App) -> String {
 fn home_help_bar_text() -> String {
     #[cfg(feature = "miniscript-policy")]
     {
-        "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | b/r:Balance | c/C:Copy | q:Quit | F1:Help"
+        "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | b/r/F5 (Refresh):Balance | r:Balance | c/C:Copy | q:Quit | F1:Help"
             .to_string()
     }
     #[cfg(not(feature = "miniscript-policy"))]
     {
-        "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | b/r:Balance | c/C:Copy | q:Quit | F1:Help"
+        "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | b/r/F5 (Refresh):Balance | r:Balance | c/C:Copy | q:Quit | F1:Help"
             .to_string()
     }
 }
@@ -3251,9 +3259,46 @@ mod tests {
         let help = help_bar_text(&app);
 
         assert!(help.contains("j/k/↑/↓"));
-        assert!(help.contains("b/r:Balance"));
+        assert!(help.contains("b/r/F5 (Refresh):Balance"));
         assert!(help.contains("Enter:Select"));
         assert!(help.contains("c/C:Copy"));
+    }
+
+    #[test]
+    fn wallet_details_help_bar_includes_refresh_shortcut() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::WalletDetails(WalletDetailsState {
+            wallet_name: "treasury".to_string(),
+            selected_action: 0,
+            confirm_delete: false,
+            delete_confirmation_input: String::new(),
+            show_qr: false,
+        });
+
+        let help = help_bar_text(&app);
+
+        assert!(help.contains("b/r/F5 (Refresh):Balance"));
+        assert!(help.contains("v:QR"));
+    }
+
+    #[test]
+    fn address_list_help_bar_includes_refresh_shortcut() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::AddressList(AddressListState {
+            wallet_name: "treasury".to_string(),
+            network: NetworkSelection::Testnet4,
+            addresses: vec![("tb1qtest".to_string(), "02".to_string(), 0)],
+            selected: 0,
+            error: None,
+            hd_enabled: true,
+            balance_cache: std::collections::HashMap::new(),
+        });
+
+        let help = help_bar_text(&app);
+
+        assert!(help.contains("b/r/F5 (Refresh):Balance"));
+        assert!(help.contains("a:Add"));
+        assert!(help.contains("x:Remove"));
     }
 
     #[test]

@@ -6,14 +6,15 @@ This is the maintained keyboard convention for FrostDAO TUI.
 
 | Key | Meaning |
 |-----|---------|
-| `Enter` | Primary action, continue, confirm, compile, generate, or complete |
+| `F1` | Open/close global help |
 | `Esc` | Back, cancel, close popup, or leave current flow |
+| `Enter` | Primary action, continue, confirm, compile, generate, or complete |
 | `↑/↓` | Move selection |
 | `j` / `k` | Move down/up, Vim-style alternative to arrows |
 | `Tab` / `Shift-Tab` | Next/previous form field |
 | `Space` | Toggle checkbox or binary option |
 | `c` / `C` | Copy current selected/output value when the screen has copyable output (`c`/`C` both work). |
-| `b` / `r` | Refresh wallet/address balance (context dependent) |
+| `b` / `r` / `F5` | Refresh wallet/address balance (context dependent) |
 | `q` | Quit only from home; close QR popup when shown |
 
 Prefer lowercase shortcuts in help text.
