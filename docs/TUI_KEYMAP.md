@@ -228,6 +228,8 @@ threshold, and party count form a valid room.
 | `r` | Retry from setup |
 | `Esc` | Return to Nostr room |
 
+Every Nostr keygen phase keeps room ID, party index, threshold, scheme, rank, and transport visible. Round 1 is public commitment exchange; Round 2 uses encrypted shares; finalizing keeps local share material on device.
+
 ## Nostr Signing
 
 | Key | Action |

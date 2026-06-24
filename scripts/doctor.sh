@@ -340,6 +340,7 @@ def check_replay_cache_persistence():
     ]
     missing.extend([f"src/tui/app.rs: {item}" for item in app_required if item not in app])
     tui_room = read(Path("src/tui/screens/nostr_room.rs"))
+    tui_keygen = read(Path("src/tui/screens/nostr_keygen.rs"))
     room_required = [
         "Transport: ",
         "local simulation",
@@ -354,6 +355,16 @@ def check_replay_cache_persistence():
         "Add local test participant",
     ]
     missing.extend([f"src/tui/screens/nostr_room.rs: {item}" for item in room_required if item not in tui_room])
+    keygen_required = [
+        "keygen_status_lines",
+        "keygen_status_lines_keep_room_context_across_rounds",
+        "Room: ",
+        "Scheme: ",
+        "Round 1: public commitments",
+        "Round 2: encrypted shares",
+        "Finalizing: local share material stays on this device",
+    ]
+    missing.extend([f"src/tui/screens/nostr_keygen.rs: {item}" for item in keygen_required if item not in tui_keygen])
     for marker in ["NostrRoomRuntime", "FileReplayCache", "RelayRoomTransport"]:
         if marker not in docs:
             missing.append(f"NOSTR_PROTOCOL {marker} documentation")
@@ -365,6 +376,10 @@ def check_replay_cache_persistence():
         missing.append("RUN_GUIDE TUI Nostr room scheme/rank documentation")
     if "Room joins are public metadata, while signing nonce/share payloads are encrypted" not in run_guide:
         missing.append("RUN_GUIDE TUI Nostr room public/encrypted boundary documentation")
+    if "Nostr keygen status keeps room, party, threshold, scheme, rank, and transport visible" not in run_guide:
+        missing.append("RUN_GUIDE TUI Nostr keygen ceremony context documentation")
+    if "Every Nostr keygen phase keeps room ID, party index, threshold, scheme, rank, and transport visible" not in keymap:
+        missing.append("TUI_KEYMAP Nostr keygen ceremony context documentation")
     if "The room info line shows room ID, party index, threshold, scheme, rank, and" not in keymap:
         missing.append("TUI_KEYMAP Nostr room ceremony state documentation")
     if "The configure status line shows `Blocked` until the room ID, party index" not in keymap:

@@ -18,7 +18,7 @@ pub fn render_nostr_keygen(frame: &mut Frame, app: &App, area: Rect) {
         .constraints([
             Constraint::Length(3), // Title
             Constraint::Length(3), // Progress bar
-            Constraint::Length(3), // Status
+            Constraint::Length(5), // Status
             Constraint::Min(10),   // Party list
             Constraint::Length(5), // Help
         ])
@@ -71,21 +71,7 @@ pub fn render_nostr_keygen(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(gauge, chunks[1]);
 
     // Status message
-    let status_msg = match &app.nostr_keygen_state {
-        NostrKeygenState::ModeSelect => {
-            format!(
-                "Room: {}  |  {}-of-{}  |  My Index: {}",
-                app.nostr_room_id, app.nostr_threshold, app.nostr_n_parties, app.nostr_my_index
-            )
-        }
-        NostrKeygenState::WaitingForParties { .. } => {
-            "Broadcasting Round 1 commitment and waiting for others...".to_string()
-        }
-        NostrKeygenState::Round2 { .. } => "Processing encrypted shares (NIP-44)...".to_string(),
-        NostrKeygenState::Finalizing => "Computing final key shares...".to_string(),
-    };
-
-    let status = Paragraph::new(Span::styled(status_msg, Style::default().fg(Color::Yellow)));
+    let status = Paragraph::new(keygen_status_lines(app));
     frame.render_widget(status, chunks[2]);
 
     // Party list
@@ -106,6 +92,43 @@ pub fn render_nostr_keygen(frame: &mut Frame, app: &App, area: Rect) {
             .border_style(Style::default().fg(Color::DarkGray)),
     );
     frame.render_widget(help, chunks[4]);
+}
+
+fn keygen_status_lines(app: &App) -> Vec<Line<'static>> {
+    let room_id = if app.nostr_room_id.trim().is_empty() {
+        "(unset)"
+    } else {
+        app.nostr_room_id.as_str()
+    };
+    let phase_line = match &app.nostr_keygen_state {
+        NostrKeygenState::ModeSelect => {
+            "Setup: room joins are public; DKG share payloads must be encrypted before relay handoff."
+        }
+        NostrKeygenState::WaitingForParties { .. } => {
+            "Round 1: public commitments; waiting for all parties."
+        }
+        NostrKeygenState::Round2 { .. } => {
+            "Round 2: encrypted shares (NIP-44); verify intended recipient before use."
+        }
+        NostrKeygenState::Finalizing => {
+            "Finalizing: local share material stays on this device."
+        }
+    };
+
+    vec![
+        Line::from(Span::styled(
+            format!(
+                "Room: {} | Party: {} | Threshold: {}-of-{}",
+                room_id, app.nostr_my_index, app.nostr_threshold, app.nostr_n_parties
+            ),
+            Style::default().fg(Color::Yellow),
+        )),
+        Line::from(Span::styled(
+            "Scheme: TSS | Rank: n/a | Transport: local simulation",
+            Style::default().fg(Color::Yellow),
+        )),
+        Line::from(Span::styled(phase_line, Style::default().fg(Color::Yellow))),
+    ]
 }
 
 fn render_party_list(frame: &mut Frame, app: &App, area: Rect) {
@@ -165,4 +188,89 @@ fn render_party_list(frame: &mut Frame, app: &App, area: Rect) {
     );
 
     frame.render_widget(list, area);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn line_to_string(line: &Line<'_>) -> String {
+        line.spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect::<Vec<_>>()
+            .join("")
+    }
+
+    fn lines_to_string(lines: &[Line<'_>]) -> String {
+        lines
+            .iter()
+            .map(line_to_string)
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    fn app_with_room_context() -> App {
+        let mut app = App::new().expect("app should initialize");
+        app.nostr_room_id = "treasury-room".to_string();
+        app.nostr_my_index = 2;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 3;
+        app
+    }
+
+    #[test]
+    fn keygen_status_lines_keep_room_context_across_rounds() {
+        let states = [
+            NostrKeygenState::ModeSelect,
+            NostrKeygenState::WaitingForParties {
+                received_round1: HashMap::new(),
+            },
+            NostrKeygenState::Round2 {
+                received_round2: HashMap::new(),
+            },
+            NostrKeygenState::Finalizing,
+        ];
+
+        for state in states {
+            let mut app = app_with_room_context();
+            app.nostr_keygen_state = state;
+
+            let text = lines_to_string(&keygen_status_lines(&app));
+
+            assert!(text.contains("Room: treasury-room"));
+            assert!(text.contains("Party: 2"));
+            assert!(text.contains("2-of-3"));
+            assert!(text.contains("Scheme: TSS"));
+            assert!(text.contains("Rank: n/a"));
+            assert!(text.contains("Transport: local simulation"));
+        }
+    }
+
+    #[test]
+    fn keygen_status_lines_label_public_and_encrypted_boundaries() {
+        let mut app = app_with_room_context();
+        app.nostr_keygen_state = NostrKeygenState::ModeSelect;
+        let setup = lines_to_string(&keygen_status_lines(&app));
+
+        app.nostr_keygen_state = NostrKeygenState::WaitingForParties {
+            received_round1: HashMap::new(),
+        };
+        let round1 = lines_to_string(&keygen_status_lines(&app));
+
+        app.nostr_keygen_state = NostrKeygenState::Round2 {
+            received_round2: HashMap::new(),
+        };
+        let round2 = lines_to_string(&keygen_status_lines(&app));
+
+        app.nostr_keygen_state = NostrKeygenState::Finalizing;
+        let finalizing = lines_to_string(&keygen_status_lines(&app));
+
+        assert!(setup.contains("public"));
+        assert!(setup.contains("encrypted"));
+        assert!(round1.contains("public commitments"));
+        assert!(round2.contains("encrypted shares"));
+        assert!(finalizing.contains("local share material stays on this device"));
+    }
 }
