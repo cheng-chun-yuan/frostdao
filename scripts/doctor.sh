@@ -624,6 +624,8 @@ def check_audit_logging():
         ("src/audit.rs", audit, "pub struct AuditEvent"),
         ("src/audit.rs", audit, "DEFAULT_AUDIT_LOG"),
         ("src/audit.rs", audit, "audit_event_appends_jsonl_without_secret_fields"),
+        ("src/audit.rs", audit, "audit_event_drops_sensitive_field_names"),
+        ("src/audit.rs", audit, "BLOCKED_FIELD_KEYS"),
         ("src/protocol/dkg_tx.rs", protocol, "AuditEvent::new(\"dkg_build_tx\""),
         ("src/protocol/dkg_tx.rs", protocol, "AuditEvent::new(\"dkg_broadcast\""),
         ("src/protocol/dkg_tx.rs", protocol, "AuditEvent::new(\"frost_auto_sign\""),
@@ -637,7 +639,9 @@ def check_audit_logging():
         ("src/tui/app.rs", app, "fields.get(\"ciphertext\").is_none()"),
         ("src/tui/app.rs", app, "fields.get(\"raw_tx\").is_none()"),
         ("docs/RUN_GUIDE.md", run_guide, "TUI Nostr proposal/consent flows append metadata-only audit events"),
+        ("docs/RUN_GUIDE.md", run_guide, "Audit field insertion drops sensitive field names"),
         ("docs/SECURITY_MODEL.md", security, "Audit events must not include mnemonics"),
+        ("docs/SECURITY_MODEL.md", security, "audit helper drops sensitive field names"),
         ("docs/SECURITY_MODEL.md", security, "FROSTDAO_AUDIT_LOG"),
     ]
     missing = [f"{path}: {marker}" for path, content, marker in required if marker not in content]

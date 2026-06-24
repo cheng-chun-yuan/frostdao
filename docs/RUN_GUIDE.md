@@ -17,7 +17,7 @@ Before a release or recorded walkthrough:
 
 This runs formatting checks, strict Clippy, tests, a debug build, and rustdoc warnings.
 
-Transaction build, broadcast, local auto-sign, and TUI Nostr proposal/consent flows append metadata-only audit events to `.frost_state/audit.jsonl`. Accepted inbound TUI Nostr signing messages are also audited with metadata only. Set `FROSTDAO_AUDIT_LOG=/path/to/audit.jsonl` to move the log for walk-throughs or CI runs.
+Transaction build, broadcast, local auto-sign, and TUI Nostr proposal/consent flows append metadata-only audit events to `.frost_state/audit.jsonl`. Accepted inbound TUI Nostr signing messages are also audited with metadata only. Audit field insertion drops sensitive field names such as ciphertext, raw transactions, full sighashes, nonces, shares, and mnemonics. Set `FROSTDAO_AUDIT_LOG=/path/to/audit.jsonl` to move the log for walk-throughs or CI runs.
 
 ## 2. Open The TUI
 

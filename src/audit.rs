@@ -11,6 +11,22 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 const DEFAULT_AUDIT_LOG: &str = ".frost_state/audit.jsonl";
+const BLOCKED_FIELD_KEYS: &[&str] = &[
+    "ciphertext",
+    "mnemonic",
+    "nonce",
+    "private_key",
+    "raw_tx",
+    "secret",
+    "secret_share",
+    "seed",
+    "share",
+    "sighash",
+    "signing_nonce",
+    "signature_share",
+    "sub_share",
+    "unsigned_tx",
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AuditEvent {
@@ -38,10 +54,18 @@ impl AuditEvent {
     }
 
     pub fn with_field(mut self, key: impl Into<String>, value: impl Serialize) -> Self {
-        let value = serde_json::to_value(value).unwrap_or(Value::Null);
-        self.fields.insert(key.into(), value);
+        let key = key.into();
+        if !is_blocked_field_key(&key) {
+            let value = serde_json::to_value(value).unwrap_or(Value::Null);
+            self.fields.insert(key, value);
+        }
         self
     }
+}
+
+fn is_blocked_field_key(key: &str) -> bool {
+    let normalized = key.trim().to_ascii_lowercase().replace('-', "_");
+    BLOCKED_FIELD_KEYS.contains(&normalized.as_str())
 }
 
 pub fn append(event: &AuditEvent) -> Result<()> {
@@ -109,5 +133,25 @@ mod tests {
         assert!(parsed.get("raw_tx").is_none());
 
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn audit_event_drops_sensitive_field_names() {
+        let event = AuditEvent::new("nostr_signing_share", "treasury", "accepted")
+            .with_field("ciphertext", "encrypted-payload")
+            .with_field("raw_tx", "020000000001")
+            .with_field("sighash", "full-sighash")
+            .with_field("nonce", "secret-nonce")
+            .with_field("signature-share", "secret-share")
+            .with_field("sighash_fingerprint", "001122...aabbcc")
+            .with_field("party_index", 2u32);
+
+        assert!(event.fields.get("ciphertext").is_none());
+        assert!(event.fields.get("raw_tx").is_none());
+        assert!(event.fields.get("sighash").is_none());
+        assert!(event.fields.get("nonce").is_none());
+        assert!(event.fields.get("signature-share").is_none());
+        assert_eq!(event.fields["sighash_fingerprint"], "001122...aabbcc");
+        assert_eq!(event.fields["party_index"], 2);
     }
 }

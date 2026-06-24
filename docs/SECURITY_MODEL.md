@@ -54,7 +54,7 @@ FrostDAO writes metadata-only JSONL audit events to `.frost_state/audit.jsonl` b
 
 Audit events may include wallet name, event type, status, session ID, room ID, transport mode, network, source path, addresses, amount, fee, fee rate, signer indexes, txid, and sighash fingerprint.
 
-Audit events must not include mnemonics, secret shares, private keys, nonces, signature shares, ciphertext payloads, or raw transactions.
+Audit events must not include mnemonics, secret shares, private keys, nonces, signature shares, ciphertext payloads, or raw transactions. The audit helper drops sensitive field names at insertion time as a final guard against accidental logging.
 
 ## Recovery Caution
 
