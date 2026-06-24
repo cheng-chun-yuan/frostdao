@@ -132,7 +132,7 @@ Write down the 24 words and keep the printed backup manifest. Verify the written
 frostdao dkg-verify-mnemonic --name treasury --words '<24 words>'
 ```
 
-The mnemonic is secret. The manifest is public metadata for checking wallet, party, rank, public key, address, and backup ID.
+The mnemonic is secret. `frostdao dkg-restore-mnemonic` restores only that party's local share; it does not reconstruct all shares or the full wallet key. The manifest is public metadata for checking wallet, party, rank, public key, address, and backup ID.
 
 ## 7. Build And Sign A Testnet Transaction
 

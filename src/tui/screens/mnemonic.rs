@@ -186,6 +186,10 @@ fn mnemonic_warning_lines() -> Vec<Line<'static>> {
             Style::default().fg(Color::Gray),
         )),
         Line::from(Span::styled(
+            "• Restore recreates only this party share, not the full wallet key",
+            Style::default().fg(Color::Gray),
+        )),
+        Line::from(Span::styled(
             "  frostdao dkg-verify-mnemonic --name <wallet> --words '<24 words>'",
             Style::default().fg(Color::Cyan),
         )),
@@ -242,6 +246,10 @@ fn mnemonic_reveal_footer_lines() -> Vec<Line<'static>> {
             Style::default().fg(Color::White),
         )),
         Line::from(Span::styled(
+            "Restore scope: dkg-restore-mnemonic restores only this party share.",
+            Style::default().fg(Color::White),
+        )),
+        Line::from(Span::styled(
             "Before relying on this backup, verify the written words with dkg-verify-mnemonic.",
             Style::default().fg(Color::Yellow),
         )),
@@ -279,6 +287,8 @@ mod tests {
         assert!(rendered.contains("threshold cooperation"));
         assert!(rendered.contains("No clipboard or copy shortcut"));
         assert!(rendered.contains("public backup manifest"));
+        assert!(rendered.contains("Restore recreates only this party share"));
+        assert!(rendered.contains("not the full wallet key"));
         assert!(rendered.contains("dkg-verify-mnemonic"));
     }
 
@@ -292,6 +302,7 @@ mod tests {
         assert!(rendered.contains("keep these words offline"));
         assert!(rendered.contains("YOUR share only"));
         assert!(rendered.contains("threshold parties"));
+        assert!(rendered.contains("dkg-restore-mnemonic restores only this party share"));
         assert!(rendered.contains("Before relying on this backup"));
         assert!(rendered.contains("dkg-verify-mnemonic"));
     }

@@ -229,7 +229,7 @@ fields across devices before funding or selecting an HD source for signing.
 | `Esc` | Cancel/back |
 
 The TUI does not provide a mnemonic copy shortcut. This keeps backup words deliberate and avoids accidental clipboard persistence.
-After writing the words down, verify them with `frostdao dkg-verify-mnemonic --name <wallet> --words '<24 words>'` before relying on the backup. Keep the public backup manifest with your wallet inventory; it is not secret.
+After writing the words down, verify them with `frostdao dkg-verify-mnemonic --name <wallet> --words '<24 words>'` before relying on the backup. `frostdao dkg-restore-mnemonic` restores only that party's local share; it does not reconstruct all shares or the full wallet key. Keep the public backup manifest with your wallet inventory; it is not secret.
 
 ## Copyable Outputs
 
