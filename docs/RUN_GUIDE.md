@@ -218,6 +218,7 @@ In every reshare ceremony:
 - Local refresh mode keeps secret share material on each signing device and rewrites that device's full local share set.
 - Distributed round1 outputs are sub-shares only and are required for one target wallet and one recipient party index.
 - The target wallet root public key and root address remain the same as the source wallet, so verify the shared key/address on every participant before signing after the operation.
+- The TUI address check is network-scoped. If the source or target address is unavailable on the selected network, compare the named source and target wallets manually before using the reshared wallet.
 
 ## 9. Recover A Lost Share
 

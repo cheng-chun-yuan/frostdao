@@ -637,6 +637,9 @@ fn reshare_address_verification_lines(
     target_wallet_name: &str,
 ) -> Vec<Line<'static>> {
     let source_wallet = app.wallets.get(form.source_wallet_index);
+    let source_wallet_name = source_wallet
+        .map(|wallet| wallet.name.as_str())
+        .unwrap_or("(missing source wallet)");
     let target_wallet = app
         .wallets
         .iter()
@@ -680,13 +683,25 @@ fn reshare_address_verification_lines(
                 Span::styled(target.to_string(), Style::default().fg(Color::Yellow)),
             ]),
         ],
-        _ => vec![Line::from(vec![
-            Span::styled("Address check: ", Style::default().fg(Color::Gray)),
-            Span::styled(
-                "verify manually - source or target address unavailable",
-                Style::default().fg(Color::Yellow),
-            ),
-        ])],
+        _ => vec![
+            Line::from(vec![
+                Span::styled("Address check: ", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    format!(
+                        "source or target address unavailable on {}",
+                        app.network.display_name()
+                    ),
+                    Style::default().fg(Color::Yellow),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("Compare manually: ", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    format!("{source_wallet_name} -> {target_wallet_name}"),
+                    Style::default().fg(Color::Yellow),
+                ),
+            ]),
+        ],
     }
 }
 
@@ -801,7 +816,8 @@ mod tests {
 
         let rendered = lines_to_string(&reshare_address_verification_lines(&app, &form, "target"));
 
-        assert!(rendered.contains("verify manually"));
+        assert!(rendered.contains("unavailable on Testnet4"));
+        assert!(rendered.contains("Compare manually: source -> target"));
         assert!(rendered.contains("address unavailable"));
     }
 }
