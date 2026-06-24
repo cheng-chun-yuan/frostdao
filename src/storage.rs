@@ -1,5 +1,5 @@
-use anyhow::Result;
-use std::path::PathBuf;
+use anyhow::{bail, Result};
+use std::path::{Component, Path, PathBuf};
 
 #[cfg(test)]
 use std::collections::HashMap;
@@ -76,28 +76,82 @@ impl FileStorage {
         std::fs::create_dir_all(&path)?;
         Ok(Self { base_dir: path })
     }
+
+    fn key_path(&self, key: &str) -> Result<PathBuf> {
+        validate_storage_key(key)?;
+        Ok(self.base_dir.join(key))
+    }
 }
 
 impl Storage for FileStorage {
     fn read(&self, key: &str) -> Result<Vec<u8>> {
-        let path = self.base_dir.join(key);
-        Ok(std::fs::read(path)?)
+        Ok(std::fs::read(self.key_path(key)?)?)
     }
 
     fn write(&self, key: &str, data: &[u8]) -> Result<()> {
-        let path = self.base_dir.join(key);
-        Ok(std::fs::write(path, data)?)
+        Ok(std::fs::write(self.key_path(key)?, data)?)
     }
 
     fn exists(&self, key: &str) -> bool {
-        self.base_dir.join(key).exists()
+        self.key_path(key).is_ok_and(|path| path.exists())
     }
 
     fn delete(&self, key: &str) -> Result<()> {
-        let path = self.base_dir.join(key);
+        let path = self.key_path(key)?;
         if path.exists() {
             std::fs::remove_file(path)?;
         }
         Ok(())
+    }
+}
+
+fn validate_storage_key(key: &str) -> Result<()> {
+    if key.trim().is_empty() {
+        bail!("storage key must not be empty");
+    }
+
+    let path = Path::new(key);
+    if path
+        .components()
+        .all(|component| matches!(component, Component::Normal(_)))
+    {
+        Ok(())
+    } else {
+        bail!(
+            "storage key must be a relative path without traversal: {}",
+            key
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FileStorage, Storage};
+
+    #[test]
+    fn file_storage_rejects_traversal_keys() {
+        let base = std::env::temp_dir().join(format!(
+            "frostdao-storage-traversal-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&base);
+        let storage = FileStorage::new(base.to_str().unwrap()).unwrap();
+
+        for key in [
+            "",
+            "../wallet.json",
+            "/tmp/wallet.json",
+            "wallet/../../secret",
+        ] {
+            assert!(storage.write(key, b"secret").is_err());
+            assert!(storage.read(key).is_err());
+            assert!(!storage.exists(key));
+            assert!(storage.delete(key).is_err());
+        }
+
+        storage.write("wallet.json", b"ok").unwrap();
+        assert_eq!(storage.read("wallet.json").unwrap(), b"ok");
+
+        let _ = std::fs::remove_dir_all(&base);
     }
 }
