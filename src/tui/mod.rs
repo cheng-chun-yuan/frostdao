@@ -2994,7 +2994,7 @@ fn ui(frame: &mut Frame, app: &App) {
     render_help_bar(frame, app, chunks[2]);
 
     if app.show_global_help {
-        render_global_help_overlay(frame);
+        render_global_help_overlay(frame, app);
     }
 }
 
@@ -3063,12 +3063,12 @@ fn render_help_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     frame.render_widget(help, area);
 }
 
-fn render_global_help_overlay(frame: &mut Frame) {
+fn render_global_help_overlay(frame: &mut Frame, app: &App) {
     let popup_area = centered_popup_rect(76, 86, frame.area());
 
     frame.render_widget(Clear, popup_area);
 
-    let help = Paragraph::new(global_help_lines())
+    let help = Paragraph::new(global_help_lines(app))
         .style(Style::default().fg(Color::Gray))
         .block(
             Block::default()
@@ -3113,7 +3113,7 @@ fn centered_popup_rect(
     }
 }
 
-fn global_help_lines() -> Vec<Line<'static>> {
+fn global_help_lines(app: &App) -> Vec<Line<'static>> {
     let copy = COPY_KEY_LABEL;
     let refresh = REFRESH_KEY_LABEL;
     let mut lines = vec![
@@ -3141,12 +3141,43 @@ fn global_help_lines() -> Vec<Line<'static>> {
             .into(),
     ];
 
-    lines.push(Line::from("Keygen / Reshare / Send"));
-    lines.push(Line::from(
-        "Tab:Next field | Enter:Continue | Esc:Back/Cancel",
-    ));
-    lines.push(Line::from("↑/↓/j/k/1/2:Select | p/P:Paste | ␠:Toggle"));
-    lines.push(format!("{copy}:Copy outputs/JSON | Ctrl+u:Clear form (text fields)").into());
+    match &app.state {
+        AppState::Keygen(state) => {
+            lines.push(Line::from("Keygen"));
+            lines.push(Line::from(keygen_help_bar_text(app, state)));
+            match state {
+                KeygenState::ParamsSetup => lines.push(Line::from(
+                    "↑/↓/j/k/1/2:Select | p/P:Paste | ␠:Toggle (in config/JSON fields)",
+                )),
+                KeygenState::Round1Output { .. } | KeygenState::Round2Output { .. } => {
+                    lines.push(Line::from(format!(
+                        "{copy}:Copy outputs/JSON | Ctrl+u:Clear JSON"
+                    )));
+                }
+                _ => {}
+            }
+        }
+        AppState::Reshare(state) => {
+            lines.push(Line::from("Reshare"));
+            lines.push(Line::from(reshare_help_bar_text(state)));
+            lines.push(Line::from("↑/↓/j/k:Select | p/P:Paste | ␠:Toggle"));
+        }
+        AppState::Send(state) => {
+            lines.push(Line::from("Send"));
+            lines.push(Line::from(send_help_bar_text(state)));
+            lines.push(Line::from("↑/↓/j/k:Navigate | p/P:Paste | ␠:Toggle"));
+        }
+        _ => {
+            lines.push(Line::from("Flow"));
+            lines.push(Line::from(
+                "Keygen / Reshare / Send are available from home. Enter them to see flow actions.",
+            ));
+        }
+    }
+
+    lines.push(Line::from(format!(
+        "{copy}:Copy outputs/JSON | Ctrl+u:Clear form (text fields)"
+    )));
     lines.push(Line::from(""));
     lines.push(Line::from("Nostr"));
     lines.push(Line::from(
@@ -3597,7 +3628,8 @@ mod tests {
 
     #[test]
     fn global_help_overlay_lists_network_and_core_actions() {
-        let rendered = lines_to_string(&global_help_lines());
+        let app = App::new().unwrap();
+        let rendered = lines_to_string(&global_help_lines(&app));
         assert!(rendered.contains("Networks supported"));
         assert!(rendered.contains("Networks supported"));
         assert!(rendered.contains("Testnet4/Testnet3/Signet"));
@@ -3605,6 +3637,43 @@ mod tests {
         assert!(rendered.contains("Global"));
         assert!(rendered.contains("Home"));
         assert!(rendered.contains("Wallet Details"));
+    }
+
+    #[test]
+    fn global_help_overlay_tracks_keygen_state() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::Keygen(KeygenState::ParamsSetup);
+        app.keygen_form.hierarchical = true;
+        app.network = NetworkSelection::Testnet3;
+
+        let rendered = lines_to_string(&global_help_lines(&app));
+
+        assert!(rendered.contains("Keygen"));
+        assert!(rendered.contains("Tab:Next field | Enter:Generate"));
+        assert!(rendered.contains("Esc:Back"));
+        assert!(rendered.contains("↑/↓/j/k/1/2:Select"));
+    }
+
+    #[test]
+    fn global_help_overlay_tracks_reshare_state() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::Reshare(ReshareState::ModeSelect);
+
+        let rendered = lines_to_string(&global_help_lines(&app));
+
+        assert!(rendered.contains("Reshare"));
+        assert!(rendered.contains("Enter:Continue"));
+    }
+
+    #[test]
+    fn global_help_overlay_tracks_send_state() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::Send(SendState::SelectWallet);
+
+        let rendered = lines_to_string(&global_help_lines(&app));
+
+        assert!(rendered.contains("Send"));
+        assert!(rendered.contains("Select wallet"));
     }
 
     #[test]
