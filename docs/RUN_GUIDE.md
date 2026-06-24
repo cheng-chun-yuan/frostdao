@@ -270,7 +270,7 @@ Select a wallet, press `p` on the home screen, then fill the agent payment field
 - `Enter` initializes a JSON payment draft using the selected wallet's derived agent address.
 - `c` copies the draft.
 
-This initializes a reviewable draft. Script-path transaction signing is not wired yet.
+This initializes a reviewable draft. Script-path transaction signing is not available in the current TUI flow.
 
 ## 11. Nostr Multi-Device Protocol
 

@@ -2587,7 +2587,7 @@ fn handle_nostr_room_ready(app: &mut App, key: KeyEvent) {
 }
 
 fn nostr_relay_keygen_blocked_message() -> &'static str {
-    "Relay-backed keygen is not wired yet; use local simulation rehearsal or CLI keygen"
+    "Relay keygen is unavailable in this TUI flow; use local rehearsal or CLI keygen"
 }
 
 /// Check if all participants have joined, transition to Ready if so
@@ -3294,7 +3294,7 @@ fn help_bar_text(app: &App) -> String {
                 if app.nostr_local_simulation_transport_active() {
                     "k:Local keygen | s:Sign | Esc:Leave".to_string()
                 } else {
-                    "k:Relay keygen blocked | s:Sign | Esc:Leave".to_string()
+                    "k:Relay keygen unavailable | s:Sign | Esc:Leave".to_string()
                 }
             }
         },
@@ -4331,7 +4331,7 @@ mod tests {
 
         assert_eq!(
             help_bar_text(&app),
-            "k:Relay keygen blocked | s:Sign | Esc:Leave"
+            "k:Relay keygen unavailable | s:Sign | Esc:Leave"
         );
 
         handle_nostr_room_ready(

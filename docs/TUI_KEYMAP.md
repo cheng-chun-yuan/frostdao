@@ -227,7 +227,7 @@ The policy input remains editable. Use the templates as starting points, then ty
 | Configure | `Esc` | Back |
 | Waiting | `Space` | Add a local test participant in local simulation mode |
 | Waiting | `Esc` | Leave room |
-| Ready | `k` | Start local keygen rehearsal; blocked for relay transport |
+| Ready | `k` | Start local keygen rehearsal; unavailable for relay transport |
 | Ready | `s` | Start distributed signing |
 | Ready | `Esc` | Leave room |
 
@@ -237,7 +237,8 @@ room join metadata is public, while signing nonce/share payloads are encrypted.
 The configure status line shows `Blocked` until the room ID, party index,
 threshold, and party count form a valid room.
 In local simulation, `k` starts a local keygen rehearsal. In relay transport,
-`k` is blocked until live relay DKG is wired; use CLI keygen or local rehearsal.
+keygen is intentionally unavailable in the TUI; create keys with CLI keygen,
+then use the room for distributed signing.
 
 ## Nostr Keygen
 

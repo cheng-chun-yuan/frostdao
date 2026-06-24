@@ -25,7 +25,7 @@ Output includes:
 - descriptor type
 - SegWit version
 - sanity-check result
-- warning that spending is not wired yet
+- warning that spending is not available in the current TUI flow
 
 Example output:
 

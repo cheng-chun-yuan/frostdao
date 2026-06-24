@@ -318,7 +318,7 @@ fn ready_help_lines(app: &App) -> Vec<Line<'static>> {
     vec![
         Line::from(vec![
             Span::styled("k", Style::default().fg(Color::DarkGray)),
-            Span::raw(": Keygen blocked for relay  "),
+            Span::raw(": Relay keygen unavailable  "),
             Span::styled("s", Style::default().fg(Color::Cyan)),
             Span::raw(": Start signing  "),
             Span::styled("Esc", Style::default().fg(Color::Yellow)),
@@ -326,7 +326,7 @@ fn ready_help_lines(app: &App) -> Vec<Line<'static>> {
         ]),
         Line::from(""),
         Line::from(Span::styled(
-            "Relay transport: live DKG is not wired yet; use local rehearsal or CLI keygen.",
+            "Relay transport: create keys with CLI keygen, then use this room for signing.",
             Style::default().fg(Color::Yellow),
         )),
     ]
@@ -527,7 +527,7 @@ mod tests {
     }
 
     #[test]
-    fn ready_help_blocks_relay_keygen_until_live_dkg_is_wired() {
+    fn ready_help_explains_relay_keygen_unavailable() {
         let mut app = App::new().unwrap();
         app.force_relay_transport_for_tests = true;
         let rendered = ready_help_lines(&app)
@@ -536,8 +536,8 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
-        assert!(rendered.contains("k: Keygen blocked for relay"));
-        assert!(rendered.contains("live DKG is not wired yet"));
+        assert!(rendered.contains("k: Relay keygen unavailable"));
+        assert!(!rendered.contains("not wired"));
         assert!(rendered.contains("CLI keygen"));
     }
 }
