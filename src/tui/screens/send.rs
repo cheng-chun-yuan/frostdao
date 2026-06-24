@@ -577,6 +577,21 @@ fn hd_address_empty_state_text(form: &SendFormData, network: NetworkSelection) -
     }
 }
 
+pub(crate) fn recipient_network_hint_line(network: NetworkSelection) -> Line<'static> {
+    Line::from(vec![
+        Span::styled("Recipient network: ", Style::default().fg(Color::Gray)),
+        Span::styled(network.display_name(), Style::default().fg(Color::Cyan)),
+        Span::styled(" expects ", Style::default().fg(Color::Gray)),
+        Span::styled(
+            network.recipient_address_prefix_hint(),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" address", Style::default().fg(Color::Gray)),
+    ])
+}
+
 /// Render send wizard
 pub fn render_send(frame: &mut Frame, app: &App, form: &SendFormData, area: Rect) {
     if let crate::tui::state::AppState::Send(state) = &app.state {
@@ -585,7 +600,7 @@ pub fn render_send(frame: &mut Frame, app: &App, form: &SendFormData, area: Rect
             SendState::SelectSigners { .. } => render_select_signers(frame, form, area),
             SendState::SelectAddress { .. } => render_select_address(frame, app, form, area),
             SendState::ConfigureScript { .. } => render_configure_script(frame, form, area),
-            SendState::EnterDetails { .. } => render_enter_details(frame, form, area),
+            SendState::EnterDetails { .. } => render_enter_details(frame, app, form, area),
             SendState::ReviewTransaction { wallet_name } => {
                 render_review_transaction(frame, app, form, wallet_name, area)
             }
@@ -1610,7 +1625,7 @@ fn render_configure_script(frame: &mut Frame, form: &SendFormData, area: Rect) {
     frame.render_widget(help, chunks[4]);
 }
 
-fn render_enter_details(frame: &mut Frame, form: &SendFormData, area: Rect) {
+fn render_enter_details(frame: &mut Frame, app: &App, form: &SendFormData, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan))
@@ -1631,7 +1646,8 @@ fn render_enter_details(frame: &mut Frame, form: &SendFormData, area: Rect) {
         .constraints([
             Constraint::Length(3), // To address
             Constraint::Length(3), // Amount
-            Constraint::Length(3), // Balance info
+            Constraint::Length(2), // Recipient network hint
+            Constraint::Length(4), // Balance info
             Constraint::Min(1),    // Spacer
             Constraint::Length(2), // Error
             Constraint::Length(2), // Help
@@ -1648,6 +1664,9 @@ fn render_enter_details(frame: &mut Frame, form: &SendFormData, area: Rect) {
         left_chunks[1],
         form.focused_field == SendFormField::Amount,
     );
+
+    let network_hint = Paragraph::new(vec![recipient_network_hint_line(app.network)]);
+    frame.render_widget(network_hint, left_chunks[2]);
 
     // Balance and fee info
     let balance_btc = form.total_balance as f64 / 100_000_000.0;
@@ -1726,16 +1745,16 @@ fn render_enter_details(frame: &mut Frame, form: &SendFormData, area: Rect) {
     }
 
     let balance_para = Paragraph::new(balance_lines);
-    frame.render_widget(balance_para, left_chunks[2]);
+    frame.render_widget(balance_para, left_chunks[3]);
 
     if let Some(error) = &form.error_message {
         let error_para = Paragraph::new(error.as_str()).style(Style::default().fg(Color::Red));
-        frame.render_widget(error_para, left_chunks[4]);
+        frame.render_widget(error_para, left_chunks[5]);
     }
 
     let help = Paragraph::new("Tab: Next field | Enter: Prepare TX | Esc: Back")
         .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(help, left_chunks[5]);
+    frame.render_widget(help, left_chunks[6]);
 
     // Right side: UTXOs and recent transactions
     let right_chunks = Layout::default()
@@ -2780,6 +2799,17 @@ mod tests {
         assert!(rendered.contains("Network: Regtest"));
         assert!(rendered.contains("Root Address (no HD tweak)"));
         assert!(rendered.contains("root MPC threshold shares"));
+    }
+
+    #[test]
+    fn recipient_network_hint_names_expected_address_prefix() {
+        let regtest = lines_to_string(vec![recipient_network_hint_line(NetworkSelection::Regtest)]);
+        let mainnet = lines_to_string(vec![recipient_network_hint_line(NetworkSelection::Mainnet)]);
+        let signet = lines_to_string(vec![recipient_network_hint_line(NetworkSelection::Signet)]);
+
+        assert!(regtest.contains("Recipient network: Regtest expects bcrt1... address"));
+        assert!(mainnet.contains("Recipient network: Mainnet expects bc1... address"));
+        assert!(signet.contains("Recipient network: Signet expects tb1... address"));
     }
 
     #[test]

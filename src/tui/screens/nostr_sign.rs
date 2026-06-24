@@ -577,10 +577,24 @@ pub(crate) fn nostr_configure_network_lines(app: &App) -> Vec<Line<'static>> {
         ];
     }
 
-    vec![Line::from(Span::styled(
-        "Enter builds a real unsigned transaction, source path, source address, and BIP341 sighash for cross-device review.",
-        Style::default().fg(Color::DarkGray),
-    ))]
+    vec![
+        Line::from(vec![
+            Span::styled("Recipient network: ", Style::default().fg(Color::Gray)),
+            Span::styled(app.network.display_name(), Style::default().fg(Color::Cyan)),
+            Span::styled(" expects ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                app.network.recipient_address_prefix_hint(),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" address", Style::default().fg(Color::Gray)),
+        ]),
+        Line::from(Span::styled(
+            "Enter builds a real unsigned transaction, source path, source address, and BIP341 sighash for cross-device review.",
+            Style::default().fg(Color::DarkGray),
+        )),
+    ]
 }
 
 fn render_role_selection(frame: &mut Frame, _app: &App, area: Rect) {
@@ -1254,6 +1268,17 @@ mod tests {
         assert!(rendered.contains("local Esplora/mempool API"));
         assert!(rendered.contains("FROSTDAO_REGTEST_MEMPOOL_API"));
         assert!(rendered.contains("testnet4, testnet3, and signet use mempool.space"));
+    }
+
+    #[test]
+    fn configure_network_lines_show_recipient_prefix_when_available() {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Mainnet;
+
+        let rendered = lines_to_string(nostr_configure_network_lines(&app));
+
+        assert!(rendered.contains("Recipient network: Mainnet expects bc1... address"));
+        assert!(rendered.contains("real unsigned transaction"));
     }
 
     #[test]

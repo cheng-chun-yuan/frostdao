@@ -189,6 +189,8 @@ whether the wallet is root-source-only or whether the user should add an
 HD-derived address first.
 Transaction details validation names the active network for recipient-address
 errors and requires an amount in sats greater than 0 before preparing review.
+The recipient field also shows the expected address prefix for the selected
+network (`tb1...`, `bcrt1...`, or `bc1...`) before validation.
 
 The transaction review labels the local-only boundary: share material stays on
 this device, and only the signed raw transaction or TXID leaves the signing

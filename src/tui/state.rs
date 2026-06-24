@@ -62,6 +62,14 @@ impl NetworkSelection {
         }
     }
 
+    pub fn recipient_address_prefix_hint(&self) -> &'static str {
+        match self {
+            Self::Mainnet => "bc1...",
+            Self::Regtest => "bcrt1...",
+            Self::Testnet4 | Self::Testnet3 | Self::Signet => "tb1...",
+        }
+    }
+
     pub fn utxo_api_hint(&self) -> String {
         match self.mempool_api_base() {
             Ok(endpoint) => endpoint,
@@ -652,6 +660,30 @@ mod tests {
         assert_eq!(
             NetworkSelection::Signet.utxo_api_hint(),
             "https://mempool.space/signet/api"
+        );
+    }
+
+    #[test]
+    fn network_selection_recipient_prefix_hint_matches_chain_family() {
+        assert_eq!(
+            NetworkSelection::Testnet4.recipient_address_prefix_hint(),
+            "tb1..."
+        );
+        assert_eq!(
+            NetworkSelection::Testnet3.recipient_address_prefix_hint(),
+            "tb1..."
+        );
+        assert_eq!(
+            NetworkSelection::Signet.recipient_address_prefix_hint(),
+            "tb1..."
+        );
+        assert_eq!(
+            NetworkSelection::Regtest.recipient_address_prefix_hint(),
+            "bcrt1..."
+        );
+        assert_eq!(
+            NetworkSelection::Mainnet.recipient_address_prefix_hint(),
+            "bc1..."
         );
     }
 }
