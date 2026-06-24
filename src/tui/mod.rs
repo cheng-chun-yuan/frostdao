@@ -2977,6 +2977,8 @@ fn help_bar_text(app: &App) -> String {
         AppState::MnemonicBackup(state) => {
             if state.revealed {
                 "Enter:Done | Esc:Back".to_string()
+            } else if !state.party_selected {
+                "↑/↓:Select party | Enter:Continue | Esc:Cancel".to_string()
             } else {
                 "Enter:Reveal | Esc:Cancel".to_string()
             }
@@ -3123,6 +3125,53 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    fn mnemonic_state_for_help(party_selected: bool, revealed: bool) -> MnemonicState {
+        MnemonicState {
+            wallet_name: "treasury".to_string(),
+            available_parties: vec![1, 2, 3],
+            selected_party: 0,
+            words: Vec::new(),
+            error: None,
+            party_selected,
+            revealed,
+            hierarchical: false,
+            party_ranks: std::collections::BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn mnemonic_help_bar_matches_party_selection_stage() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::MnemonicBackup(mnemonic_state_for_help(false, false));
+
+        let help = help_bar_text(&app);
+
+        assert!(help.contains("Select party"));
+        assert!(help.contains("Enter:Continue"));
+        assert!(help.contains("Esc:Cancel"));
+        assert!(!help.contains("Reveal"));
+    }
+
+    #[test]
+    fn mnemonic_help_bar_matches_warning_stage() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::MnemonicBackup(mnemonic_state_for_help(true, false));
+
+        let help = help_bar_text(&app);
+
+        assert_eq!(help, "Enter:Reveal | Esc:Cancel");
+    }
+
+    #[test]
+    fn mnemonic_help_bar_matches_revealed_stage() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::MnemonicBackup(mnemonic_state_for_help(true, true));
+
+        let help = help_bar_text(&app);
+
+        assert_eq!(help, "Enter:Done | Esc:Back");
     }
 
     #[test]

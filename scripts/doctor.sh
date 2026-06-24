@@ -461,6 +461,8 @@ def check_mnemonic_backup_ux():
     keymap = read(Path("docs/TUI_KEYMAP.md"))
     security = read(Path("docs/SECURITY_MODEL.md"))
     required = [
+        ("src/tui/mod.rs", read(Path("src/tui/mod.rs")), "mnemonic_help_bar_matches_party_selection_stage"),
+        ("src/tui/mod.rs", read(Path("src/tui/mod.rs")), "↑/↓:Select party | Enter:Continue | Esc:Cancel"),
         ("src/tui/screens/mnemonic.rs", screen, "No clipboard or copy shortcut"),
         ("src/tui/screens/mnemonic.rs", screen, "No copy shortcut is provided"),
         ("src/tui/screens/mnemonic.rs", screen, "YOUR SECRET SHARE"),
