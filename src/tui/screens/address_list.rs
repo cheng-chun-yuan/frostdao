@@ -98,8 +98,8 @@ pub fn render_address_list(frame: &mut Frame, state: &AddressListState, area: Re
     frame.render_widget(list, main_chunks[0]);
 
     // Right: Details panel with QR code
-    if let Some((addr, _pubkey, index)) = state.addresses.get(state.selected) {
-        render_details_panel(frame, state, addr, *index, main_chunks[1]);
+    if let Some((addr, pubkey, index)) = state.addresses.get(state.selected) {
+        render_details_panel(frame, state, addr, pubkey, *index, main_chunks[1]);
     }
 }
 
@@ -107,6 +107,7 @@ fn render_details_panel(
     frame: &mut Frame,
     state: &AddressListState,
     addr: &str,
+    pubkey: &str,
     index: u32,
     area: Rect,
 ) {
@@ -122,9 +123,9 @@ fn render_details_panel(
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(9), // Info section
-            Constraint::Min(12),   // QR code
-            Constraint::Length(1), // Help
+            Constraint::Length(10), // Info section
+            Constraint::Min(12),    // QR code
+            Constraint::Length(1),  // Help
         ])
         .split(inner);
 
@@ -150,6 +151,16 @@ fn render_details_panel(
             format!("  {}", addr),
             Style::default().fg(Color::Yellow),
         )]),
+        Line::from(vec![
+            Span::styled(
+                "  Child x-only fingerprint: ",
+                Style::default().fg(Color::DarkGray),
+            ),
+            Span::styled(
+                child_pubkey_fingerprint_label(pubkey),
+                Style::default().fg(Color::Cyan),
+            ),
+        ]),
     ];
     info_lines.extend(hd_control_lines());
 
@@ -218,6 +229,11 @@ fn hd_control_lines() -> Vec<Line<'static>> {
             Span::raw("No new root key or single-device private key is created"),
         ]),
     ]
+}
+
+fn child_pubkey_fingerprint_label(pubkey_hex: &str) -> String {
+    frostdao::btc::hd_address::child_pubkey_fingerprint(pubkey_hex)
+        .unwrap_or_else(|_| "invalid child pubkey".to_string())
 }
 
 /// Render a QR code for the given address (square aspect ratio)
@@ -313,5 +329,26 @@ mod tests {
         assert!(rendered.contains("sign this derived path"));
         assert!(rendered.contains("No new root key"));
         assert!(rendered.contains("single-device private key"));
+    }
+
+    #[test]
+    fn child_pubkey_fingerprint_label_is_human_checkable() {
+        let rendered = child_pubkey_fingerprint_label(
+            "1111111111111111111111111111111111111111111111111111111111111111",
+        );
+
+        assert_eq!(rendered.len(), 27);
+        assert!(rendered.contains("..."));
+        assert_eq!(
+            rendered,
+            frostdao::btc::hd_address::child_pubkey_fingerprint(
+                "1111111111111111111111111111111111111111111111111111111111111111"
+            )
+            .unwrap()
+        );
+        assert_eq!(
+            child_pubkey_fingerprint_label("not-hex"),
+            "invalid child pubkey"
+        );
     }
 }

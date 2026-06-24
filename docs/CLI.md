@@ -594,7 +594,9 @@ frostdao dkg-broadcast \
 
 ### dkg-derive-address
 
-Derive a single HD address.
+Derive a single HD address. The output includes the BIP-86 path, derived address,
+child x-only public key, and a short child key fingerprint for multi-device
+comparison.
 
 ```bash
 frostdao dkg-derive-address \
@@ -607,7 +609,8 @@ frostdao dkg-derive-address \
 
 ### dkg-list-addresses
 
-List derived HD addresses.
+List derived HD addresses. Each row includes a child key fingerprint so signers
+can confirm the same threshold-controlled child key across devices.
 
 ```bash
 frostdao dkg-list-addresses \

@@ -21,6 +21,7 @@ use anyhow::{Context, Result};
 use bitcoin::{Address, Network, XOnlyPublicKey};
 use schnorr_fun::frost::SharedKey;
 use secp256kfun::prelude::*;
+use sha2::{Digest, Sha256};
 
 // ============================================================================
 // Address Derivation
@@ -45,6 +46,18 @@ pub fn derive_taproot_address(
 
     let pubkey_hex = hex::encode(pubkey_bytes);
     Ok((address, pubkey_hex))
+}
+
+/// Short, human-checkable fingerprint for a derived child x-only public key.
+pub fn child_pubkey_fingerprint(pubkey_hex: &str) -> Result<String> {
+    let pubkey = hex::decode(pubkey_hex).context("Invalid child pubkey hex")?;
+    if pubkey.len() != 32 {
+        anyhow::bail!("Child x-only pubkey must be 32 bytes");
+    }
+
+    let digest = Sha256::digest(&pubkey);
+    let full = hex::encode(digest);
+    Ok(format!("{}...{}", &full[..12], &full[full.len() - 12..]))
 }
 
 /// List multiple derived addresses (external chain, change=0)
@@ -167,8 +180,10 @@ pub fn derive_address_core(
     out.push_str(&format!("Network: {}\n\n", network_str));
 
     let (addr, pubkey) = derive_taproot_address(&context, &path, network)?;
+    let fingerprint = child_pubkey_fingerprint(&pubkey)?;
 
     out.push_str(&format!("Public Key: {}\n", pubkey));
+    out.push_str(&format!("Child Key Fingerprint: {}\n", fingerprint));
     out.push_str(&format!("Address: {}\n", addr));
     out.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
@@ -206,7 +221,8 @@ pub fn list_addresses_core(
     out.push_str("─────────────────────────────────────────────────────────────────────────────\n");
 
     for (addr, pubkey, idx) in &addresses {
-        out.push_str(&format!("  {:>3}  {}  ({}...)\n", idx, addr, &pubkey[..16]));
+        let fingerprint = child_pubkey_fingerprint(pubkey)?;
+        out.push_str(&format!("  {:>3}  {}  ({})\n", idx, addr, fingerprint));
     }
 
     out.push_str(
@@ -324,5 +340,18 @@ mod tests {
         assert_eq!((receive.change, receive.address_index), (0, 5));
         let change = DerivationPath::change(3);
         assert_eq!((change.change, change.address_index), (1, 3));
+    }
+
+    #[test]
+    fn child_pubkey_fingerprint_is_short_and_stable() {
+        let pubkey_hex = "1111111111111111111111111111111111111111111111111111111111111111";
+
+        let first = child_pubkey_fingerprint(pubkey_hex).unwrap();
+        let second = child_pubkey_fingerprint(pubkey_hex).unwrap();
+
+        assert_eq!(first, second);
+        assert_eq!(first.len(), 27);
+        assert!(first.contains("..."));
+        assert!(child_pubkey_fingerprint("abcd").is_err());
     }
 }
