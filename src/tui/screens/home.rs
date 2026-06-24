@@ -8,7 +8,9 @@ use ratatui::{
     Frame,
 };
 
-use crate::tui::app::{balance_cache_key, wallet_address_for_network, App};
+use crate::tui::app::{
+    balance_cache_key, missing_network_address_message, wallet_address_for_network, App,
+};
 use crate::tui::state::NetworkSelection;
 use crate::tui::{COPY_KEY_LABEL, REFRESH_KEY_LABEL};
 use frostdao::protocol::keygen::WalletSummary;
@@ -153,7 +155,10 @@ fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
                     format!("Address ({}): ", app.network.display_name()),
                     Style::default().fg(Color::Gray),
                 ),
-                Span::styled("not available", Style::default().fg(Color::Red)),
+                Span::styled(
+                    missing_network_address_message(app.network),
+                    Style::default().fg(Color::Red),
+                ),
             ]));
         }
 

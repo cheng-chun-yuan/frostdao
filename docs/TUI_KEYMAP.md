@@ -52,7 +52,7 @@ Core command shortcuts are case-insensitive (for example, `c` and `C` are treate
 | `v` | Show QR code |
 | `Esc` | Back |
 
-Wallet Details shows the active network, policy, address scope, and `UTXO API` before the wallet address, so balance fetch and send readiness use the same network facts as Home and Chain Select.
+Wallet Details shows the active network, policy, address scope, and `UTXO API` before the wallet address, so balance fetch and send readiness use the same network facts as Home and Chain Select. If the selected wallet has no address for the active network, Home and Wallet Details name the missing network address and block send, copy, and QR expectations until the user selects a wallet/network with an address.
 
 Delete confirmation:
 

@@ -42,6 +42,13 @@ pub(crate) fn wallet_address_for_network(
     }
 }
 
+pub(crate) fn missing_network_address_message(network: NetworkSelection) -> String {
+    format!(
+        "missing {} source address; select a wallet/network with an address before send, copy, or QR",
+        network.display_name()
+    )
+}
+
 pub(crate) fn balance_cache_key(wallet_name: &str, network: NetworkSelection) -> String {
     format!("{}:{:?}", wallet_name, network)
 }
@@ -2091,6 +2098,14 @@ mod tests {
             super::balance_cache_key("treasury", NetworkSelection::Testnet3),
             super::balance_cache_key("treasury", NetworkSelection::Mainnet)
         );
+    }
+
+    #[test]
+    fn missing_network_address_message_names_network_and_blocked_actions() {
+        let message = super::missing_network_address_message(NetworkSelection::Mainnet);
+
+        assert!(message.contains("missing Mainnet source address"));
+        assert!(message.contains("before send, copy, or QR"));
     }
 
     #[test]

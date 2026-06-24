@@ -9,7 +9,9 @@ use ratatui::{
     Frame,
 };
 
-use crate::tui::app::{balance_cache_key, wallet_address_for_network, App};
+use crate::tui::app::{
+    balance_cache_key, missing_network_address_message, wallet_address_for_network, App,
+};
 use crate::tui::state::{NetworkSelection, WalletAction, WalletDetailsState};
 use crate::tui::COPY_KEY_LABEL;
 
@@ -202,7 +204,10 @@ fn render_wallet_info(frame: &mut Frame, app: &App, wallet_name: &str, area: Rec
                     format!("Address ({}): ", app.network.display_name()),
                     Style::default().fg(Color::Gray),
                 ),
-                Span::styled("not available", Style::default().fg(Color::Red)),
+                Span::styled(
+                    missing_network_address_message(app.network),
+                    Style::default().fg(Color::Red),
+                ),
             ]));
         }
 
