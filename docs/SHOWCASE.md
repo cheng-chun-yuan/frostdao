@@ -36,13 +36,13 @@ Run the fast quality gate before any walkthrough or review:
 Run a local 2-of-3 DKG walkthrough:
 
 ```bash
-./scripts/demo.sh
+./scripts/dkg-walkthrough.sh
 ```
 
 Run a local resharing walkthrough:
 
 ```bash
-./scripts/demo-reshare.sh
+./scripts/reshare-walkthrough.sh
 ```
 
 Build the CLI:
