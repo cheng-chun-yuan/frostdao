@@ -795,7 +795,7 @@ def check_nostr_transaction_review():
         ("src/tui/app.rs", app, "tui_nostr_signing_attempt_replays_prior_session_nonces"),
         ("src/tui/app.rs", app, "early-share"),
         ("src/tui/mod.rs", tui, "ready_to_combine"),
-        ("src/tui/mod.rs", tui, "press y to consent"),
+        ("src/tui/mod.rs", tui, "press y only after every signer matches review"),
         ("src/tui/mod.rs", tui, "Rejection sent for proposal fingerprint"),
         ("src/tui/mod.rs", tui, "nostr_sign_help_text(&app.nostr_sign_state)"),
         ("src/tui/mod.rs", tui, "y:Consent after review match"),

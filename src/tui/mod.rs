@@ -2908,7 +2908,7 @@ fn handle_nostr_sign_keys(app: &mut App, key: KeyEvent) {
                 }
                 NostrSignState::ReviewProposal { proposal, .. } => {
                     app.message = Some(format!(
-                        "Review fingerprint {}, then press y to consent",
+                        "Review fingerprint {}, then press y only after every signer matches review",
                         proposal.review.sighash_fingerprint
                     ));
                 }
@@ -4534,6 +4534,23 @@ mod tests {
             .unwrap_or("")
             .contains("Consent sent"));
         let _ = std::fs::remove_file(&cache_path);
+    }
+
+    #[test]
+    fn nostr_review_enter_message_requires_cross_device_match() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::NostrSign;
+        app.nostr_sign_state = NostrSignState::ReviewProposal {
+            wallet_name: "wallet-test".to_string(),
+            proposal: reviewable_proposal(),
+        };
+
+        handle_nostr_sign_keys(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+        let message = app.message.as_deref().unwrap_or("");
+        assert!(message.contains("Review fingerprint abc12345"));
+        assert!(message.contains("only after every signer matches review"));
+        assert!(!message.contains("press y to consent"));
     }
 
     #[test]
