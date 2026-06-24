@@ -23,7 +23,7 @@ pub fn render_nostr_sign(frame: &mut Frame, app: &App, area: Rect) {
         .constraints([
             Constraint::Length(3), // Title
             Constraint::Length(3), // Progress bar
-            Constraint::Length(7), // Status/Info
+            Constraint::Length(9), // Status/Info
             Constraint::Min(8),    // Content
             Constraint::Length(3), // Help
         ])
@@ -124,7 +124,12 @@ fn get_progress(state: &NostrSignState, app: &App) -> (u16, String) {
 }
 
 fn render_status_info(frame: &mut Frame, app: &App, area: Rect) {
-    let lines = match &app.nostr_sign_state {
+    let status = Paragraph::new(nostr_sign_status_lines(app));
+    frame.render_widget(status, area);
+}
+
+fn nostr_sign_status_lines<'a>(app: &'a App) -> Vec<Line<'a>> {
+    let state_lines = match &app.nostr_sign_state {
         NostrSignState::ConfigureTx { wallet_name } => {
             let (source_path, source_address, control) =
                 nostr_configure_source_summary(app, wallet_name);
@@ -295,26 +300,9 @@ fn render_status_info(frame: &mut Frame, app: &App, area: Rect) {
                     ),
                 ]),
                 Line::from(vec![
-                    Span::styled("Raw sighash: ", Style::default().fg(Color::Gray)),
+                    Span::styled("Unsigned tx: ", Style::default().fg(Color::Gray)),
                     Span::styled(
-                        format!("{}...", &proposal.sighash[..16.min(proposal.sighash.len())]),
-                        Style::default().fg(Color::DarkGray),
-                    ),
-                ]),
-                Line::from(vec![
-                    Span::styled("Desc: ", Style::default().fg(Color::Gray)),
-                    Span::styled(
-                        if proposal.description.is_empty() {
-                            "No description"
-                        } else {
-                            &proposal.description
-                        },
-                        Style::default().fg(Color::White),
-                    ),
-                    Span::raw("  "),
-                    Span::styled("Time: ", Style::default().fg(Color::Gray)),
-                    Span::styled(
-                        format_timestamp(proposal.timestamp),
+                        unsigned_tx_review_summary(&proposal.unsigned_tx),
                         Style::default().fg(Color::DarkGray),
                     ),
                 ]),
@@ -405,7 +393,20 @@ fn render_status_info(frame: &mut Frame, app: &App, area: Rect) {
                 ]),
             ]
         }
-        _ => {
+        NostrSignState::ViewProposals { wallet_name }
+        | NostrSignState::WaitingForExecution { wallet_name, .. } => {
+            vec![
+                Line::from(vec![
+                    Span::styled("Wallet: ", Style::default().fg(Color::Gray)),
+                    Span::styled(wallet_name, Style::default().fg(Color::White)),
+                ]),
+                Line::from(Span::styled(
+                    "Boundary: proposals are public metadata; signing nonce/share payloads are encrypted.",
+                    Style::default().fg(Color::DarkGray),
+                )),
+            ]
+        }
+        NostrSignState::SelectWallet => {
             vec![Line::from(Span::styled(
                 "Select a wallet to start...",
                 Style::default().fg(Color::DarkGray),
@@ -413,8 +414,33 @@ fn render_status_info(frame: &mut Frame, app: &App, area: Rect) {
         }
     };
 
-    let status = Paragraph::new(lines);
-    frame.render_widget(status, area);
+    with_nostr_sign_context(app, state_lines)
+}
+
+fn with_nostr_sign_context<'a>(app: &'a App, mut state_lines: Vec<Line<'a>>) -> Vec<Line<'a>> {
+    let room_id = if app.nostr_room_id.trim().is_empty() {
+        "(unset)".to_string()
+    } else {
+        app.nostr_room_id.clone()
+    };
+    let mut lines = vec![
+        Line::from(Span::styled(
+            format!(
+                "Room: {} | Party: {} | Threshold: {}-of-{}",
+                room_id, app.nostr_my_index, app.nostr_threshold, app.nostr_n_parties
+            ),
+            Style::default().fg(Color::Yellow),
+        )),
+        Line::from(Span::styled(
+            format!(
+                "Scheme: TSS | Rank: n/a | Transport: {}",
+                app.nostr_transport_label()
+            ),
+            Style::default().fg(Color::Yellow),
+        )),
+    ];
+    lines.append(&mut state_lines);
+    lines
 }
 
 pub(crate) fn nostr_configure_source_summary(
@@ -922,29 +948,6 @@ pub(crate) fn nostr_sign_help_text(state: &NostrSignState) -> &'static str {
     }
 }
 
-/// Format unix timestamp as relative time or short date
-fn format_timestamp(timestamp: u64) -> String {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-
-    if timestamp == 0 {
-        return "unknown".to_string();
-    }
-
-    let diff = now.saturating_sub(timestamp);
-    if diff < 60 {
-        "just now".to_string()
-    } else if diff < 3600 {
-        format!("{}m ago", diff / 60)
-    } else if diff < 86400 {
-        format!("{}h ago", diff / 3600)
-    } else {
-        format!("{}d ago", diff / 86400)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1007,6 +1010,86 @@ mod tests {
             signing_requirement: None,
             party_ranks: None::<BTreeMap<u32, u32>>,
         }
+    }
+
+    fn app_with_room_context() -> App {
+        let mut app = App::new().unwrap();
+        app.nostr_room_id = "treasury-room".to_string();
+        app.nostr_my_index = 2;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 3;
+        app
+    }
+
+    #[test]
+    fn nostr_sign_status_keeps_room_context_across_states() {
+        let proposal = test_review_proposal();
+        let states = [
+            NostrSignState::SelectWallet,
+            NostrSignState::SelectRole {
+                wallet_name: "treasury".to_string(),
+            },
+            NostrSignState::ConfigureTx {
+                wallet_name: "treasury".to_string(),
+            },
+            NostrSignState::WaitingForConsent {
+                wallet_name: "treasury".to_string(),
+                session_id: "session-a".to_string(),
+                proposal: proposal.clone(),
+                consents: HashMap::new(),
+                rejections: HashMap::new(),
+            },
+            NostrSignState::ViewProposals {
+                wallet_name: "treasury".to_string(),
+            },
+            NostrSignState::ReviewProposal {
+                wallet_name: "treasury".to_string(),
+                proposal: proposal.clone(),
+            },
+            NostrSignState::WaitingForExecution {
+                wallet_name: "treasury".to_string(),
+                session_id: "session-a".to_string(),
+            },
+            NostrSignState::CollectingShares {
+                wallet_name: "treasury".to_string(),
+                session_id: "session-a".to_string(),
+                received_shares: HashMap::new(),
+            },
+            NostrSignState::Combining {
+                wallet_name: "treasury".to_string(),
+                session_id: "session-a".to_string(),
+            },
+            NostrSignState::Complete {
+                txid: "abc123456789".to_string(),
+            },
+        ];
+
+        for state in states {
+            let mut app = app_with_room_context();
+            app.nostr_sign_state = state;
+
+            let rendered = lines_to_string(nostr_sign_status_lines(&app));
+
+            assert!(rendered.contains("Room: treasury-room"));
+            assert!(rendered.contains("Party: 2"));
+            assert!(rendered.contains("Threshold: 2-of-3"));
+            assert!(rendered.contains("Scheme: TSS"));
+            assert!(rendered.contains("Rank: n/a"));
+            assert!(rendered.contains("Transport: local simulation"));
+        }
+    }
+
+    #[test]
+    fn nostr_sign_status_labels_public_and_encrypted_boundaries() {
+        let mut app = app_with_room_context();
+        app.nostr_sign_state = NostrSignState::ViewProposals {
+            wallet_name: "treasury".to_string(),
+        };
+
+        let rendered = lines_to_string(nostr_sign_status_lines(&app));
+
+        assert!(rendered.contains("proposals are public metadata"));
+        assert!(rendered.contains("signing nonce/share payloads are encrypted"));
     }
 
     #[test]
