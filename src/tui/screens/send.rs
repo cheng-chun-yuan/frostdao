@@ -2060,7 +2060,7 @@ fn render_show_sighash(frame: &mut Frame, sighash: &str, area: Rect) {
         .wrap(Wrap { trim: false });
     frame.render_widget(sighash_para, chunks[1]);
 
-    let help = Paragraph::new("c: Copy | Enter: Generate Nonce | Esc: Back")
+    let help = Paragraph::new("c/C: Copy | Enter: Generate Nonce | Esc: Back")
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[2]);
 }
@@ -2115,7 +2115,7 @@ fn render_generate_nonce(frame: &mut Frame, nonce_output: &str, area: Rect) {
         .wrap(Wrap { trim: false });
     frame.render_widget(nonce_para, chunks[1]);
 
-    let help = Paragraph::new("c: Copy | Enter: Collect nonces from others | Esc: Back")
+    let help = Paragraph::new("c/C: Copy | Enter: Collect nonces from others | Esc: Back")
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[2]);
 }
@@ -2236,7 +2236,7 @@ fn render_generate_share(frame: &mut Frame, share_output: &str, area: Rect) {
         .wrap(Wrap { trim: false });
     frame.render_widget(share_para, chunks[1]);
 
-    let help = Paragraph::new("c: Copy | Enter: Combine (Aggregator) | Esc: Done")
+    let help = Paragraph::new("c/C: Copy | Enter: Combine (Aggregator) | Esc: Done")
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[2]);
 }
@@ -2406,7 +2406,7 @@ fn render_complete(
     frame.render_widget(info, chunks[1]);
 
     let help = Paragraph::new(Line::from(vec![
-        Span::styled("c", Style::default().fg(Color::Yellow)),
+        Span::styled("c/C", Style::default().fg(Color::Yellow)),
         Span::raw(if raw_tx.is_some() {
             ": Copy raw TX | "
         } else {

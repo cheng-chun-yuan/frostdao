@@ -433,7 +433,7 @@ fn render_action_menu(frame: &mut Frame, state: &WalletDetailsState, area: Rect)
         Span::raw(" Navigate  "),
         Span::styled("Enter", Style::default().fg(Color::Yellow)),
         Span::raw(" Select  "),
-        Span::styled("c", Style::default().fg(Color::Yellow)),
+        Span::styled("c/C", Style::default().fg(Color::Yellow)),
         Span::raw(" Copy  "),
         Span::styled("v", Style::default().fg(Color::Yellow)),
         Span::raw(" QR  "),

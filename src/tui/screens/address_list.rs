@@ -194,10 +194,15 @@ fn render_details_panel(
     render_qr_code(frame, addr, chunks[1]);
 
     // Help text
-    let help = Paragraph::new(Line::from(vec![
-        Span::styled("c", Style::default().fg(Color::Yellow)),
+    let help = Paragraph::new(address_list_help_line());
+    frame.render_widget(help, chunks[2]);
+}
+
+fn address_list_help_line() -> Line<'static> {
+    Line::from(vec![
+        Span::styled("c/C", Style::default().fg(Color::Yellow)),
         Span::styled(" Copy ", Style::default().fg(Color::DarkGray)),
-        Span::styled("b", Style::default().fg(Color::Yellow)),
+        Span::styled("b/r/F5", Style::default().fg(Color::Yellow)),
         Span::styled(" Bal ", Style::default().fg(Color::DarkGray)),
         Span::styled("+/a", Style::default().fg(Color::Green)),
         Span::styled(" Add ", Style::default().fg(Color::DarkGray)),
@@ -207,8 +212,7 @@ fn render_details_panel(
         Span::styled(" Nav ", Style::default().fg(Color::DarkGray)),
         Span::styled("Esc", Style::default().fg(Color::Yellow)),
         Span::styled(" Back", Style::default().fg(Color::DarkGray)),
-    ]));
-    frame.render_widget(help, chunks[2]);
+    ])
 }
 
 fn hd_control_lines() -> Vec<Line<'static>> {
@@ -350,5 +354,20 @@ mod tests {
             child_pubkey_fingerprint_label("not-hex"),
             "invalid child pubkey"
         );
+    }
+
+    #[test]
+    fn address_list_help_mentions_copy_and_refresh_aliases() {
+        let line = address_list_help_line();
+        let rendered = line
+            .spans
+            .iter()
+            .map(|span| span.content.to_string())
+            .collect::<Vec<_>>()
+            .join("");
+
+        assert!(rendered.contains("c/C"));
+        assert!(rendered.contains("b/r/F5"));
+        assert!(rendered.contains("↑↓"));
     }
 }

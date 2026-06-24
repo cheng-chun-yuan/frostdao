@@ -124,7 +124,7 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
                 app.set_message("No wallet selected");
             }
         }
-        KeyCode::Char('r') | KeyCode::F(5) => app.refresh_balance(),
+        KeyCode::Char('b') | KeyCode::Char('r') | KeyCode::F(5) => app.refresh_balance(),
         KeyCode::Char('R') => app.reload_wallets(),
         KeyCode::Char('n') => {
             app.chain_selector_index = match app.network {
@@ -2154,7 +2154,7 @@ fn handle_address_list_keys(app: &mut App, code: KeyCode) {
                 app.copy_to_clipboard(&addr);
             }
         }
-        KeyCode::Char('b') => {
+        KeyCode::Char('b') | KeyCode::Char('r') | KeyCode::F(5) => {
             // Fetch balance for selected address
             let addr_info = if let AppState::AddressList(ref state) = app.state {
                 state
@@ -3005,7 +3005,7 @@ fn help_bar_text(app: &App) -> String {
         AppState::Reshare(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
         AppState::Send(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
         AppState::AddressList(_) => {
-            "↑/↓:Navigate | c/C:Copy | b:Balance | a:Add | x:Remove | Esc:Back".to_string()
+            "↑/↓:Navigate | c/C:Copy | b/r/F5:Balance | a:Add | x:Remove | Esc:Back".to_string()
         }
         AppState::MnemonicBackup(state) => {
             if state.revealed {
@@ -3041,11 +3041,11 @@ fn help_bar_text(app: &App) -> String {
 fn home_help_bar_text() -> String {
     #[cfg(feature = "miniscript-policy")]
     {
-        "↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | r/F5:Balance | c/C:Copy | q:Quit".to_string()
+        "↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | b/r/F5:Balance | c/C:Copy | q:Quit".to_string()
     }
     #[cfg(not(feature = "miniscript-policy"))]
     {
-        "↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | r/F5:Balance | c/C:Copy | q:Quit"
+        "↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | b/r/F5:Balance | c/C:Copy | q:Quit"
             .to_string()
     }
 }
@@ -3089,7 +3089,7 @@ mod tests {
         let app = App::new().unwrap();
         let help = help_bar_text(&app);
 
-        assert!(help.contains("r/F5:Balance"));
+        assert!(help.contains("b/r/F5:Balance"));
         assert!(help.contains("Enter:Select"));
         assert!(help.contains("c/C:Copy"));
     }

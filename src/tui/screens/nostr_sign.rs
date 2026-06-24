@@ -943,7 +943,7 @@ pub(crate) fn nostr_sign_help_text(state: &NostrSignState) -> &'static str {
             "Tab:Field | Enter:Publish proposal | Ctrl+u:Clear field | Esc:Back"
         }
         NostrSignState::ReviewProposal { .. } => "y: Consent | r: Reject | Esc: Back",
-        NostrSignState::Complete { .. } => "Enter: Done | c: Copy TXID",
+        NostrSignState::Complete { .. } => "Enter: Done | c/C: Copy TXID",
         _ => "Enter: Continue | Esc: Cancel",
     }
 }

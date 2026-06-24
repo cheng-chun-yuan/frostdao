@@ -13,8 +13,8 @@ This is the maintained keyboard convention for FrostDAO TUI.
 | `Tab` / `Shift-Tab` | Next/previous form field |
 | `Space` | Toggle checkbox or binary option |
 | `c` / `C` | Copy current selected/output value when the screen has copyable output (`c`/`C` both work). |
-| `r` | Refresh, retry, or reject depending on screen context |
-| `F5` | Refresh selected wallet balance on Home (UI compatibility alias for `r`). |
+| `b` / `r` / `F5` | Refresh wallet/address balance (context dependent) |
+| `F5` | Refresh selected wallet balance across home and address list as `b`/`r` compatibility. |
 | `q` | Quit only from home; close QR popup when shown |
 
 Prefer lowercase shortcuts in help text. Uppercase/layered aliases are compatibility-only (`C` for copy, `F5` for home refresh), not primary bindings.
@@ -34,7 +34,7 @@ Prefer lowercase shortcuts in help text. Uppercase/layered aliases are compatibi
 | `a` | View derived addresses |
 | `m` | Show mnemonic backup flow |
 | `c` / `C` | Copy selected wallet address |
-| `r` / `F5` | Refresh selected wallet balance |
+| `b` / `r` / `F5` | Refresh selected wallet balance |
 | `R` | Reload wallet list |
 | `q` | Quit |
 
@@ -167,8 +167,8 @@ broadcast fails, use `c`/`C` to copy the raw transaction for manual broadcast.
 | Key | Action |
 |-----|--------|
 | `↑/↓`, `j/k` | Select derived address |
-| `c` / `C` | Copy selected address |
-| `b` | Fetch selected address balance |
+| `c` / `C` | Copy selected wallet address |
+| `b` / `r` / `F5` | Fetch selected address balance |
 | `+`, `a` | Add next derived address |
 | `-`, `x` | Remove last derived address |
 | `Esc` | Back |
