@@ -429,7 +429,7 @@ fn render_action_menu(frame: &mut Frame, state: &WalletDetailsState, area: Rect)
     };
 
     let help = Paragraph::new(Line::from(vec![
-        Span::styled("↑/↓", Style::default().fg(Color::Yellow)),
+        Span::styled("j/k/↑/↓", Style::default().fg(Color::Yellow)),
         Span::raw(" Navigate  "),
         Span::styled("Enter", Style::default().fg(Color::Yellow)),
         Span::raw(" Select  "),

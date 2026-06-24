@@ -773,7 +773,7 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
                 app.keygen_form = screens::KeygenFormData::new();
                 app.state = AppState::Home;
             }
-            KeyCode::Up | KeyCode::Down => {
+            KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
                 // Toggle between TSS and HTSS
                 app.keygen_form.hierarchical = !app.keygen_form.hierarchical;
             }
@@ -2996,22 +2996,22 @@ fn help_bar_text(app: &App) -> String {
             if state.confirm_delete {
                 "Type wallet name | Enter:Delete | Backspace:Edit | Esc:Cancel".to_string()
             } else {
-                "↑/↓:Navigate | Enter:Select | b/r/F5:Balance | c/C:Copy | v:QR | Esc:Back"
+                "j/k/↑/↓:Navigate | Enter:Select | b/r/F5:Balance | c/C:Copy | v:QR | Esc:Back"
                     .to_string()
             }
         }
-        AppState::ChainSelect => "↑/↓:Select | Enter:Confirm | Esc:Cancel".to_string(),
+        AppState::ChainSelect => "j/k/↑/↓:Select | Enter:Confirm | Esc:Cancel".to_string(),
         AppState::Keygen(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
         AppState::Reshare(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
         AppState::Send(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
         AppState::AddressList(_) => {
-            "↑/↓:Navigate | c/C:Copy | b/r/F5:Balance | a:Add | x:Remove | Esc:Back".to_string()
+            "j/k/↑/↓:Navigate | c/C:Copy | b/r/F5:Balance | a:Add | x:Remove | Esc:Back".to_string()
         }
         AppState::MnemonicBackup(state) => {
             if state.revealed {
                 "Enter:Done | Esc:Back".to_string()
             } else if !state.party_selected {
-                "↑/↓:Select party | Enter:Continue | Esc:Cancel".to_string()
+                "j/k/↑/↓:Select party | Enter:Continue | Esc:Cancel".to_string()
             } else {
                 "Enter:Reveal | Esc:Cancel".to_string()
             }
@@ -3041,11 +3041,12 @@ fn help_bar_text(app: &App) -> String {
 fn home_help_bar_text() -> String {
     #[cfg(feature = "miniscript-policy")]
     {
-        "↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | b/r/F5:Balance | c/C:Copy | q:Quit".to_string()
+        "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | b/r/F5:Balance | c/C:Copy | q:Quit"
+            .to_string()
     }
     #[cfg(not(feature = "miniscript-policy"))]
     {
-        "↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | b/r/F5:Balance | c/C:Copy | q:Quit"
+        "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | b/r/F5:Balance | c/C:Copy | q:Quit"
             .to_string()
     }
 }
@@ -3089,9 +3090,31 @@ mod tests {
         let app = App::new().unwrap();
         let help = help_bar_text(&app);
 
+        assert!(help.contains("j/k/↑/↓"));
         assert!(help.contains("b/r/F5:Balance"));
         assert!(help.contains("Enter:Select"));
         assert!(help.contains("c/C:Copy"));
+    }
+
+    #[test]
+    fn keygen_mode_select_accepts_j_k_shortcuts() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::Keygen(KeygenState::ModeSelect);
+        app.keygen_form.hierarchical = false;
+
+        handle_keygen_keys(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
+        );
+
+        assert!(app.keygen_form.hierarchical);
+
+        handle_keygen_keys(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE),
+        );
+
+        assert!(!app.keygen_form.hierarchical);
     }
 
     #[test]

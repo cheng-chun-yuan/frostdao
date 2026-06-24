@@ -109,7 +109,7 @@ pub fn render_chain_select(frame: &mut Frame, app: &App, area: Rect) {
     // Enhanced help text
     let help_lines = vec![
         Line::from(vec![
-            Span::styled("↑/↓", Style::default().fg(Color::Yellow)),
+            Span::styled("j/k/↑/↓", Style::default().fg(Color::Yellow)),
             Span::raw(": Navigate  "),
             Span::styled("Enter", Style::default().fg(Color::Yellow)),
             Span::raw(": Confirm  "),

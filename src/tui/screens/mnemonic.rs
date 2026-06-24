@@ -88,7 +88,7 @@ pub fn render_mnemonic(frame: &mut Frame, state: &MnemonicState, area: Rect) {
 
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
-            "↑/↓: Select | Enter: Continue | Esc: Cancel",
+            "j/k/↑/↓: Select | Enter: Continue | Esc: Cancel",
             Style::default().fg(Color::DarkGray),
         )));
 

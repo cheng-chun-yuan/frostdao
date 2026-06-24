@@ -208,7 +208,7 @@ fn address_list_help_line() -> Line<'static> {
         Span::styled(" Add ", Style::default().fg(Color::DarkGray)),
         Span::styled("-/x", Style::default().fg(Color::Red)),
         Span::styled(" Del ", Style::default().fg(Color::DarkGray)),
-        Span::styled("↑↓", Style::default().fg(Color::Yellow)),
+        Span::styled("j/k/↑/↓", Style::default().fg(Color::Yellow)),
         Span::styled(" Nav ", Style::default().fg(Color::DarkGray)),
         Span::styled("Esc", Style::default().fg(Color::Yellow)),
         Span::styled(" Back", Style::default().fg(Color::DarkGray)),
@@ -368,6 +368,6 @@ mod tests {
 
         assert!(rendered.contains("c/C"));
         assert!(rendered.contains("b/r/F5"));
-        assert!(rendered.contains("↑↓"));
+        assert!(rendered.contains("j/k/↑/↓"));
     }
 }

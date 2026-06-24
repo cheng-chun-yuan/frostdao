@@ -667,7 +667,7 @@ fn render_select_wallet(frame: &mut Frame, app: &App, form: &SendFormData, area:
         frame.render_widget(error_para, chunks[3]);
     }
 
-    let help = Paragraph::new("↑/↓: Select wallet | Enter: Continue | Esc: Cancel")
+    let help = Paragraph::new("j/k/↑/↓: Select wallet | Enter: Continue | Esc: Cancel")
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[4]);
 }
@@ -757,7 +757,7 @@ fn render_select_signers(frame: &mut Frame, form: &SendFormData, area: Rect) {
         frame.render_widget(error_para, chunks[3]);
     }
 
-    let help = Paragraph::new("↑/↓: Navigate | Space: Toggle | Enter: Continue | Esc: Back")
+    let help = Paragraph::new("j/k/↑/↓: Navigate | Space: Toggle | Enter: Continue | Esc: Back")
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[4]);
 }
@@ -1194,7 +1194,7 @@ fn render_select_address(frame: &mut Frame, app: &App, form: &SendFormData, area
         frame.render_widget(error_para, chunks[3]);
     }
 
-    let help = Paragraph::new("↑/↓: Navigate | Enter: Continue | Esc: Back")
+    let help = Paragraph::new("j/k/↑/↓: Navigate | Enter: Continue | Esc: Back")
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[4]);
 }
@@ -1555,7 +1555,7 @@ fn render_configure_script(frame: &mut Frame, form: &SendFormData, area: Rect) {
     }
 
     let help = Paragraph::new(
-        "↑/↓: Select type | Tab: Next field | Space: Toggle | Enter: Continue | Esc: Back",
+        "j/k/↑/↓: Select type | Tab: Next field | Space: Toggle | Enter: Continue | Esc: Back",
     )
     .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[4]);

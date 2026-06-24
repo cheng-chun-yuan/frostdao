@@ -152,7 +152,7 @@ fn render_mode_select(frame: &mut Frame, form: &ReshareFormData, area: Rect) {
         .block(Block::default().borders(Borders::ALL).title("Reshare Mode"));
     frame.render_widget(mode_list, chunks[1]);
 
-    let help = Paragraph::new("↑/↓: Select | Enter: Continue | Esc: Cancel")
+    let help = Paragraph::new("j/k/↑/↓: Select | Enter: Continue | Esc: Cancel")
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[2]);
 }
@@ -201,7 +201,7 @@ fn render_local_setup(frame: &mut Frame, app: &App, form: &ReshareFormData, area
         .unwrap_or_else(|| "(no wallets)".to_string());
 
     let wallet_para =
-        Paragraph::new(format!("  {}  (↑/↓ to change)", wallet_name)).block(wallet_block);
+        Paragraph::new(format!("  {}  (j/k/↑/↓ to change)", wallet_name)).block(wallet_block);
     frame.render_widget(wallet_para, chunks[0]);
 
     // Target name
@@ -260,7 +260,7 @@ fn render_local_setup(frame: &mut Frame, app: &App, form: &ReshareFormData, area
     }
 
     // Help
-    let help = Paragraph::new("Tab: Next | ↑/↓: Select wallet | Enter: Reshare | Esc: Back")
+    let help = Paragraph::new("Tab: Next | j/k/↑/↓: Select wallet | Enter: Reshare | Esc: Back")
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[6]);
 }
@@ -361,7 +361,7 @@ fn render_round1_setup(frame: &mut Frame, app: &App, form: &ReshareFormData, are
         .unwrap_or("(no wallets)");
 
     let wallet_para =
-        Paragraph::new(format!("  {}  (↑/↓ to change)", wallet_name)).block(wallet_block);
+        Paragraph::new(format!("  {}  (j/k/↑/↓ to change)", wallet_name)).block(wallet_block);
     frame.render_widget(wallet_para, chunks[0]);
 
     // New threshold
@@ -389,7 +389,7 @@ fn render_round1_setup(frame: &mut Frame, app: &App, form: &ReshareFormData, are
     }
 
     // Help
-    let help = Paragraph::new("Tab: Next | ↑/↓: Select wallet | Enter: Generate | Esc: Cancel")
+    let help = Paragraph::new("Tab: Next | j/k/↑/↓: Select wallet | Enter: Generate | Esc: Cancel")
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[5]);
 }

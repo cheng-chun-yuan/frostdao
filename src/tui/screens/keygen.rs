@@ -246,7 +246,7 @@ fn render_mode_select(frame: &mut Frame, form: &KeygenFormData, area: Rect) {
     .block(htss_block);
     frame.render_widget(htss_para, chunks[2]);
 
-    let help = Paragraph::new("↑/↓ or 1/2: Select | Enter: Continue | Esc: Cancel")
+    let help = Paragraph::new("j/k/↑/↓/1/2: Select | Enter: Continue | Esc: Cancel")
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[4]);
 }

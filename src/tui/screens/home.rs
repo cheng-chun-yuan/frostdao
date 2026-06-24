@@ -229,7 +229,7 @@ fn render_shortcuts(frame: &mut Frame, has_wallet: bool, area: Rect) {
             Span::raw(" Network"),
         ]),
         Line::from(vec![
-            Span::styled("↑/↓", Style::default().fg(Color::Green)),
+            Span::styled("j/k/↑/↓", Style::default().fg(Color::Green)),
             Span::raw(" Navigate   "),
             Span::styled("Enter", Style::default().fg(Color::Green)),
             Span::raw(" Open wallet   "),
