@@ -265,6 +265,7 @@ impl App {
         if amount_sats == 0 {
             anyhow::bail!("amount must be greater than zero");
         }
+        self.ensure_nostr_proposal_network_available()?;
 
         let wallet = self
             .wallets
@@ -297,6 +298,16 @@ impl App {
             serde_json::from_str(&build.result)?;
 
         Ok(self.nostr_tx_proposal_from_build_output(wallet_name, timestamp, build_output))
+    }
+
+    pub(crate) fn ensure_nostr_proposal_network_available(&self) -> Result<()> {
+        self.network.mempool_api_base().map(|_| ()).map_err(|_| {
+            anyhow::anyhow!(
+                "Nostr transaction proposals are unavailable on {}; {}. Use the local-node CLI workflow until TUI local-node UTXO support is wired.",
+                self.network.display_name(),
+                self.network.policy_hint()
+            )
+        })
     }
 
     pub(crate) fn nostr_to_address_value(&self) -> &str {
@@ -2169,6 +2180,23 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("has no known Testnet3 source address"));
+    }
+
+    #[test]
+    fn tui_nostr_tx_proposal_rejects_regtest_remote_build() {
+        let mut app = app_with_wallet(Some(test_address(Network::Regtest)));
+        app.network = NetworkSelection::Regtest;
+        app.nostr_to_address = test_address(Network::Regtest);
+        app.nostr_amount_sats = 50_000;
+
+        let err = app
+            .build_nostr_tx_proposal("wallet-test", 1_700_000_000)
+            .unwrap_err()
+            .to_string();
+
+        assert!(err.contains("unavailable on Regtest"));
+        assert!(err.contains("local-node workflow"));
+        assert!(err.contains("local-node CLI workflow"));
     }
 
     #[test]

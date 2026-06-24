@@ -508,25 +508,44 @@ fn render_configure_tx(frame: &mut Frame, app: &App, wallet_name: &str, area: Re
         .render(frame, rows[1], app.nostr_tx_focus == NostrTxField::Amount);
 
     let (_, source_address, _) = nostr_configure_source_summary(app, wallet_name);
-    let details = Paragraph::new(vec![
+    let mut detail_lines = vec![
         Line::from(vec![
             Span::styled("Source: ", Style::default().fg(Color::Gray)),
             Span::styled(source_address, Style::default().fg(Color::White)),
         ]),
         Line::from(""),
-        Line::from(Span::styled(
-            "Enter builds a real unsigned transaction, source path, source address, and BIP341 sighash for cross-device review.",
-            Style::default().fg(Color::DarkGray),
-        )),
-    ])
-    .block(
-        Block::default()
-            .borders(Borders::ALL)
-            .title(" Proposal Draft ")
-            .border_style(Style::default().fg(Color::DarkGray)),
-    )
-    .wrap(ratatui::widgets::Wrap { trim: false });
+    ];
+    detail_lines.extend(nostr_configure_network_lines(app));
+
+    let details = Paragraph::new(detail_lines)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Proposal Draft ")
+                .border_style(Style::default().fg(Color::DarkGray)),
+        )
+        .wrap(ratatui::widgets::Wrap { trim: false });
     frame.render_widget(details, rows[2]);
+}
+
+pub(crate) fn nostr_configure_network_lines(app: &App) -> Vec<Line<'static>> {
+    if let Err(error) = app.ensure_nostr_proposal_network_available() {
+        return vec![
+            Line::from(vec![
+                Span::styled("Unavailable: ", Style::default().fg(Color::Red)),
+                Span::styled(error.to_string(), Style::default().fg(Color::Red)),
+            ]),
+            Line::from(Span::styled(
+                "Switch to testnet4, testnet3, or signet for remote mempool.space proposal building.",
+                Style::default().fg(Color::DarkGray),
+            )),
+        ];
+    }
+
+    vec![Line::from(Span::styled(
+        "Enter builds a real unsigned transaction, source path, source address, and BIP341 sighash for cross-device review.",
+        Style::default().fg(Color::DarkGray),
+    ))]
 }
 
 fn render_role_selection(frame: &mut Frame, _app: &App, area: Rect) {
@@ -950,6 +969,19 @@ mod tests {
         }
     }
 
+    fn lines_to_string(lines: Vec<Line<'_>>) -> String {
+        lines
+            .into_iter()
+            .map(|line| {
+                line.spans
+                    .into_iter()
+                    .map(|span| span.content.into_owned())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     fn wallet_summary(name: &str, address: &str) -> WalletSummary {
         WalletSummary {
             name: name.to_string(),
@@ -1009,6 +1041,19 @@ mod tests {
         assert_eq!(path, "m/86'/1'/0'/0/9");
         assert_eq!(address, "tb1pagentderived");
         assert!(control.contains("HD tweak"));
+    }
+
+    #[test]
+    fn configure_network_lines_explain_regtest_unavailable() {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Regtest;
+
+        let rendered = lines_to_string(nostr_configure_network_lines(&app));
+
+        assert!(rendered.contains("Unavailable"));
+        assert!(rendered.contains("Nostr transaction proposals are unavailable on Regtest"));
+        assert!(rendered.contains("local-node workflow"));
+        assert!(rendered.contains("Switch to testnet4, testnet3, or signet"));
     }
 
     #[test]
