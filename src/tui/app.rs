@@ -1424,7 +1424,7 @@ impl App {
         self.clear_network_volatile_state();
         self.state = AppState::Home;
         self.message = Some(format!(
-            "Switched to {}; {}; cleared pending send and Nostr ceremony state",
+            "Switched to {}; {}; cleared pending send, reshare, and Nostr ceremony state",
             self.network.display_name(),
             self.network.policy_hint()
         ));
@@ -2141,7 +2141,7 @@ mod tests {
         assert_eq!(app.network.to_bitcoin_network(), Network::Regtest);
         let message = app.message.as_deref().unwrap_or_default();
         assert!(message.contains("regtest uses local Esplora/mempool API"));
-        assert!(message.contains("cleared pending send and Nostr ceremony state"));
+        assert!(message.contains("cleared pending send, reshare, and Nostr ceremony state"));
     }
 
     #[test]
@@ -2170,6 +2170,8 @@ mod tests {
         app.send_form.to_address.set_value("tb1qstale");
         app.send_form.total_balance = 50_000;
         app.send_form.error_message = Some("stale send error".to_string());
+        app.reshare_form.round1_output = "stale reshare round".to_string();
+        app.reshare_form.error_message = Some("stale reshare error".to_string());
         app.nostr_connected = true;
         app.nostr_room_phase = NostrRoomPhase::Ready;
         app.nostr_participants.insert(1, "npub-local-1".to_string());
@@ -2205,6 +2207,8 @@ mod tests {
         assert_eq!(app.send_form.to_address.value(), "");
         assert_eq!(app.send_form.total_balance, 0);
         assert!(app.send_form.error_message.is_none());
+        assert!(app.reshare_form.round1_output.is_empty());
+        assert!(app.reshare_form.error_message.is_none());
         assert!(!app.nostr_connected);
         assert!(matches!(app.nostr_room_phase, NostrRoomPhase::Configure));
         assert!(app.nostr_participants.is_empty());
@@ -2214,7 +2218,7 @@ mod tests {
             .message
             .as_deref()
             .unwrap_or("")
-            .contains("cleared pending send and Nostr ceremony state"));
+            .contains("cleared pending send, reshare, and Nostr ceremony state"));
     }
 
     #[test]

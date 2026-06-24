@@ -154,7 +154,7 @@ pub(crate) fn chain_select_policy_lines(network: NetworkSelection) -> Vec<Line<'
             Span::styled(network.utxo_api_hint(), Style::default().fg(policy_color)),
         ]),
         Line::from(Span::styled(
-            "Confirming clears pending send form data and volatile Nostr ceremony state.",
+            "Confirming clears pending send, reshare, and volatile Nostr ceremony state.",
             Style::default().fg(Color::DarkGray),
         )),
     ]
@@ -230,6 +230,6 @@ mod tests {
 
         assert!(rendered.contains("signet remote UTXOs via mempool.space"));
         assert!(rendered.contains("UTXO API: https://mempool.space/signet/api"));
-        assert!(rendered.contains("Confirming clears pending send form data"));
+        assert!(rendered.contains("Confirming clears pending send, reshare"));
     }
 }
