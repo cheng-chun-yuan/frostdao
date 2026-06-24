@@ -195,6 +195,10 @@ with explicit mainnet opt-in after offline review. If broadcast fails, use
 | `-`, `x` | Remove last derived address |
 | `Esc` | Back |
 
+The details panel shows the selected network, BIP-86 path, derived address,
+child x-only pubkey fingerprint, and MPC-threshold control note. Compare those
+fields across devices before funding or selecting an HD source for signing.
+
 ## Mnemonic Backup
 
 | Key | Action |

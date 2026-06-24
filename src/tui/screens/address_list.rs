@@ -124,46 +124,13 @@ fn render_details_panel(
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(10), // Info section
+            Constraint::Length(11), // Info section
             Constraint::Min(12),    // QR code
             Constraint::Length(1),  // Help
         ])
         .split(inner);
 
-    // Info section
-    let mut info_lines = vec![
-        Line::from(vec![
-            Span::styled("  Path: ", Style::default().fg(Color::DarkGray)),
-            Span::styled(
-                frostdao::crypto::hd::format_bip86_path(
-                    state.network.to_bitcoin_network(),
-                    0,
-                    index,
-                ),
-                Style::default().fg(Color::Cyan),
-            ),
-        ]),
-        Line::from(""),
-        Line::from(vec![Span::styled(
-            "  Address:",
-            Style::default().fg(Color::DarkGray),
-        )]),
-        Line::from(vec![Span::styled(
-            format!("  {}", addr),
-            Style::default().fg(Color::Yellow),
-        )]),
-        Line::from(vec![
-            Span::styled(
-                "  Child x-only fingerprint: ",
-                Style::default().fg(Color::DarkGray),
-            ),
-            Span::styled(
-                child_pubkey_fingerprint_label(pubkey),
-                Style::default().fg(Color::Cyan),
-            ),
-        ]),
-    ];
-    info_lines.extend(hd_control_lines());
+    let mut info_lines = address_review_lines(state, addr, pubkey, index);
 
     // Add balance if cached
     if let Some((balance, utxo_count)) = state.balance_cache.get(&index) {
@@ -197,6 +164,57 @@ fn render_details_panel(
     // Help text
     let help = Paragraph::new(address_list_help_line());
     frame.render_widget(help, chunks[2]);
+}
+
+fn address_review_lines(
+    state: &AddressListState,
+    addr: &str,
+    pubkey: &str,
+    index: u32,
+) -> Vec<Line<'static>> {
+    let mut info_lines = vec![
+        Line::from(vec![
+            Span::styled("  Network: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                state.network.display_name(),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  Path: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                frostdao::crypto::hd::format_bip86_path(
+                    state.network.to_bitcoin_network(),
+                    0,
+                    index,
+                ),
+                Style::default().fg(Color::Cyan),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Address:",
+            Style::default().fg(Color::DarkGray),
+        )]),
+        Line::from(vec![Span::styled(
+            format!("  {}", addr),
+            Style::default().fg(Color::Yellow),
+        )]),
+        Line::from(vec![
+            Span::styled(
+                "  Child x-only fingerprint: ",
+                Style::default().fg(Color::DarkGray),
+            ),
+            Span::styled(
+                child_pubkey_fingerprint_label(pubkey),
+                Style::default().fg(Color::Cyan),
+            ),
+        ]),
+    ];
+    info_lines.extend(hd_control_lines());
+    info_lines
 }
 
 fn address_list_help_line() -> Line<'static> {
@@ -312,6 +330,8 @@ fn truncate_address(addr: &str, max_len: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tui::state::NetworkSelection;
+    use std::collections::HashMap;
 
     fn lines_to_string(lines: Vec<Line<'_>>) -> String {
         lines
@@ -355,6 +375,28 @@ mod tests {
             child_pubkey_fingerprint_label("not-hex"),
             "invalid child pubkey"
         );
+    }
+
+    #[test]
+    fn address_review_lines_show_network_path_address_and_fingerprint() {
+        let state = AddressListState {
+            wallet_name: "treasury".to_string(),
+            network: NetworkSelection::Signet,
+            addresses: vec![],
+            selected: 0,
+            error: None,
+            hd_enabled: true,
+            balance_cache: HashMap::new(),
+        };
+        let pubkey = "11".repeat(32);
+
+        let rendered = lines_to_string(address_review_lines(&state, "tb1pderived", &pubkey, 7));
+
+        assert!(rendered.contains("Network: Signet"));
+        assert!(rendered.contains("m/86'/1'/0'/0/7"));
+        assert!(rendered.contains("tb1pderived"));
+        assert!(rendered.contains("Child x-only fingerprint"));
+        assert!(rendered.contains("MPC threshold shares"));
     }
 
     #[test]
