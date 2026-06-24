@@ -520,6 +520,8 @@ def check_transaction_review():
         ("src/tui/screens/home.rs", read(Path("src/tui/screens/home.rs")), "regtest uses local Esplora/mempool API"),
         ("src/tui/screens/home.rs", read(Path("src/tui/screens/home.rs")), "Press b/r/F5 to fetch"),
         ("src/tui/screens/wallet_details.rs", read(Path("src/tui/screens/wallet_details.rs")), "Press v for QR code"),
+        ("src/tui/screens/wallet_details.rs", read(Path("src/tui/screens/wallet_details.rs")), "qr_popup_lines_include_network_context"),
+        ("src/tui/screens/wallet_details.rs", read(Path("src/tui/screens/wallet_details.rs")), "Network: "),
         ("src/tui/app.rs", read(Path("src/tui/app.rs")), "balance_cache_key"),
         ("src/tui/app.rs", read(Path("src/tui/app.rs")), "clear_network_volatile_state"),
         ("src/tui/app.rs", read(Path("src/tui/app.rs")), "network_switch_clears_volatile_send_and_nostr_state"),

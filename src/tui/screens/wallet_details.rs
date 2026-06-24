@@ -37,7 +37,7 @@ pub fn render_wallet_details(frame: &mut Frame, app: &App, state: &WalletDetails
     if state.show_qr {
         let wallet = app.wallets.iter().find(|w| w.name == state.wallet_name);
         if let Some(addr) = wallet.and_then(|w| wallet_address_for_network(w, app.network)) {
-            render_qr_popup(frame, addr, area);
+            render_qr_popup(frame, addr, app.network.display_name(), area);
         }
     }
 }
@@ -278,9 +278,40 @@ fn qr_open_hint_line() -> Line<'static> {
 }
 
 /// Render QR code popup overlay
-fn render_qr_popup(frame: &mut Frame, address: &str, area: Rect) {
+fn render_qr_popup(frame: &mut Frame, address: &str, network_label: &str, area: Rect) {
     use ratatui::widgets::Clear;
 
+    let (lines, qr_width) = qr_popup_lines(address, network_label);
+
+    // Calculate popup size based on QR code
+    let popup_width = (qr_width as u16 + 4).max(50);
+    let popup_height = (lines.len() as u16 + 2).min(area.height - 2);
+
+    // Center the popup
+    let popup_area = Rect {
+        x: area.x + (area.width.saturating_sub(popup_width)) / 2,
+        y: area.y + (area.height.saturating_sub(popup_height)) / 2,
+        width: popup_width.min(area.width),
+        height: popup_height,
+    };
+
+    // Clear the area behind the popup
+    frame.render_widget(Clear, popup_area);
+
+    let qr_widget = Paragraph::new(lines)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Address QR ")
+                .border_style(Style::default().fg(Color::Green))
+                .style(Style::default().bg(Color::Black)),
+        )
+        .alignment(ratatui::layout::Alignment::Center);
+
+    frame.render_widget(qr_widget, popup_area);
+}
+
+fn qr_popup_lines(address: &str, network_label: &str) -> (Vec<Line<'static>>, usize) {
     let qr_lines = match QrCode::new(address.as_bytes()) {
         Ok(code) => {
             let width = code.width();
@@ -310,20 +341,27 @@ fn render_qr_popup(frame: &mut Frame, address: &str, area: Rect) {
 
             // Add address below QR code
             lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled("Network: ", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    network_label.to_string(),
+                    Style::default().fg(Color::Yellow),
+                ),
+            ]));
             // Show address in chunks for readability
             let addr_len = address.len();
             if addr_len > 40 {
                 lines.push(Line::from(Span::styled(
-                    &address[..addr_len / 2],
+                    address[..addr_len / 2].to_string(),
                     Style::default().fg(Color::Green),
                 )));
                 lines.push(Line::from(Span::styled(
-                    &address[addr_len / 2..],
+                    address[addr_len / 2..].to_string(),
                     Style::default().fg(Color::Green),
                 )));
             } else {
                 lines.push(Line::from(Span::styled(
-                    address,
+                    address.to_string(),
                     Style::default().fg(Color::Green),
                 )));
             }
@@ -351,35 +389,7 @@ fn render_qr_popup(frame: &mut Frame, address: &str, area: Rect) {
             (lines, 30)
         }
     };
-
-    let (lines, qr_width) = qr_lines;
-
-    // Calculate popup size based on QR code
-    let popup_width = (qr_width as u16 + 4).max(50);
-    let popup_height = (lines.len() as u16 + 2).min(area.height - 2);
-
-    // Center the popup
-    let popup_area = Rect {
-        x: area.x + (area.width.saturating_sub(popup_width)) / 2,
-        y: area.y + (area.height.saturating_sub(popup_height)) / 2,
-        width: popup_width.min(area.width),
-        height: popup_height,
-    };
-
-    // Clear the area behind the popup
-    frame.render_widget(Clear, popup_area);
-
-    let qr_widget = Paragraph::new(lines)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" QR Code ")
-                .border_style(Style::default().fg(Color::Green))
-                .style(Style::default().bg(Color::Black)),
-        )
-        .alignment(ratatui::layout::Alignment::Center);
-
-    frame.render_widget(qr_widget, popup_area);
+    qr_lines
 }
 
 fn render_action_menu(frame: &mut Frame, state: &WalletDetailsState, area: Rect) {
@@ -463,6 +473,16 @@ mod tests {
 
         assert_eq!(rendered, "Press v for QR code");
         assert!(!rendered.contains("Press q for QR code"));
+    }
+
+    #[test]
+    fn qr_popup_lines_include_network_context() {
+        let (lines, _) = qr_popup_lines("bcrt1qexample", "Regtest");
+        let rendered = lines_to_string(lines);
+
+        assert!(rendered.contains("Network: Regtest"));
+        assert!(rendered.contains("bcrt1qexample"));
+        assert!(rendered.contains("Press q or Esc to close"));
     }
 
     fn lines_to_string(lines: Vec<Line<'_>>) -> String {
