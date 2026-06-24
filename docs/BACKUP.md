@@ -68,11 +68,14 @@ If a device is lost but the party has their mnemonic:
 
 1. Rebuild or reinstall FrostDAO.
 2. Verify the mnemonic against the public backup manifest.
-3. Restore the local share using the mnemonic restore command once implemented.
+3. Restore the local wallet files:
+
+```bash
+frostdao dkg-restore-mnemonic --name treasury --words '<24 words>' --manifest backup-manifest.json
+```
+
 4. Verify the wallet address against the manifest.
 5. Sign a small testnet/signet transaction before using mainnet.
-
-Until the restore command is implemented, do not rely on the mnemonic alone for disaster recovery. Keep a separate protected copy of the local wallet state, or use the threshold recovery flow with helper parties.
 
 If the mnemonic is lost too:
 
@@ -91,9 +94,9 @@ Implemented:
 - backup ID
 - share fingerprint
 - mnemonic verification against local wallet metadata
+- mnemonic restore/import into a missing local wallet directory
 
 Still required before relying on mnemonic-only disaster recovery:
 
-- explicit import/restore command that reconstructs local wallet files from mnemonic plus manifest
 - encrypted backup file export/import
 - recovery drill automation

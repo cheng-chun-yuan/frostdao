@@ -649,7 +649,19 @@ frostdao dkg-verify-mnemonic --name <wallet_name> --words '<24 words>'
 
 **Checks:** BIP-39 checksum, share fingerprint, wallet metadata, party index, rank, party-rank map, group public key, public shared-key polynomial, and backup ID.
 
-This command verifies the written words but does not restore wallet files. Mnemonic restore/import is a separate pre-mainnet requirement.
+This command verifies the written words but does not restore wallet files.
+
+---
+
+### dkg-restore-mnemonic
+
+Restore local wallet files from a 24-word share mnemonic and the public backup manifest.
+
+```bash
+frostdao dkg-restore-mnemonic --name <wallet_name> --words '<24 words>' --manifest backup-manifest.json
+```
+
+The command refuses to overwrite an existing `.frost_state/<wallet_name>` directory. It verifies the mnemonic against the manifest, pairs the share against the public FROST polynomial, checks root addresses, and writes the standard local wallet files.
 
 ---
 

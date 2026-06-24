@@ -569,9 +569,9 @@ def check_mnemonic_backup_ux():
         ("docs/TUI_KEYMAP.md", keymap, "dkg-verify-mnemonic"),
         ("docs/BACKUP.md", backup, "public shared-key polynomial"),
         ("docs/BACKUP.md", backup, "party-rank map"),
-        ("docs/BACKUP.md", backup, "do not rely on the mnemonic alone"),
-        ("docs/CLI.md", cli, "does not restore wallet files"),
-        ("docs/PRODUCTION_READINESS.md", production, "mnemonic restore/import"),
+        ("docs/BACKUP.md", backup, "dkg-restore-mnemonic"),
+        ("docs/CLI.md", cli, "dkg-restore-mnemonic"),
+        ("docs/PRODUCTION_READINESS.md", production, "restore-test a backup mnemonic"),
         ("docs/SECURITY_MODEL.md", security, "equivalent to that party's local secret share"),
     ]
     missing = [f"{path}: {marker}" for path, content, marker in required if marker not in content]

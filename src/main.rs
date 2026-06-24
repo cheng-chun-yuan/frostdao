@@ -285,6 +285,21 @@ enum Commands {
         words: String,
     },
 
+    /// Restore local wallet files from a verified share mnemonic and public backup manifest
+    DkgRestoreMnemonic {
+        /// Wallet name; must match the manifest wallet name
+        #[arg(long)]
+        name: String,
+
+        /// 24-word mnemonic in quotes
+        #[arg(long)]
+        words: String,
+
+        /// Path to the public backup manifest JSON
+        #[arg(long)]
+        manifest: String,
+    },
+
     /// Reshare Round 1: Old party generates sub-shares for new parties
     ReshareRound1 {
         /// Source wallet name (existing wallet to reshare from)
@@ -569,6 +584,151 @@ fn load_backup_inputs(
     Ok((metadata, share_bytes, group_info))
 }
 
+fn restore_wallet_from_mnemonic_manifest(
+    name: &str,
+    words: &str,
+    manifest_path: &str,
+) -> Result<()> {
+    use bitcoin::{Address, Network, XOnlyPublicKey};
+    use frostdao::crypto::{backup, mnemonic};
+    use frostdao::protocol::keygen::{GroupInfo, HdMetadata, HtssMetadata, PartyInfo};
+    use frostdao::storage::FileStorage;
+    use schnorr_fun::frost::{SecretShare, SharedKey};
+    use secp256kfun::prelude::*;
+
+    let manifest_json = std::fs::read_to_string(manifest_path)
+        .with_context(|| format!("failed to read backup manifest '{}'", manifest_path))?;
+    let manifest: backup::BackupManifest =
+        serde_json::from_str(&manifest_json).context("failed to parse backup manifest JSON")?;
+    manifest.validate()?;
+
+    if manifest.wallet_name != name {
+        anyhow::bail!(
+            "manifest wallet name '{}' does not match requested wallet '{}'",
+            manifest.wallet_name,
+            name
+        );
+    }
+
+    let parsed = mnemonic::parse_mnemonic(words)?;
+    let share_bytes = mnemonic::mnemonic_to_share(&parsed)?;
+    backup::verify_share_against_manifest(&share_bytes, &manifest)?;
+
+    let state_dir = keygen::get_state_dir(name);
+    let state_path = std::path::Path::new(&state_dir);
+    if state_path.exists() {
+        anyhow::bail!(
+            "wallet '{}' already exists at {}; refusing to overwrite",
+            name,
+            state_dir
+        );
+    }
+
+    let shared_key_polynomial = hex::decode(&manifest.shared_key_polynomial)
+        .context("shared key polynomial in manifest is not valid hex")?;
+    let shared_key: SharedKey<EvenY> = SharedKey::from_slice(&shared_key_polynomial)
+        .ok_or_else(|| anyhow::anyhow!("manifest shared key polynomial is invalid"))?;
+
+    let share_scalar = Scalar::<Secret, Zero>::from_bytes(share_bytes)
+        .ok_or_else(|| anyhow::anyhow!("mnemonic share is not a valid secp256k1 scalar"))?;
+    let share_index = Scalar::<Secret, Zero>::from(manifest.party_index)
+        .public()
+        .non_zero()
+        .ok_or_else(|| anyhow::anyhow!("manifest party index cannot be zero"))?;
+    let secret_share = SecretShare {
+        index: share_index,
+        share: share_scalar,
+    };
+    let paired_share = shared_key
+        .pair_secret_share(secret_share)
+        .ok_or_else(|| anyhow::anyhow!("mnemonic share does not match public FROST polynomial"))?;
+
+    let pubkey_bytes = hex::decode(&manifest.group_public_key)
+        .context("group public key in manifest is not valid hex")?;
+    let xonly_pk = XOnlyPublicKey::from_slice(&pubkey_bytes)
+        .context("group public key in manifest is not a valid x-only key")?;
+    let secp = bitcoin::secp256k1::Secp256k1::new();
+    let address_testnet = Address::p2tr(&secp, xonly_pk, None, Network::Testnet).to_string();
+    let address_mainnet = Address::p2tr(&secp, xonly_pk, None, Network::Bitcoin).to_string();
+    if address_testnet != manifest.taproot_address_testnet {
+        anyhow::bail!("manifest testnet address does not match group public key");
+    }
+    if address_mainnet != manifest.taproot_address_mainnet {
+        anyhow::bail!("manifest mainnet address does not match group public key");
+    }
+
+    let storage = FileStorage::new(&state_dir)?;
+    storage.write(
+        "paired_secret_share.bin",
+        &bincode::serialize(&paired_share)?,
+    )?;
+    storage.write("shared_key.bin", &bincode::serialize(&shared_key)?)?;
+
+    let htss = HtssMetadata {
+        my_index: manifest.party_index,
+        my_rank: manifest.rank,
+        threshold: manifest.threshold,
+        hierarchical: manifest.hierarchical,
+        party_ranks: manifest.party_ranks.clone(),
+        signing_requirement: None,
+    };
+    storage.write(
+        "htss_metadata.json",
+        serde_json::to_string_pretty(&htss)?.as_bytes(),
+    )?;
+
+    let chain_code =
+        frostdao::crypto::helpers::tagged_hash("FrostDAO/ChainCode", &xonly_pk.serialize());
+    let hd_metadata = HdMetadata {
+        chain_code: hex::encode(chain_code),
+        hd_enabled: true,
+        mnemonic_hint: None,
+        derived_count: 10,
+    };
+    storage.write(
+        "hd_metadata.json",
+        serde_json::to_string_pretty(&hd_metadata)?.as_bytes(),
+    )?;
+
+    let parties = manifest
+        .party_ranks
+        .iter()
+        .map(|(index, rank)| PartyInfo {
+            index: *index,
+            rank: *rank,
+            verification_share: "unavailable".to_string(),
+        })
+        .collect();
+    let group_info = GroupInfo {
+        name: name.to_string(),
+        group_public_key: manifest.group_public_key.clone(),
+        taproot_address_testnet: manifest.taproot_address_testnet.clone(),
+        taproot_address_mainnet: manifest.taproot_address_mainnet.clone(),
+        threshold: manifest.threshold,
+        total_parties: manifest.total_parties,
+        hierarchical: manifest.hierarchical,
+        parties,
+    };
+    storage.write(
+        "group_info.json",
+        serde_json::to_string_pretty(&group_info)?.as_bytes(),
+    )?;
+
+    println!("Restored wallet '{}' from mnemonic backup.", name);
+    println!("Backup ID: {}", manifest.backup_id);
+    println!("Party: {}", manifest.party_index);
+    println!("Rank: {}", manifest.rank);
+    println!(
+        "Threshold: {} of {}",
+        manifest.threshold, manifest.total_parties
+    );
+    println!("Testnet address: {}", manifest.taproot_address_testnet);
+    println!("Mainnet address: {}", manifest.taproot_address_mainnet);
+    println!("Restored files at: {}", state_dir);
+
+    Ok(())
+}
+
 fn parse_dkg_network(network: &str) -> Result<bitcoin::Network> {
     match network {
         "testnet" | "testnet3" => Ok(bitcoin::Network::Testnet),
@@ -783,6 +943,13 @@ fn main() -> Result<()> {
                 "Threshold: {} of {}",
                 manifest.threshold, manifest.total_parties
             );
+        }
+        Commands::DkgRestoreMnemonic {
+            name,
+            words,
+            manifest,
+        } => {
+            restore_wallet_from_mnemonic_manifest(&name, &words, &manifest)?;
         }
 
         Commands::ReshareRound1 {

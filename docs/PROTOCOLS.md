@@ -72,6 +72,7 @@ Each party backs up only their local share.
 ```bash
 frostdao dkg-generate-mnemonic --name treasury
 frostdao dkg-verify-mnemonic --name treasury --words '<24 words>'
+frostdao dkg-restore-mnemonic --name treasury --words '<24 words>' --manifest backup-manifest.json
 ```
 
 The mnemonic is secret. The backup manifest is public metadata containing wallet, party, rank, threshold, party-rank map, group public key, public shared-key polynomial, address, share fingerprint, and backup ID.

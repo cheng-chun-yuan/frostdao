@@ -37,7 +37,7 @@ The relay smoke test publishes and receives both a public room join and a direct
 1. Start from a clean test profile and run `./scripts/doctor.sh`, then `./scripts/quality.sh --full`.
 2. Create a 2-of-3 TSS wallet with CLI commands from [User Flow](USER_FLOW.md).
 3. Derive at least two addresses and verify they remain deterministic across devices.
-4. Generate and verify a backup mnemonic for each party.
+4. Generate, verify, and restore-test a backup mnemonic for each party.
 5. Build and sign a testnet transaction using an explicit session ID.
 6. Reshare the wallet to a new party set and verify the address fingerprint is unchanged.
 7. Recover one lost party share and verify the recovered wallet public key/address.
@@ -52,7 +52,6 @@ The relay smoke test publishes and receives both a public room join and a direct
 - Complete public relay-backed TUI room transport testing for relay-backed rooms.
 - Wire real cryptographic signing share generation, combination, and testnet transaction broadcast into the relay-backed TUI signing path.
 - Extend structured audit logs that exclude secret material to every live relay ceremony path.
-- Implement and test explicit mnemonic restore/import from the written words plus public backup manifest.
 - Complete an external cryptography/security review for FROST, HTSS, NIP-44 use, reshare, and recovery.
 - Default to testnet/signet until the user deliberately enables mainnet; DKG transaction build and broadcast require `FROSTDAO_ENABLE_MAINNET_BITCOIN=1` for mainnet.
 
