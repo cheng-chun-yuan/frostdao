@@ -536,6 +536,12 @@ fn load_backup_inputs(
     let htss: frostdao::protocol::keygen::HtssMetadata =
         serde_json::from_str(&htss_json).context("failed to parse htss_metadata.json")?;
 
+    let shared_key_bytes = storage
+        .read("shared_key.bin")
+        .with_context(|| format!("wallet '{}' has no shared_key.bin", name))?;
+    let shared_key: schnorr_fun::frost::SharedKey<secp256kfun::marker::EvenY> =
+        bincode::deserialize(&shared_key_bytes).context("failed to parse shared_key.bin")?;
+
     let group_info_json =
         String::from_utf8(storage.read("group_info.json")?).with_context(|| {
             format!(
@@ -554,6 +560,7 @@ fn load_backup_inputs(
         total_parties: group_info.total_parties,
         hierarchical: htss.hierarchical,
         group_public_key: group_info.group_public_key.clone(),
+        shared_key_polynomial: hex::encode(shared_key.to_bytes()),
         taproot_address_testnet: group_info.taproot_address_testnet.clone(),
         taproot_address_mainnet: group_info.taproot_address_mainnet.clone(),
     };

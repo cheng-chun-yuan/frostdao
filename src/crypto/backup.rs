@@ -20,6 +20,7 @@ pub struct BackupWalletMetadata {
     pub total_parties: u32,
     pub hierarchical: bool,
     pub group_public_key: String,
+    pub shared_key_polynomial: String,
     pub taproot_address_testnet: String,
     pub taproot_address_mainnet: String,
 }
@@ -35,6 +36,7 @@ pub struct BackupManifest {
     pub total_parties: u32,
     pub hierarchical: bool,
     pub group_public_key: String,
+    pub shared_key_polynomial: String,
     pub taproot_address_testnet: String,
     pub taproot_address_mainnet: String,
     pub share_fingerprint: String,
@@ -68,6 +70,7 @@ impl BackupManifest {
         if self.group_public_key.len() != 64 || hex::decode(&self.group_public_key).is_err() {
             bail!("group public key must be 32-byte hex");
         }
+        validate_shared_key_polynomial(&self.shared_key_polynomial, &self.group_public_key)?;
         if self.share_fingerprint.len() != 64 || hex::decode(&self.share_fingerprint).is_err() {
             bail!("share fingerprint must be 32-byte hex");
         }
@@ -102,6 +105,7 @@ pub fn build_backup_manifest(
         total_parties: metadata.total_parties,
         hierarchical: metadata.hierarchical,
         group_public_key: metadata.group_public_key,
+        shared_key_polynomial: metadata.shared_key_polynomial,
         taproot_address_testnet: metadata.taproot_address_testnet,
         taproot_address_mainnet: metadata.taproot_address_mainnet,
         share_fingerprint,
@@ -140,6 +144,7 @@ pub fn verify_share_against_manifest(
         total_parties: manifest.total_parties,
         hierarchical: manifest.hierarchical,
         group_public_key: manifest.group_public_key.clone(),
+        shared_key_polynomial: manifest.shared_key_polynomial.clone(),
         taproot_address_testnet: manifest.taproot_address_testnet.clone(),
         taproot_address_mainnet: manifest.taproot_address_mainnet.clone(),
     };
@@ -154,6 +159,24 @@ pub fn verify_share_against_manifest(
 fn validate_share_bytes(share_bytes: &[u8; 32]) -> Result<()> {
     if share_bytes.iter().all(|byte| *byte == 0) {
         bail!("share cannot be all zero");
+    }
+    Ok(())
+}
+
+fn validate_shared_key_polynomial(
+    shared_key_polynomial: &str,
+    group_public_key: &str,
+) -> Result<()> {
+    let bytes = hex::decode(shared_key_polynomial)
+        .map_err(|_| anyhow::anyhow!("shared key polynomial must be hex"))?;
+    if bytes.is_empty() || bytes.len() % 33 != 0 {
+        bail!("shared key polynomial must contain compressed public coefficients");
+    }
+    if bytes[0] != 0x02 {
+        bail!("shared key polynomial must start with the even-y group public key");
+    }
+    if hex::encode(&bytes[1..33]) != group_public_key {
+        bail!("shared key polynomial does not match group public key");
     }
     Ok(())
 }
@@ -201,6 +224,7 @@ mod tests {
             total_parties: 3,
             hierarchical: true,
             group_public_key: "11".repeat(32),
+            shared_key_polynomial: format!("02{}", "11".repeat(32)),
             taproot_address_testnet: "tb1ptest".to_string(),
             taproot_address_mainnet: "bc1ptest".to_string(),
         }
@@ -236,5 +260,16 @@ mod tests {
     #[test]
     fn manifest_rejects_zero_share() {
         assert!(build_backup_manifest(metadata(), &[0u8; 32]).is_err());
+    }
+
+    #[test]
+    fn manifest_rejects_mismatched_shared_key_polynomial() {
+        let mut metadata = metadata();
+        metadata.shared_key_polynomial = format!("02{}", "22".repeat(32));
+
+        let err = build_backup_manifest(metadata, &[0x42u8; 32]).unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("shared key polynomial does not match group public key"));
     }
 }

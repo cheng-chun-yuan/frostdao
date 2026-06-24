@@ -629,7 +629,7 @@ Generate 24-word backup for your local share and print a public backup manifest.
 frostdao dkg-generate-mnemonic --name <wallet_name>
 ```
 
-The mnemonic is secret. The manifest is public metadata that binds the mnemonic to wallet name, party index, rank, threshold, group public key, and address fingerprints.
+The mnemonic is secret. The manifest is public metadata that binds the mnemonic to wallet name, party index, rank, threshold, group public key, public shared-key polynomial, and address fingerprints.
 
 ---
 
@@ -647,7 +647,7 @@ frostdao dkg-verify-mnemonic --name <wallet_name> --words '<24 words>'
 | `--name` | Wallet name |
 | `--words` | 24-word mnemonic in quotes |
 
-**Checks:** BIP-39 checksum, share fingerprint, wallet metadata, party index, rank, group public key, and backup ID.
+**Checks:** BIP-39 checksum, share fingerprint, wallet metadata, party index, rank, group public key, public shared-key polynomial, and backup ID.
 
 This command verifies the written words but does not restore wallet files. Mnemonic restore/import is a separate pre-mainnet requirement.
 
