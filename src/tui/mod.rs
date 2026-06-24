@@ -132,8 +132,8 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut A
 
 fn handle_home_keys(app: &mut App, code: KeyCode) {
     match code {
-        KeyCode::Down | KeyCode::Char('j') => app.next_wallet(),
-        KeyCode::Up | KeyCode::Char('k') => app.prev_wallet(),
+        code if code == KeyCode::Down || is_shortcut_key(&code, 'j') => app.next_wallet(),
+        code if code == KeyCode::Up || is_shortcut_key(&code, 'k') => app.prev_wallet(),
         KeyCode::Enter => {
             // Go to wallet details
             if let Some(wallet) = app.selected_wallet() {
@@ -511,8 +511,8 @@ fn initialize_agent_payment_policy(app: &mut App) {
 
 fn handle_chain_select_keys(app: &mut App, code: KeyCode) {
     match code {
-        KeyCode::Up | KeyCode::Char('k') => app.prev_network(),
-        KeyCode::Down | KeyCode::Char('j') => app.next_network(),
+        code if code == KeyCode::Up || is_shortcut_key(&code, 'k') => app.prev_network(),
+        code if code == KeyCode::Down || is_shortcut_key(&code, 'j') => app.next_network(),
         KeyCode::Enter => app.confirm_network(),
         KeyCode::Esc => app.state = AppState::Home,
         _ => {}
@@ -592,7 +592,7 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
         KeyCode::Esc => {
             app.state = AppState::Home;
         }
-        KeyCode::Up | KeyCode::Char('k') => {
+        code if code == KeyCode::Up || is_shortcut_key(&code, 'k') => {
             if let AppState::WalletDetails(ref mut s) = app.state {
                 if s.selected_action > 0 {
                     s.selected_action -= 1;
@@ -601,7 +601,7 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
                 }
             }
         }
-        KeyCode::Down | KeyCode::Char('j') => {
+        code if code == KeyCode::Down || is_shortcut_key(&code, 'j') => {
             if let AppState::WalletDetails(ref mut s) = app.state {
                 s.selected_action = (s.selected_action + 1) % action_count;
             }
@@ -802,7 +802,9 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
                 app.keygen_form = screens::KeygenFormData::new();
                 app.state = AppState::Home;
             }
-            KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
+            code if (code == KeyCode::Up || is_shortcut_key(&code, 'k'))
+                || (code == KeyCode::Down || is_shortcut_key(&code, 'j')) =>
+            {
                 // Toggle between TSS and HTSS
                 app.keygen_form.hierarchical = !app.keygen_form.hierarchical;
             }
@@ -1070,11 +1072,13 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
                 app.reshare_form = ReshareFormData::new();
                 app.state = AppState::Home;
             }
-            KeyCode::Up | KeyCode::Char('k') if app.reshare_form.mode_selected_index > 0 => {
+            code if (code == KeyCode::Up || is_shortcut_key(&code, 'k'))
+                && app.reshare_form.mode_selected_index > 0 =>
+            {
                 app.reshare_form.mode_selected_index -= 1;
             }
-            KeyCode::Up | KeyCode::Char('k') => {}
-            KeyCode::Down | KeyCode::Char('j') => {
+            code if code == KeyCode::Up || is_shortcut_key(&code, 'k') => {}
+            code if code == KeyCode::Down || is_shortcut_key(&code, 'j') => {
                 let modes = ReshareMode::all();
                 if app.reshare_form.mode_selected_index < modes.len() - 1 {
                     app.reshare_form.mode_selected_index += 1;
@@ -1105,14 +1109,18 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
             KeyCode::BackTab => {
                 app.reshare_form.local_field = app.reshare_form.local_field.prev();
             }
-            KeyCode::Up if app.reshare_form.local_field == ReshareLocalField::SourceWallet => {
+            code if (code == KeyCode::Up || is_shortcut_key(&code, 'k'))
+                && app.reshare_form.local_field == ReshareLocalField::SourceWallet =>
+            {
                 if app.reshare_form.source_wallet_index > 0 {
                     app.reshare_form.source_wallet_index -= 1;
                 } else if !app.wallets.is_empty() {
                     app.reshare_form.source_wallet_index = app.wallets.len() - 1;
                 }
             }
-            KeyCode::Down if app.reshare_form.local_field == ReshareLocalField::SourceWallet => {
+            code if (code == KeyCode::Down || is_shortcut_key(&code, 'j'))
+                && app.reshare_form.local_field == ReshareLocalField::SourceWallet =>
+            {
                 if !app.wallets.is_empty() {
                     app.reshare_form.source_wallet_index =
                         (app.reshare_form.source_wallet_index + 1) % app.wallets.len();
@@ -1215,16 +1223,16 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
                     app.reshare_form.focused_field = app.reshare_form.focused_field.prev();
                 }
             }
-            KeyCode::Char('j')
-                if app.reshare_form.focused_field == ReshareFormField::SourceWallet =>
+            code if (code == KeyCode::Down || is_shortcut_key(&code, 'j'))
+                && app.reshare_form.focused_field == ReshareFormField::SourceWallet =>
             {
                 if !app.wallets.is_empty() {
                     app.reshare_form.source_wallet_index =
                         (app.reshare_form.source_wallet_index + 1) % app.wallets.len();
                 }
             }
-            KeyCode::Char('k')
-                if app.reshare_form.focused_field == ReshareFormField::SourceWallet =>
+            code if (code == KeyCode::Up || is_shortcut_key(&code, 'k'))
+                && app.reshare_form.focused_field == ReshareFormField::SourceWallet =>
             {
                 if app.reshare_form.source_wallet_index > 0 {
                     app.reshare_form.source_wallet_index -= 1;
@@ -1486,17 +1494,19 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 app.send_form = SendFormData::new();
                 app.state = AppState::Home;
             }
-            KeyCode::Up | KeyCode::Char('k') => {
+            code if code == KeyCode::Up || is_shortcut_key(&code, 'k') => {
                 if app.send_form.wallet_index > 0 {
                     app.send_form.wallet_index -= 1;
                 } else if !app.wallets.is_empty() {
                     app.send_form.wallet_index = app.wallets.len() - 1;
                 }
             }
-            KeyCode::Down | KeyCode::Char('j') if !app.wallets.is_empty() => {
+            code if (code == KeyCode::Down || is_shortcut_key(&code, 'j'))
+                && !app.wallets.is_empty() =>
+            {
                 app.send_form.wallet_index = (app.send_form.wallet_index + 1) % app.wallets.len();
             }
-            KeyCode::Down | KeyCode::Char('j') => {}
+            code if code == KeyCode::Down || is_shortcut_key(&code, 'j') => {}
             KeyCode::Enter => {
                 if app.wallets.is_empty() {
                     app.send_form.error_message = Some("No wallets available".to_string());
@@ -1550,14 +1560,14 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
             KeyCode::Esc => {
                 app.state = AppState::Send(SendState::SelectWallet);
             }
-            KeyCode::Up | KeyCode::Char('k') => {
+            code if code == KeyCode::Up || is_shortcut_key(&code, 'k') => {
                 if app.send_form.party_selector_index > 0 {
                     app.send_form.party_selector_index -= 1;
                 } else {
                     app.send_form.party_selector_index = app.send_form.total_parties as usize - 1;
                 }
             }
-            KeyCode::Down | KeyCode::Char('j') => {
+            code if code == KeyCode::Down || is_shortcut_key(&code, 'j') => {
                 app.send_form.party_selector_index =
                     (app.send_form.party_selector_index + 1) % app.send_form.total_parties as usize;
             }
@@ -1634,7 +1644,9 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     wallet_name: wallet_name.clone(),
                 });
             }
-            KeyCode::Up | KeyCode::Char('k') if app.send_form.use_hd_address => {
+            code if (code == KeyCode::Up || is_shortcut_key(&code, 'k'))
+                && app.send_form.use_hd_address =>
+            {
                 if app.send_form.hd_selected_index > 0 {
                     app.send_form.hd_selected_index -= 1;
                 } else {
@@ -1642,8 +1654,8 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     app.send_form.use_hd_address = false;
                 }
             }
-            KeyCode::Up | KeyCode::Char('k') => {}
-            KeyCode::Down | KeyCode::Char('j') => {
+            code if code == KeyCode::Up || is_shortcut_key(&code, 'k') => {}
+            code if code == KeyCode::Down || is_shortcut_key(&code, 'j') => {
                 if !app.send_form.use_hd_address {
                     // At root, move to first HD address if available
                     if !app.send_form.hd_addresses.is_empty() {
@@ -1716,11 +1728,13 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     wallet_name: wallet_name.clone(),
                 });
             }
-            KeyCode::Up | KeyCode::Char('k') if app.send_form.script_config.selected_index > 0 => {
+            code if (code == KeyCode::Up || is_shortcut_key(&code, 'k'))
+                && app.send_form.script_config.selected_index > 0 =>
+            {
                 app.send_form.script_config.selected_index -= 1;
             }
-            KeyCode::Up | KeyCode::Char('k') => {}
-            KeyCode::Down | KeyCode::Char('j') => {
+            code if code == KeyCode::Up || is_shortcut_key(&code, 'k') => {}
+            code if code == KeyCode::Down || is_shortcut_key(&code, 'j') => {
                 let max = crate::tui::screens::ScriptType::all().len();
                 if app.send_form.script_config.selected_index + 1 < max {
                     app.send_form.script_config.selected_index += 1;
@@ -2179,14 +2193,14 @@ fn handle_address_list_keys(app: &mut App, code: KeyCode) {
         KeyCode::Esc => {
             app.state = AppState::Home;
         }
-        KeyCode::Up | KeyCode::Char('k') => {
+        code if code == KeyCode::Up || is_shortcut_key(&code, 'k') => {
             if let AppState::AddressList(ref mut state) = app.state {
                 if state.selected > 0 {
                     state.selected -= 1;
                 }
             }
         }
-        KeyCode::Down | KeyCode::Char('j') => {
+        code if code == KeyCode::Down || is_shortcut_key(&code, 'j') => {
             if let AppState::AddressList(ref mut state) = app.state {
                 if state.selected + 1 < state.addresses.len() {
                     state.selected += 1;
@@ -2315,7 +2329,7 @@ fn handle_mnemonic_keys(app: &mut App, code: KeyCode) {
         KeyCode::Esc => {
             app.state = AppState::Home;
         }
-        KeyCode::Up | KeyCode::Char('k') => {
+        code if code == KeyCode::Up || is_shortcut_key(&code, 'k') => {
             if let AppState::MnemonicBackup(ref mut state) = app.state {
                 if !state.party_selected && !state.available_parties.is_empty() {
                     if state.selected_party > 0 {
@@ -2326,7 +2340,7 @@ fn handle_mnemonic_keys(app: &mut App, code: KeyCode) {
                 }
             }
         }
-        KeyCode::Down | KeyCode::Char('j') => {
+        code if code == KeyCode::Down || is_shortcut_key(&code, 'j') => {
             if let AppState::MnemonicBackup(ref mut state) = app.state {
                 if !state.party_selected && !state.available_parties.is_empty() {
                     state.selected_party =
@@ -2889,12 +2903,12 @@ fn handle_nostr_sign_keys(app: &mut App, key: KeyEvent) {
                 }
             }
         }
-        KeyCode::Up | KeyCode::Char('k') => {
+        code if code == KeyCode::Up || is_shortcut_key(&code, 'k') => {
             if matches!(app.nostr_sign_state, NostrSignState::SelectWallet) {
                 app.prev_wallet();
             }
         }
-        KeyCode::Down | KeyCode::Char('j') => {
+        code if code == KeyCode::Down || is_shortcut_key(&code, 'j') => {
             if matches!(app.nostr_sign_state, NostrSignState::SelectWallet) {
                 app.next_wallet();
             }
@@ -3681,6 +3695,43 @@ mod tests {
     }
 
     #[test]
+    fn address_list_navigation_is_case_insensitive() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::AddressList(AddressListState {
+            wallet_name: "wallet-case-test".to_string(),
+            network: NetworkSelection::Testnet4,
+            addresses: vec![
+                ("tb1qtest1".to_string(), "02".to_string(), 0),
+                ("tb1qtest2".to_string(), "03".to_string(), 1),
+            ],
+            selected: 1,
+            error: None,
+            hd_enabled: true,
+            balance_cache: std::collections::HashMap::new(),
+        });
+
+        handle_address_list_keys(&mut app, KeyCode::Char('K'));
+        assert_eq!(
+            if let AppState::AddressList(state) = &app.state {
+                state.selected
+            } else {
+                unreachable!()
+            },
+            0
+        );
+
+        handle_address_list_keys(&mut app, KeyCode::Char('J'));
+        assert_eq!(
+            if let AppState::AddressList(state) = &app.state {
+                state.selected
+            } else {
+                unreachable!()
+            },
+            1
+        );
+    }
+
+    #[test]
     fn address_list_help_bar_includes_refresh_shortcut() {
         let mut app = App::new().unwrap();
         app.state = AppState::AddressList(AddressListState {
@@ -3841,6 +3892,28 @@ mod tests {
         );
 
         assert!(!app.keygen_form.hierarchical);
+    }
+
+    #[test]
+    fn send_select_wallet_navigation_is_case_insensitive() {
+        let mut app = App::new().unwrap();
+        app.wallets = vec![
+            wallet_summary_no_address("wallet-a"),
+            wallet_summary_no_address("wallet-b"),
+        ];
+        app.state = AppState::Send(SendState::SelectWallet);
+
+        handle_send_keys(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('J'), KeyModifiers::NONE),
+        );
+        assert_eq!(app.send_form.wallet_index, 1);
+
+        handle_send_keys(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('K'), KeyModifiers::NONE),
+        );
+        assert_eq!(app.send_form.wallet_index, 0);
     }
 
     #[test]
@@ -4123,6 +4196,42 @@ mod tests {
     }
 
     #[test]
+    fn mnemonic_navigation_is_case_insensitive() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::MnemonicBackup(MnemonicState {
+            wallet_name: "treasury".to_string(),
+            available_parties: vec![1, 2, 3],
+            selected_party: 0,
+            words: Vec::new(),
+            error: None,
+            party_selected: false,
+            revealed: false,
+            hierarchical: false,
+            party_ranks: BTreeMap::new(),
+        });
+
+        handle_mnemonic_keys(&mut app, KeyCode::Char('K'));
+        assert_eq!(
+            if let AppState::MnemonicBackup(state) = &app.state {
+                state.selected_party
+            } else {
+                unreachable!()
+            },
+            2
+        );
+
+        handle_mnemonic_keys(&mut app, KeyCode::Char('J'));
+        assert_eq!(
+            if let AppState::MnemonicBackup(state) = &app.state {
+                state.selected_party
+            } else {
+                unreachable!()
+            },
+            0
+        );
+    }
+
+    #[test]
     fn nostr_sign_help_bar_matches_review_actions() {
         let mut app = App::new().unwrap();
         app.state = AppState::NostrSign;
@@ -4256,6 +4365,30 @@ mod tests {
             app.message.as_deref(),
             Some(nostr_relay_keygen_blocked_message())
         );
+    }
+
+    #[test]
+    fn nostr_sign_wallet_navigation_is_case_insensitive() {
+        let mut app = App::new().unwrap();
+        app.wallets = vec![
+            wallet_summary_no_address("wallet-a"),
+            wallet_summary_no_address("wallet-b"),
+        ];
+        app.wallet_list_state.select(Some(0));
+        app.state = AppState::NostrSign;
+        app.nostr_sign_state = NostrSignState::SelectWallet;
+
+        handle_nostr_sign_keys(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('J'), KeyModifiers::NONE),
+        );
+        assert_eq!(app.wallet_list_state.selected(), Some(1));
+
+        handle_nostr_sign_keys(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('K'), KeyModifiers::NONE),
+        );
+        assert_eq!(app.wallet_list_state.selected(), Some(0));
     }
 
     #[test]
