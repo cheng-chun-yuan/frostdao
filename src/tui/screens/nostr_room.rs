@@ -287,27 +287,49 @@ fn render_ready(frame: &mut Frame, app: &App, area: Rect) {
     render_participant_list(frame, app, chunks[3]);
 
     // Help
-    let help_lines = vec![
-        Line::from(vec![
-            Span::styled("k", Style::default().fg(Color::Cyan)),
-            Span::raw(": Start Keygen  "),
-            Span::styled("s", Style::default().fg(Color::Cyan)),
-            Span::raw(": Start Signing  "),
-            Span::styled("Esc", Style::default().fg(Color::Yellow)),
-            Span::raw(": Leave"),
-        ]),
-        Line::from(""),
-        Line::from(Span::styled(
-            "All participants have joined - ready to start!",
-            Style::default().fg(Color::Green),
-        )),
-    ];
+    let help_lines = ready_help_lines(app);
     let help = Paragraph::new(help_lines).block(
         Block::default()
             .borders(Borders::TOP)
             .border_style(Style::default().fg(Color::DarkGray)),
     );
     frame.render_widget(help, chunks[4]);
+}
+
+fn ready_help_lines(app: &App) -> Vec<Line<'static>> {
+    if app.nostr_local_simulation_transport_active() {
+        return vec![
+            Line::from(vec![
+                Span::styled("k", Style::default().fg(Color::Cyan)),
+                Span::raw(": Start local keygen  "),
+                Span::styled("s", Style::default().fg(Color::Cyan)),
+                Span::raw(": Start signing  "),
+                Span::styled("Esc", Style::default().fg(Color::Yellow)),
+                Span::raw(": Leave"),
+            ]),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Local simulation: all participants have joined - ready to rehearse.",
+                Style::default().fg(Color::Green),
+            )),
+        ];
+    }
+
+    vec![
+        Line::from(vec![
+            Span::styled("k", Style::default().fg(Color::DarkGray)),
+            Span::raw(": Keygen blocked for relay  "),
+            Span::styled("s", Style::default().fg(Color::Cyan)),
+            Span::raw(": Start signing  "),
+            Span::styled("Esc", Style::default().fg(Color::Yellow)),
+            Span::raw(": Leave"),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Relay transport: live DKG is not wired yet; use local rehearsal or CLI keygen.",
+            Style::default().fg(Color::Yellow),
+        )),
+    ]
 }
 
 fn room_info_line(app: &App) -> Line<'static> {
@@ -488,5 +510,34 @@ mod tests {
         let rendered = line_to_string(room_config_status_line(&app));
 
         assert!(rendered.contains("Status: OK - Ready to join"));
+    }
+
+    #[test]
+    fn ready_help_labels_local_keygen_as_rehearsal() {
+        let app = App::new().unwrap();
+        let rendered = ready_help_lines(&app)
+            .into_iter()
+            .map(line_to_string)
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(rendered.contains("k: Start local keygen"));
+        assert!(rendered.contains("Local simulation"));
+        assert!(rendered.contains("rehearse"));
+    }
+
+    #[test]
+    fn ready_help_blocks_relay_keygen_until_live_dkg_is_wired() {
+        let mut app = App::new().unwrap();
+        app.force_relay_transport_for_tests = true;
+        let rendered = ready_help_lines(&app)
+            .into_iter()
+            .map(line_to_string)
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(rendered.contains("k: Keygen blocked for relay"));
+        assert!(rendered.contains("live DKG is not wired yet"));
+        assert!(rendered.contains("CLI keygen"));
     }
 }

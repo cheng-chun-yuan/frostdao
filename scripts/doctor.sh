@@ -284,6 +284,7 @@ def check_replay_cache_persistence():
     source = read(Path("src/nostr/transport.rs"))
     module = read(Path("src/nostr/mod.rs"))
     app = read(Path("src/tui/app.rs"))
+    tui_mod = read(Path("src/tui/mod.rs"))
     smoke_test = read(Path("tests/nostr_relay_smoke.rs"))
     smoke_script = read(Path("scripts/nostr-relay-smoke.sh"))
     docs = read(Path("docs/NOSTR_PROTOCOL.md"))
@@ -339,6 +340,12 @@ def check_replay_cache_persistence():
         "tui_nostr_room_uses_runtime_and_replay_cache",
     ]
     missing.extend([f"src/tui/app.rs: {item}" for item in app_required if item not in app])
+    tui_mod_required = [
+        "nostr_relay_keygen_blocked_message",
+        "nostr_room_ready_blocks_relay_keygen_shortcut",
+        "k:Relay keygen blocked",
+    ]
+    missing.extend([f"src/tui/mod.rs: {item}" for item in tui_mod_required if item not in tui_mod])
     tui_room = read(Path("src/tui/screens/nostr_room.rs"))
     tui_keygen = read(Path("src/tui/screens/nostr_keygen.rs"))
     room_required = [
@@ -353,6 +360,9 @@ def check_replay_cache_persistence():
         "room_info_labels_local_simulation_transport",
         "local_waiting_help_uses_test_participant_wording",
         "Add local test participant",
+        "ready_help_lines",
+        "Keygen blocked for relay",
+        "live DKG is not wired yet",
     ]
     missing.extend([f"src/tui/screens/nostr_room.rs: {item}" for item in room_required if item not in tui_room])
     keygen_required = [
@@ -378,8 +388,12 @@ def check_replay_cache_persistence():
         missing.append("RUN_GUIDE TUI Nostr room public/encrypted boundary documentation")
     if "Nostr keygen status keeps room, party, threshold, scheme, rank, and transport visible" not in run_guide:
         missing.append("RUN_GUIDE TUI Nostr keygen ceremony context documentation")
+    if "TUI room ready blocks relay-backed keygen until live relay DKG is wired" not in run_guide:
+        missing.append("RUN_GUIDE TUI relay keygen guard documentation")
     if "Every Nostr keygen phase keeps room ID, party index, threshold, scheme, rank, and transport visible" not in keymap:
         missing.append("TUI_KEYMAP Nostr keygen ceremony context documentation")
+    if "Start local keygen rehearsal; blocked for relay transport" not in keymap:
+        missing.append("TUI_KEYMAP relay keygen guard documentation")
     if "The room info line shows room ID, party index, threshold, scheme, rank, and" not in keymap:
         missing.append("TUI_KEYMAP Nostr room ceremony state documentation")
     if "The configure status line shows `Blocked` until the room ID, party index" not in keymap:

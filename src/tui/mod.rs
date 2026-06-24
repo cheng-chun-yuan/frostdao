@@ -2478,6 +2478,10 @@ fn handle_nostr_room_ready(app: &mut App, key: KeyEvent) {
             app.set_message("Left room");
         }
         KeyCode::Char('k') | KeyCode::Char('K') => {
+            if !app.nostr_local_simulation_transport_active() {
+                app.set_message(nostr_relay_keygen_blocked_message());
+                return;
+            }
             // Start Nostr keygen
             app.nostr_keygen_state = NostrKeygenState::ModeSelect;
             app.state = AppState::NostrKeygen;
@@ -2489,6 +2493,10 @@ fn handle_nostr_room_ready(app: &mut App, key: KeyEvent) {
         }
         _ => {}
     }
+}
+
+fn nostr_relay_keygen_blocked_message() -> &'static str {
+    "Relay-backed keygen is not wired yet; use local simulation rehearsal or CLI keygen"
 }
 
 /// Check if all participants have joined, transition to Ready if so
@@ -3008,7 +3016,13 @@ fn help_bar_text(app: &App) -> String {
             NostrRoomPhase::WaitingForParticipants => {
                 "Space:Add local test participant | Esc:Leave".to_string()
             }
-            NostrRoomPhase::Ready => "k:Keygen | s:Sign | Esc:Leave".to_string(),
+            NostrRoomPhase::Ready => {
+                if app.nostr_local_simulation_transport_active() {
+                    "k:Local keygen | s:Sign | Esc:Leave".to_string()
+                } else {
+                    "k:Relay keygen blocked | s:Sign | Esc:Leave".to_string()
+                }
+            }
         },
         AppState::NostrKeygen => "Enter:Continue | r:Retry | Esc:Cancel".to_string(),
         AppState::NostrSign => screens::nostr_sign_help_text(&app.nostr_sign_state).to_string(),
@@ -3284,6 +3298,31 @@ mod tests {
         assert!(help.contains("Esc:Leave"));
         assert!(!help.contains("Simulate join"));
         assert!(!help.contains("demo"));
+    }
+
+    #[test]
+    fn nostr_room_ready_blocks_relay_keygen_shortcut() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::NostrRoom;
+        app.nostr_room_phase = NostrRoomPhase::Ready;
+        app.force_relay_transport_for_tests = true;
+
+        assert_eq!(
+            help_bar_text(&app),
+            "k:Relay keygen blocked | s:Sign | Esc:Leave"
+        );
+
+        handle_nostr_room_ready(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE),
+        );
+
+        assert!(matches!(app.state, AppState::NostrRoom));
+        assert!(matches!(app.nostr_room_phase, NostrRoomPhase::Ready));
+        assert_eq!(
+            app.message.as_deref(),
+            Some(nostr_relay_keygen_blocked_message())
+        );
     }
 
     #[test]

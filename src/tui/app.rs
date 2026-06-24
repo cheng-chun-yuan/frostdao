@@ -179,6 +179,10 @@ pub struct App {
     /// Current signing state
     pub nostr_sign_state: NostrSignState,
 
+    /// Test-only transport override so TUI tests do not mutate process env.
+    #[cfg(test)]
+    pub force_relay_transport_for_tests: bool,
+
     // Nostr signing transaction data
     /// Current focused Nostr transaction draft field
     pub nostr_tx_focus: NostrTxField,
@@ -235,6 +239,8 @@ impl App {
             nostr_runtime: None,
             nostr_keygen_state: NostrKeygenState::ModeSelect,
             nostr_sign_state: NostrSignState::SelectWallet,
+            #[cfg(test)]
+            force_relay_transport_for_tests: false,
             nostr_tx_focus: NostrTxField::Recipient,
             nostr_to_address_input: TextInput::new("Recipient Address").with_placeholder("tb1p..."),
             nostr_amount_input: TextInput::new("Amount (sats)")
@@ -699,6 +705,11 @@ impl App {
     }
 
     pub fn nostr_local_simulation_transport_active(&self) -> bool {
+        #[cfg(test)]
+        if self.force_relay_transport_for_tests {
+            return false;
+        }
+
         self.nostr_runtime
             .as_ref()
             .map(TuiNostrRuntime::is_local_simulation)
