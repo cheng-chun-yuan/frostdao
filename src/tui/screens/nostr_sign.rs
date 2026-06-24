@@ -714,21 +714,7 @@ fn render_proposals_list(frame: &mut Frame, app: &App, area: Rect) {
     } else {
         proposals
             .into_iter()
-            .map(|proposal| {
-                ListItem::new(Line::from(vec![
-                    Span::styled(
-                        format!("Party {} ", proposal.proposer_index),
-                        Style::default().fg(Color::Cyan),
-                    ),
-                    Span::raw(format!("{} sats -> ", proposal.amount_sats)),
-                    Span::styled(&proposal.to_address, Style::default().fg(Color::Yellow)),
-                    Span::raw("  "),
-                    Span::styled(
-                        &proposal.review.sighash_fingerprint,
-                        Style::default().fg(Color::Magenta),
-                    ),
-                ]))
-            })
+            .map(|proposal| ListItem::new(pending_proposal_lines(proposal)))
             .collect()
     };
 
@@ -740,6 +726,44 @@ fn render_proposals_list(frame: &mut Frame, app: &App, area: Rect) {
     );
 
     frame.render_widget(list, area);
+}
+
+fn pending_proposal_lines(proposal: &crate::tui::state::TxProposal) -> Vec<Line<'static>> {
+    vec![
+        Line::from(vec![
+            Span::styled("Wallet: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                proposal.wallet_name.clone(),
+                Style::default().fg(Color::White),
+            ),
+            Span::styled("  Network: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                proposal.review.network.clone(),
+                Style::default().fg(Color::Cyan),
+            ),
+            Span::styled("  Session: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                proposal.session_id.clone(),
+                Style::default().fg(Color::Magenta),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                format!("Party {} ", proposal.proposer_index),
+                Style::default().fg(Color::Cyan),
+            ),
+            Span::raw(format!("{} sats -> ", proposal.amount_sats)),
+            Span::styled(
+                proposal.to_address.clone(),
+                Style::default().fg(Color::Yellow),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                proposal.review.sighash_fingerprint.clone(),
+                Style::default().fg(Color::Magenta),
+            ),
+        ]),
+    ]
 }
 
 fn review_checklist_lines(proposal: &crate::tui::state::TxProposal) -> Vec<Line<'static>> {
@@ -1153,6 +1177,32 @@ mod tests {
             "Proposer: Party 2",
             "Only press y when every line matches",
             "press r to publish rejection",
+        ] {
+            assert!(rendered.contains(expected), "missing {expected}");
+        }
+    }
+
+    #[test]
+    fn pending_proposal_lines_show_identity_before_review() {
+        let proposal = test_review_proposal();
+        let rendered = pending_proposal_lines(&proposal)
+            .into_iter()
+            .map(|line| {
+                line.spans
+                    .into_iter()
+                    .map(|span| span.content.into_owned())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        for expected in [
+            "Wallet: treasury",
+            "Network: Testnet3",
+            "Session: session-review",
+            "Party 2",
+            "50000 sats -> tb1qrecipient",
+            "abc12345",
         ] {
             assert!(rendered.contains(expected), "missing {expected}");
         }
