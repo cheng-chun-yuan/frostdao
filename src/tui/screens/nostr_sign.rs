@@ -406,6 +406,9 @@ fn render_content(frame: &mut Frame, app: &App, area: Rect) {
         NostrSignState::ViewProposals { .. } => {
             render_proposals_list(frame, app, area);
         }
+        NostrSignState::ReviewProposal { proposal, .. } => {
+            render_review_checklist(frame, proposal, area);
+        }
         NostrSignState::CollectingShares {
             received_shares, ..
         } => {
@@ -582,6 +585,79 @@ fn render_proposals_list(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(list, area);
 }
 
+fn review_checklist_lines(proposal: &crate::tui::state::TxProposal) -> Vec<Line<'static>> {
+    vec![
+        Line::from(Span::styled(
+            "Before consenting, compare these fields on every device:",
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        checklist_line(
+            "Network and session",
+            format!("{} / {}", proposal.review.network, proposal.session_id),
+        ),
+        checklist_line(
+            "Source",
+            format!(
+                "{} from {}",
+                proposal.review.source_path, proposal.review.from_address
+            ),
+        ),
+        checklist_line("Destination", proposal.review.to_address.clone()),
+        checklist_line(
+            "Amount and fee",
+            format!(
+                "{} sats at {} sat/vB",
+                proposal.amount_sats, proposal.fee_rate
+            ),
+        ),
+        checklist_line(
+            "Sighash fingerprint",
+            proposal.review.sighash_fingerprint.clone(),
+        ),
+        checklist_line("Proposer", format!("Party {}", proposal.proposer_index)),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("Only press ", Style::default().fg(Color::DarkGray)),
+            Span::styled("y", Style::default().fg(Color::Yellow)),
+            Span::styled(
+                " when every line matches; press ",
+                Style::default().fg(Color::DarkGray),
+            ),
+            Span::styled("r", Style::default().fg(Color::Yellow)),
+            Span::styled(
+                " to publish rejection.",
+                Style::default().fg(Color::DarkGray),
+            ),
+        ]),
+    ]
+}
+
+fn checklist_line(label: &'static str, value: String) -> Line<'static> {
+    Line::from(vec![
+        Span::styled("□ ", Style::default().fg(Color::Cyan)),
+        Span::styled(label, Style::default().fg(Color::Gray)),
+        Span::styled(": ", Style::default().fg(Color::Gray)),
+        Span::styled(value, Style::default().fg(Color::White)),
+    ])
+}
+
+fn render_review_checklist(
+    frame: &mut Frame,
+    proposal: &crate::tui::state::TxProposal,
+    area: Rect,
+) {
+    let checklist = Paragraph::new(review_checklist_lines(proposal)).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Consent Checklist ")
+            .border_style(Style::default().fg(Color::Cyan)),
+    );
+    frame.render_widget(checklist, area);
+}
+
 fn render_shares_list(
     frame: &mut Frame,
     app: &App,
@@ -732,10 +808,63 @@ fn format_timestamp(timestamp: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tui::state::TxProposal;
     use frostdao::protocol::{
         SigningAttemptConfig, SigningCoordinator, SigningNonceInput, SigningSchemePolicy,
         SigningShareInput,
     };
+
+    fn test_review_proposal() -> TxProposal {
+        TxProposal {
+            session_id: "session-review".to_string(),
+            wallet_name: "treasury".to_string(),
+            proposer_index: 2,
+            to_address: "tb1qrecipient".to_string(),
+            amount_sats: 50_000,
+            fee_rate: 7,
+            sighash: "abcdef".to_string(),
+            review: frostdao::nostr::TxReviewPayload {
+                network: "Testnet3".to_string(),
+                source_path: "m/86'/1'/0'/0/0".to_string(),
+                from_address: "tb1qsource".to_string(),
+                to_address: "tb1qrecipient".to_string(),
+                amount_sats: 50_000,
+                fee_rate_sats_vb: 7,
+                sighash_fingerprint: "abc12345".to_string(),
+            },
+            description: "test proposal".to_string(),
+            timestamp: 1_700_000_000,
+        }
+    }
+
+    #[test]
+    fn review_checklist_contains_required_consent_fields() {
+        let proposal = test_review_proposal();
+        let rendered = review_checklist_lines(&proposal)
+            .into_iter()
+            .map(|line| {
+                line.spans
+                    .into_iter()
+                    .map(|span| span.content.into_owned())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        for expected in [
+            "Network and session",
+            "Testnet3 / session-review",
+            "m/86'/1'/0'/0/0 from tb1qsource",
+            "Destination: tb1qrecipient",
+            "50000 sats at 7 sat/vB",
+            "Sighash fingerprint: abc12345",
+            "Proposer: Party 2",
+            "Only press y when every line matches",
+            "press r to publish rejection",
+        ] {
+            assert!(rendered.contains(expected), "missing {expected}");
+        }
+    }
 
     #[test]
     fn signing_progress_counts_falls_back_to_session_inboxes() {

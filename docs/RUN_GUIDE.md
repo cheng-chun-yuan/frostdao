@@ -168,7 +168,7 @@ DKG transaction build and broadcast commands accept `testnet`, `testnet3`, `sign
 
 Never reuse a signing session nonce.
 
-In the TUI send flow, `Enter` prepares the transaction review screen. Press `y` only after the review fields match what every signer expects. In Nostr proposal review, `y` publishes consent and `r` publishes an explicit rejection tied to the reviewed proposal fingerprint. Proposers see approved, rejected, and pending parties in the consent list.
+In the TUI send flow, `Enter` prepares the transaction review screen. Press `y` only after the review fields match what every signer expects. In Nostr proposal review, the consent checklist shows network/session, source path and address, destination, amount/fee, sighash fingerprint, and proposer before `y` publishes consent. Press `r` to publish an explicit rejection tied to the reviewed proposal fingerprint. Proposers see approved, rejected, and pending parties in the consent list.
 
 ## 8. Reshare Without Changing Address
 
