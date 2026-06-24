@@ -978,7 +978,9 @@ pub(crate) fn nostr_sign_help_text(state: &NostrSignState) -> String {
         NostrSignState::ConfigureTx { .. } => {
             String::from("Tab:Field | Enter:Publish proposal | Ctrl+u:Clear field | Esc:Back")
         }
-        NostrSignState::ReviewProposal { .. } => String::from("y: Consent | r: Reject | Esc: Back"),
+        NostrSignState::ReviewProposal { .. } => String::from(
+            "y: Consent only after every signer matches review | r: Reject | Esc: Back",
+        ),
         NostrSignState::Combining { .. } => {
             String::from("CLI handoff: combine + broadcast | Esc: Back")
         }
@@ -1181,6 +1183,17 @@ mod tests {
         ] {
             assert!(rendered.contains(expected), "missing {expected}");
         }
+    }
+
+    #[test]
+    fn review_help_requires_cross_device_match_before_consent() {
+        let help = nostr_sign_help_text(&NostrSignState::ReviewProposal {
+            wallet_name: "treasury".to_string(),
+            proposal: test_review_proposal(),
+        });
+
+        assert!(help.contains("Consent only after every signer matches review"));
+        assert!(help.contains("r: Reject"));
     }
 
     #[test]

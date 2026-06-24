@@ -295,11 +295,11 @@ Every Nostr keygen phase keeps room ID, party index, threshold, scheme, rank, an
 | `p` | Propose transaction, in role select |
 | `c` / `C` | Consent role in role select, or copy TXID on completion |
 | `Ctrl+u` | Clear focused recipient or amount field while configuring a proposal |
-| `y` | Consent after reviewing proposal fingerprint |
+| `y` | Consent only after every signer matches the proposal review |
 | `r` | Publish a proposal rejection or retry where shown |
 | `Esc` | Back/cancel |
 
-The configure and review screens show the source path and source address. Send review also shows the child x-only pubkey fingerprint for HD sources. If the proposer selected an HD-derived source, the Nostr proposal uses that same derived path; consent only after every signer sees the same source path, source address, destination, amount, and fingerprint.
+The configure and review screens show the source path and source address. Send review also shows the child x-only pubkey fingerprint for HD sources. If the proposer selected an HD-derived source, the Nostr proposal uses that same derived path; consent only after every signer sees the same source path, source address, destination, amount, and fingerprint. The review help bar repeats that `y` means consent only after every signer matches the review.
 Regtest Nostr proposals require `FROSTDAO_REGTEST_MEMPOOL_API`; without it, the configure screen blocks publishing and shows the missing setting.
 Every Nostr signing phase keeps room ID, party index, threshold, scheme, rank,
 and transport visible. Proposal metadata is public; signing nonce/share payloads
