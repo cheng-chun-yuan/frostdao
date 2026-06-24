@@ -2996,7 +2996,7 @@ fn help_bar_text(app: &App) -> String {
             if state.confirm_delete {
                 "Type wallet name | Enter:Delete | Backspace:Edit | Esc:Cancel".to_string()
             } else {
-                "↑/↓:Navigate | Enter:Select | b:Balance | c:Copy | v:QR | Esc:Back".to_string()
+                "↑/↓:Navigate | Enter:Select | b:Balance | c/C:Copy | v:QR | Esc:Back".to_string()
             }
         }
         AppState::ChainSelect => "↑/↓:Select | Enter:Confirm | Esc:Cancel".to_string(),
@@ -3004,7 +3004,7 @@ fn help_bar_text(app: &App) -> String {
         AppState::Reshare(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
         AppState::Send(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
         AppState::AddressList(_) => {
-            "↑/↓:Navigate | c:Copy | b:Balance | a:Add | x:Remove | Esc:Back".to_string()
+            "↑/↓:Navigate | c/C:Copy | b:Balance | a:Add | x:Remove | Esc:Back".to_string()
         }
         AppState::MnemonicBackup(state) => {
             if state.revealed {
@@ -3032,7 +3032,7 @@ fn help_bar_text(app: &App) -> String {
         AppState::NostrSign => screens::nostr_sign_help_text(&app.nostr_sign_state).to_string(),
         #[cfg(feature = "miniscript-policy")]
         AppState::PolicyPreview => {
-            "Enter:Init draft | [/]:Template | Tab:Field | c:Copy | Esc:Back".to_string()
+            "Enter:Init draft | [/]:Template | Tab:Field | c/C:Copy | Esc:Back".to_string()
         }
     }
 }
@@ -3040,11 +3040,11 @@ fn help_bar_text(app: &App) -> String {
 fn home_help_bar_text() -> String {
     #[cfg(feature = "miniscript-policy")]
     {
-        "↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | r/F5:Balance | c:Copy | q:Quit".to_string()
+        "↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | r/F5:Balance | c/C:Copy | q:Quit".to_string()
     }
     #[cfg(not(feature = "miniscript-policy"))]
     {
-        "↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | r/F5:Balance | c:Copy | q:Quit"
+        "↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | r/F5:Balance | c/C:Copy | q:Quit"
             .to_string()
     }
 }
@@ -3090,7 +3090,7 @@ mod tests {
 
         assert!(help.contains("r/F5:Balance"));
         assert!(help.contains("Enter:Select"));
-        assert!(help.contains("c:Copy"));
+        assert!(help.contains("c/C:Copy"));
     }
 
     #[test]

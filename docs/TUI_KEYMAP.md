@@ -12,7 +12,7 @@ This is the maintained keyboard convention for FrostDAO TUI.
 | `j` / `k` | Move down/up, Vim-style alternative to arrows |
 | `Tab` / `Shift-Tab` | Next/previous form field |
 | `Space` | Toggle checkbox or binary option |
-| `c` | Copy current selected/output value when the screen has copyable output (`C` also works). |
+| `c` / `C` | Copy current selected/output value when the screen has copyable output (`c`/`C` both work). |
 | `r` | Refresh, retry, or reject depending on screen context |
 | `F5` | Refresh selected wallet balance on Home (UI compatibility alias for `r`). |
 | `q` | Quit only from home; close QR popup when shown |
@@ -33,7 +33,7 @@ Prefer lowercase shortcuts in help text. Uppercase/layered aliases are compatibi
 | `s` | Send from selected wallet |
 | `a` | View derived addresses |
 | `m` | Show mnemonic backup flow |
-| `c` | Copy selected wallet address |
+| `c` / `C` | Copy selected wallet address |
 | `r` / `F5` | Refresh selected wallet balance |
 | `R` | Reload wallet list |
 | `q` | Quit |
@@ -47,7 +47,7 @@ Prefer lowercase shortcuts in help text. Uppercase/layered aliases are compatibi
 | `↑/↓`, `j/k` | Select action |
 | `Enter` | Run selected action |
 | `b` | Fetch balance |
-| `c` | Copy wallet address |
+| `c` / `C` | Copy wallet address |
 | `v` | Show QR code |
 | `Esc` | Back |
 
@@ -108,7 +108,7 @@ Applies when a single-line input or multiline paste area is focused.
 | Mode select | `Enter` | Continue |
 | Parameters | `Tab`, `Shift-Tab` | Move fields |
 | Parameters | `Enter` | Generate local wallet or continue distributed flow |
-| Round output | `c` | Copy JSON output |
+| Round output | `c` / `C` | Copy JSON output |
 | Round output | `Enter` | Continue |
 | Any phase | `Esc` | Back/cancel |
 
@@ -124,9 +124,9 @@ Applies when a single-line input or multiline paste area is focused.
 | Distributed setup | `Tab`, `Shift-Tab` | Move fields |
 | Distributed setup | `j/k` | Select source wallet when wallet field is focused |
 | Distributed setup | `Enter` | Generate round1 sub-shares for new parties |
-| Round output | `c` | Copy JSON output |
+| Round output | `c` / `C` | Copy JSON output |
 | Round output | `Enter` | Go to finalize as new party |
-| Round output | `c` | Copy only to intended recipient channel |
+| Round output | `c` / `C` | Copy only to intended recipient channel |
 | Finalize | `Space` | Toggle HTSS when hierarchy field is focused |
 | Finalize | `Enter` | Finalize new share |
 | Any phase | `Esc` | Back/cancel |
@@ -150,24 +150,24 @@ Reshare boundaries:
 | Script config | `m` | Toggle relative timelock mode |
 | Transaction details | `Tab`, `Shift-Tab` | Move address/amount fields |
 | Transaction review | `y` | Confirm only after every signer sees the same review, then locally sign and attempt broadcast |
-| Sighash | `c` | Copy sighash |
-| Nonce output | `c` | Copy nonce JSON |
-| Signature share | `c` | Copy signature share JSON |
-| Complete | `c` | Copy TXID, or raw transaction when broadcast failed |
+| Sighash | `c` / `C` | Copy sighash |
+| Nonce output | `c` / `C` | Copy nonce JSON |
+| Signature share | `c` / `C` | Copy signature share JSON |
+| Complete | `c` / `C` | Copy TXID, or raw transaction when broadcast failed |
 | Any phase | `Enter` | Continue/submit |
 | Any phase | `Esc` | Back/cancel |
 
 The transaction review labels the local-only boundary: share material stays on
 this device, and only the signed raw transaction or TXID leaves the signing
 flow. Pressing `y` signs locally and attempts the selected network API; if
-broadcast fails, use `c` to copy the raw transaction for manual broadcast.
+broadcast fails, use `c`/`C` to copy the raw transaction for manual broadcast.
 
 ## Address List
 
 | Key | Action |
 |-----|--------|
 | `↑/↓`, `j/k` | Select derived address |
-| `c` | Copy selected address |
+| `c` / `C` | Copy selected address |
 | `b` | Fetch selected address balance |
 | `+`, `a` | Add next derived address |
 | `-`, `x` | Remove last derived address |
@@ -187,14 +187,14 @@ The TUI does not provide a mnemonic copy shortcut. This keeps backup words delib
 
 | Screen | Key |
 |--------|-----|
-| Keygen round output | `c` copies JSON |
-| Reshare round output | `c` copies JSON |
-| Send sighash | `c` copies sighash |
-| Send nonce output | `c` copies JSON |
-| Send signature share | `c` copies JSON |
-| Send complete | `c` copies TXID |
-| Address list | `c` copies selected address |
-| Miniscript agent payment draft | `c` copies initialized JSON draft |
+| Keygen round output | `c` / `C` copies JSON |
+| Reshare round output | `c` / `C` copies JSON |
+| Send sighash | `c` / `C` copies sighash |
+| Send nonce output | `c` / `C` copies JSON |
+| Send signature share | `c` / `C` copies JSON |
+| Send complete | `c` / `C` copies TXID |
+| Address list | `c` / `C` copies selected address |
+| Miniscript agent payment draft | `c` / `C` copies initialized JSON draft |
 
 ## Miniscript Agent Payment Policy
 
@@ -210,7 +210,7 @@ cargo run --features miniscript-policy -- tui
 | `Tab`, `Shift-Tab` | Move between agent label, pubkey, payment fields, and custom policy input |
 | `[` / `]` | Cycle common policy templates |
 | `Enter` | Initialize agent payment draft |
-| `c` | Copy initialized JSON draft |
+| `c` / `C` | Copy initialized JSON draft |
 | `Esc` | Back to Home |
 
 The policy input remains editable. Use the templates as starting points, then type a custom Miniscript policy when the policy field is focused.
@@ -254,7 +254,7 @@ Every Nostr keygen phase keeps room ID, party index, threshold, scheme, rank, an
 | `Tab`, `Shift-Tab` | Move recipient/amount field while configuring a proposal |
 | `Enter` | Continue/done |
 | `p` | Propose transaction, in role select |
-| `c` | Consent role in role select, or copy TXID on completion |
+| `c` / `C` | Consent role in role select, or copy TXID on completion |
 | `Ctrl+u` | Clear focused recipient or amount field while configuring a proposal |
 | `y` | Consent after reviewing proposal fingerprint |
 | `r` | Publish a proposal rejection or retry where shown |
