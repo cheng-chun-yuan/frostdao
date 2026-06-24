@@ -115,6 +115,7 @@ Control model:
 - Every signer derives the same public tweak and applies it to their own local share.
 - Spending from the derived address still requires a valid TSS or HTSS signer set for that wallet.
 - The send review and TUI Nostr proposal review show the selected source path and source address so all devices can compare the same HD child before signing.
+- The TUI send flow also shows a child x-only pubkey fingerprint for HD sources. The path, address, and child pubkey fingerprint should match on every signer device before anyone confirms.
 
 ## 6. Back Up Your Share
 

@@ -137,6 +137,7 @@ UX requirements:
 - Show path with the selected network's BIP-86 coin type: `m/86'/0'/0'/0/index` on mainnet, `m/86'/1'/0'/0/index` on testnet, signet, and regtest.
 - Explain that the same MPC threshold signer set controls all derived addresses.
 - Explain that each derived address is controlled by tweaked threshold shares for the selected path, not by a newly reconstructed private key.
+- Show a child x-only pubkey fingerprint for HD selections so multiple devices can compare the same threshold-controlled child before signing.
 
 ## Flow 4: Propose Transaction
 

@@ -442,6 +442,29 @@ fn review_source_address(form: &SendFormData, root_address: Option<&str>) -> Str
         .unwrap_or_else(|| "unknown source address".to_string())
 }
 
+fn selected_hd_pubkey(form: &SendFormData) -> Option<&str> {
+    if form.use_hd_address && form.hd_enabled {
+        form.hd_addresses
+            .get(form.hd_selected_index)
+            .map(|(_, pubkey, _)| pubkey.as_str())
+    } else {
+        None
+    }
+}
+
+fn short_fingerprint(value: &str) -> String {
+    if value.len() <= 24 {
+        value.to_string()
+    } else {
+        format!("{}...{}", &value[..16], &value[value.len() - 8..])
+    }
+}
+
+fn review_control_proof(form: &SendFormData) -> Option<String> {
+    selected_hd_pubkey(form)
+        .map(|pubkey| format!("child x-only pubkey {}", short_fingerprint(pubkey)))
+}
+
 fn review_control_statement(form: &SendFormData) -> &'static str {
     if form.get_derivation_path().is_some() {
         "MPC threshold shares sign this derived path with the HD tweak"
@@ -452,7 +475,7 @@ fn review_control_statement(form: &SendFormData) -> &'static str {
 
 fn selected_address_lines(form: &SendFormData) -> Vec<Line<'static>> {
     if form.use_hd_address && form.hd_enabled {
-        if let Some((_addr, _, idx)) = form.hd_addresses.get(form.hd_selected_index) {
+        if let Some((_addr, pubkey, idx)) = form.hd_addresses.get(form.hd_selected_index) {
             return vec![
                 Line::from(vec![
                     Span::styled("Selected: ", Style::default().fg(Color::Gray)),
@@ -470,6 +493,13 @@ fn selected_address_lines(form: &SendFormData) -> Vec<Line<'static>> {
                         Style::default().fg(Color::Green),
                     ),
                     Span::raw(" with HD tweak"),
+                ]),
+                Line::from(vec![
+                    Span::styled("Proof: ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        format!("child x-only pubkey {}", short_fingerprint(pubkey)),
+                        Style::default().fg(Color::Cyan),
+                    ),
                 ]),
                 Line::from("No new root key or single-device private key is created."),
             ];
@@ -1714,6 +1744,7 @@ fn render_review_transaction(
             .and_then(|wallet| wallet_address_for_network(wallet, app.network)),
     );
     let control_statement = review_control_statement(form);
+    let control_proof = review_control_proof(form);
     let signer_list = form
         .get_selected_indices()
         .iter()
@@ -1755,6 +1786,16 @@ fn render_review_transaction(
             Span::styled("Control: ", Style::default().fg(Color::Gray)),
             Span::styled(control_statement, Style::default().fg(Color::Green)),
         ]),
+    ];
+
+    if let Some(proof) = control_proof {
+        lines.push(Line::from(vec![
+            Span::styled("Control proof: ", Style::default().fg(Color::Gray)),
+            Span::styled(proof, Style::default().fg(Color::Cyan)),
+        ]));
+    }
+
+    lines.extend([
         Line::from(vec![
             Span::styled("Destination: ", Style::default().fg(Color::Gray)),
             Span::raw(form.to_address.value().to_string()),
@@ -1806,7 +1847,7 @@ fn render_review_transaction(
                 form.threshold, form.total_parties, signer_list
             )),
         ]),
-    ];
+    ]);
 
     if form.hierarchical {
         let requirement = form
@@ -2491,6 +2532,39 @@ mod tests {
     }
 
     #[test]
+    fn short_fingerprint_keeps_pubkey_comparable() {
+        assert_eq!(short_fingerprint("short"), "short");
+        assert_eq!(
+            short_fingerprint("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
+            "0123456789abcdef...89abcdef"
+        );
+    }
+
+    #[test]
+    fn review_control_proof_shows_selected_hd_child_pubkey() {
+        let mut form = SendFormData::new();
+        form.hd_enabled = true;
+        form.use_hd_address = true;
+        form.hd_addresses = vec![(
+            "tb1pderived".to_string(),
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
+            7,
+        )];
+
+        assert_eq!(
+            review_control_proof(&form),
+            Some("child x-only pubkey 0123456789abcdef...89abcdef".to_string())
+        );
+    }
+
+    #[test]
+    fn review_control_proof_is_hidden_for_root_source() {
+        let form = SendFormData::new();
+
+        assert!(review_control_proof(&form).is_none());
+    }
+
+    #[test]
     fn local_review_guard_requires_cross_device_comparison() {
         let rendered = lines_to_string(local_review_guard_lines());
 
@@ -2567,13 +2641,18 @@ mod tests {
         let mut form = SendFormData::new();
         form.hd_enabled = true;
         form.use_hd_address = true;
-        form.hd_addresses = vec![("tb1ptest".to_string(), "pubkey".to_string(), 7)];
+        form.hd_addresses = vec![(
+            "tb1ptest".to_string(),
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
+            7,
+        )];
 
         let rendered = lines_to_string(selected_address_lines(&form));
 
         assert!(rendered.contains("HD Address at path 0/7"));
         assert!(rendered.contains("same MPC threshold shares"));
         assert!(rendered.contains("HD tweak"));
+        assert!(rendered.contains("child x-only pubkey 0123456789abcdef...89abcdef"));
         assert!(rendered.contains("No new root key"));
         assert!(rendered.contains("single-device private key"));
     }

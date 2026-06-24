@@ -56,6 +56,7 @@ FrostDAO derives receive addresses from the same threshold wallet. This does not
 Each party applies the same public tweak to their own FROST share, so no full private key is reconstructed and no single device can take control of the derived address.
 When the group signs for a derived address, every signer must use the selected derivation path and the resulting tweaked shares.
 The invariant is: any valid threshold signer set can interpolate the tweaked shares to the HD child key, while fewer than threshold parties still cannot reconstruct or sign for that child key.
+For operator review, compare the selected path, derived address, and child x-only pubkey fingerprint across devices. All three identify the same threshold-controlled HD child without revealing any secret share.
 
 ```bash
 frostdao dkg-derive-address --name treasury --change 0 --index 0 --network testnet
