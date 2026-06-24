@@ -14,7 +14,7 @@ use ratatui::{
 
 use crate::tui::app::{wallet_address_for_network, App};
 use crate::tui::components::{TextArea, TextInput};
-use crate::tui::state::{SendFormField, SendState};
+use crate::tui::state::{NetworkSelection, SendFormField, SendState};
 use crate::tui::COPY_KEY_LABEL;
 
 /// Script type for Taproot spending conditions
@@ -474,14 +474,25 @@ fn review_control_statement(form: &SendFormData) -> &'static str {
     }
 }
 
-fn selected_address_lines(form: &SendFormData) -> Vec<Line<'static>> {
+fn selected_address_lines(form: &SendFormData, network: NetworkSelection) -> Vec<Line<'static>> {
     if form.use_hd_address && form.hd_enabled {
         if let Some((_addr, pubkey, idx)) = form.hd_addresses.get(form.hd_selected_index) {
+            let path =
+                frostdao::crypto::hd::format_bip86_path(network.to_bitcoin_network(), 0, *idx);
             return vec![
+                Line::from(vec![
+                    Span::styled("Network: ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        network.display_name(),
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                ]),
                 Line::from(vec![
                     Span::styled("Selected: ", Style::default().fg(Color::Gray)),
                     Span::styled(
-                        format!("HD Address at path 0/{}", idx),
+                        format!("HD Address at {path}"),
                         Style::default()
                             .fg(Color::Green)
                             .add_modifier(Modifier::BOLD),
@@ -510,6 +521,15 @@ fn selected_address_lines(form: &SendFormData) -> Vec<Line<'static>> {
     }
 
     vec![
+        Line::from(vec![
+            Span::styled("Network: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                network.display_name(),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
         Line::from(vec![
             Span::styled("Selected: ", Style::default().fg(Color::Gray)),
             Span::styled(
@@ -1078,7 +1098,7 @@ fn render_select_address(frame: &mut Frame, app: &App, form: &SendFormData, area
         .constraints([
             Constraint::Length(4), // Header info
             Constraint::Min(8),    // Address list
-            Constraint::Length(3), // Selection info
+            Constraint::Length(4), // Selection info
             Constraint::Length(2), // Error
             Constraint::Length(2), // Help
         ])
@@ -1187,7 +1207,7 @@ fn render_select_address(frame: &mut Frame, app: &App, form: &SendFormData, area
     }
 
     // Selection info
-    let selection_info = Paragraph::new(selected_address_lines(form));
+    let selection_info = Paragraph::new(selected_address_lines(form, app.network));
     frame.render_widget(selection_info, chunks[2]);
 
     if let Some(error) = &form.error_message {
@@ -2696,9 +2716,10 @@ mod tests {
             7,
         )];
 
-        let rendered = lines_to_string(selected_address_lines(&form));
+        let rendered = lines_to_string(selected_address_lines(&form, NetworkSelection::Signet));
 
-        assert!(rendered.contains("HD Address at path 0/7"));
+        assert!(rendered.contains("Network: Signet"));
+        assert!(rendered.contains("HD Address at m/86'/1'/0'/0/7"));
         assert!(rendered.contains("same MPC threshold shares"));
         assert!(rendered.contains("HD tweak"));
         assert!(rendered.contains("child x-only pubkey 0123456789abcdef...89abcdef"));
@@ -2710,8 +2731,9 @@ mod tests {
     fn selected_address_lines_explain_root_threshold_control() {
         let form = SendFormData::new();
 
-        let rendered = lines_to_string(selected_address_lines(&form));
+        let rendered = lines_to_string(selected_address_lines(&form, NetworkSelection::Regtest));
 
+        assert!(rendered.contains("Network: Regtest"));
         assert!(rendered.contains("Root Address (no HD tweak)"));
         assert!(rendered.contains("root MPC threshold shares"));
     }

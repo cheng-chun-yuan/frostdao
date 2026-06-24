@@ -177,6 +177,9 @@ Recovery boundaries:
 | Any phase | `Enter` | Continue/submit |
 | Any phase | `Esc` | Back/cancel |
 
+The address selection step shows the selected network and either the root
+key-path source or the full BIP-86 HD source path before transaction details.
+
 The transaction review labels the local-only boundary: share material stays on
 this device, and only the signed raw transaction or TXID leaves the signing
 flow. Pressing `y` signs locally and attempts the selected network API on test
