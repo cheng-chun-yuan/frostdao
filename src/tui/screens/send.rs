@@ -12,7 +12,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::tui::app::App;
+use crate::tui::app::{wallet_address_for_network, App};
 use crate::tui::components::{TextArea, TextInput};
 use crate::tui::state::{SendFormField, SendState};
 
@@ -380,6 +380,20 @@ fn review_source_path(form: &SendFormData, network: bitcoin::Network) -> String 
     form.get_derivation_path()
         .map(|(change, index)| frostdao::crypto::hd::format_bip86_path(network, change, index))
         .unwrap_or_else(|| "root key-path".to_string())
+}
+
+fn review_source_address(form: &SendFormData, root_address: Option<&str>) -> String {
+    form.get_selected_hd_address()
+        .or_else(|| root_address.map(str::to_string))
+        .unwrap_or_else(|| "unknown source address".to_string())
+}
+
+fn review_control_statement(form: &SendFormData) -> &'static str {
+    if form.get_derivation_path().is_some() {
+        "MPC threshold shares sign this derived path with the HD tweak"
+    } else {
+        "MPC threshold shares sign the root key-path address"
+    }
 }
 
 fn selected_address_lines(form: &SendFormData) -> Vec<Line<'static>> {
@@ -1625,6 +1639,14 @@ fn render_review_transaction(
     let total_spend = amount.saturating_add(form.estimated_fee);
     let remaining = confirmed_balance.saturating_sub(total_spend);
     let source_path = review_source_path(form, app.network.to_bitcoin_network());
+    let source_address = review_source_address(
+        form,
+        app.wallets
+            .iter()
+            .find(|wallet| wallet.name == wallet_name)
+            .and_then(|wallet| wallet_address_for_network(wallet, app.network)),
+    );
+    let control_statement = review_control_statement(form);
     let signer_list = form
         .get_selected_indices()
         .iter()
@@ -1657,6 +1679,14 @@ fn render_review_transaction(
         Line::from(vec![
             Span::styled("Source path: ", Style::default().fg(Color::Gray)),
             Span::raw(source_path),
+        ]),
+        Line::from(vec![
+            Span::styled("Source address: ", Style::default().fg(Color::Gray)),
+            Span::raw(source_address),
+        ]),
+        Line::from(vec![
+            Span::styled("Control: ", Style::default().fg(Color::Gray)),
+            Span::styled(control_statement, Style::default().fg(Color::Green)),
         ]),
         Line::from(vec![
             Span::styled("Destination: ", Style::default().fg(Color::Gray)),
@@ -2327,6 +2357,49 @@ mod tests {
         assert_eq!(
             review_source_path(&form, bitcoin::Network::Bitcoin),
             "m/86'/0'/0'/0/9"
+        );
+    }
+
+    #[test]
+    fn review_source_address_prefers_selected_hd_address() {
+        let mut form = SendFormData::new();
+        form.hd_enabled = true;
+        form.use_hd_address = true;
+        form.hd_addresses = vec![("tb1pderived".to_string(), "pubkey".to_string(), 9)];
+
+        assert_eq!(
+            review_source_address(&form, Some("tb1proot")),
+            "tb1pderived"
+        );
+    }
+
+    #[test]
+    fn review_source_address_falls_back_to_root_address() {
+        let form = SendFormData::new();
+
+        assert_eq!(review_source_address(&form, Some("tb1proot")), "tb1proot");
+    }
+
+    #[test]
+    fn review_control_statement_explains_hd_threshold_control() {
+        let mut form = SendFormData::new();
+        form.hd_enabled = true;
+        form.use_hd_address = true;
+        form.hd_addresses = vec![("tb1pderived".to_string(), "pubkey".to_string(), 7)];
+
+        assert_eq!(
+            review_control_statement(&form),
+            "MPC threshold shares sign this derived path with the HD tweak"
+        );
+    }
+
+    #[test]
+    fn review_control_statement_explains_root_threshold_control() {
+        let form = SendFormData::new();
+
+        assert_eq!(
+            review_control_statement(&form),
+            "MPC threshold shares sign the root key-path address"
         );
     }
 

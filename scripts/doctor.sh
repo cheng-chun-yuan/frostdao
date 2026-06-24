@@ -411,6 +411,8 @@ def check_transaction_review():
         ("src/tui/mod.rs", tui_keys, "KeyCode::Char('y')"),
         ("src/tui/mod.rs", tui_keys, "parsed[\"broadcast_status\"]"),
         ("src/tui/screens/send.rs", read(Path("src/tui/screens/send.rs")), "review_source_path"),
+        ("src/tui/screens/send.rs", read(Path("src/tui/screens/send.rs")), "Source address:"),
+        ("src/tui/screens/send.rs", read(Path("src/tui/screens/send.rs")), "MPC threshold shares sign this derived path with the HD tweak"),
         ("src/tui/screens/send.rs", read(Path("src/tui/screens/send.rs")), "same MPC threshold shares"),
         ("src/tui/screens/address_list.rs", read(Path("src/tui/screens/address_list.rs")), "format_bip86_path"),
         ("src/tui/screens/address_list.rs", read(Path("src/tui/screens/address_list.rs")), "MPC threshold shares"),
