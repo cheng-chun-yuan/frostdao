@@ -11,6 +11,7 @@ use ratatui::{
     widgets::{Block, Borders, Gauge, List, ListItem, Paragraph},
     Frame,
 };
+use std::collections::HashMap;
 
 use crate::tui::app::App;
 use crate::tui::state::NostrSignState;
@@ -89,12 +90,19 @@ fn get_progress(state: &NostrSignState, app: &App) -> (u16, String) {
         NostrSignState::ReviewProposal { .. } => (15, "Review proposal details".to_string()),
         NostrSignState::WaitingForExecution { .. } => (60, "Waiting for execution...".to_string()),
         NostrSignState::CollectingShares {
-            received_shares, ..
+            session_id,
+            received_shares,
+            ..
         } => {
-            let count = received_shares.len();
-            let total = app.nostr_threshold as usize;
-            let pct = 60 + (count * 30 / total.max(1)) as u16;
-            (pct, format!("Shares: {}/{} received", count, total))
+            let counts = signing_progress_counts(app, session_id, received_shares);
+            let pct = 60 + (counts.share_count * 30 / counts.threshold.max(1)) as u16;
+            (
+                pct.min(90),
+                format!(
+                    "Nonces: {}/{} | Shares: {}/{}",
+                    counts.nonce_count, counts.threshold, counts.share_count, counts.threshold
+                ),
+            )
         }
         NostrSignState::Combining { .. } => {
             (95, "Waiting for transaction broadcast...".to_string())
@@ -254,8 +262,9 @@ fn render_status_info(frame: &mut Frame, app: &App, area: Rect) {
         NostrSignState::CollectingShares {
             wallet_name,
             session_id,
-            ..
+            received_shares,
         } => {
+            let counts = signing_progress_counts(app, session_id, received_shares);
             vec![
                 Line::from(vec![
                     Span::styled("Wallet: ", Style::default().fg(Color::Gray)),
@@ -264,10 +273,40 @@ fn render_status_info(frame: &mut Frame, app: &App, area: Rect) {
                     Span::styled("Session: ", Style::default().fg(Color::Gray)),
                     Span::styled(&session_id[..8], Style::default().fg(Color::Cyan)),
                 ]),
-                Line::from(""),
+                Line::from(vec![
+                    Span::styled("Nonce threshold: ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        format!("{}/{}", counts.nonce_count, counts.threshold),
+                        Style::default().fg(if counts.nonce_count >= counts.threshold {
+                            Color::Green
+                        } else {
+                            Color::Yellow
+                        }),
+                    ),
+                    Span::raw("  "),
+                    Span::styled("Share threshold: ", Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        format!("{}/{}", counts.share_count, counts.threshold),
+                        Style::default().fg(if counts.ready_to_combine {
+                            Color::Green
+                        } else {
+                            Color::Yellow
+                        }),
+                    ),
+                ]),
                 Line::from(Span::styled(
-                    "Threshold reached! Collecting signature shares...",
-                    Style::default().fg(Color::Green),
+                    if counts.ready_to_combine {
+                        "Coordinator threshold reached; ready for combine handoff."
+                    } else if counts.nonce_count >= counts.threshold {
+                        "Nonce threshold reached; collecting signature shares."
+                    } else {
+                        "Waiting for nonce threshold before accepting signature shares."
+                    },
+                    Style::default().fg(if counts.ready_to_combine {
+                        Color::Green
+                    } else {
+                        Color::Yellow
+                    }),
                 )),
             ]
         }
@@ -499,22 +538,37 @@ fn render_proposals_list(frame: &mut Frame, app: &App, area: Rect) {
 fn render_shares_list(
     frame: &mut Frame,
     app: &App,
-    received_shares: &std::collections::HashMap<u32, String>,
+    received_shares: &HashMap<u32, String>,
     area: Rect,
 ) {
-    let threshold = app.nostr_threshold;
+    let session_id = match &app.nostr_sign_state {
+        NostrSignState::CollectingShares { session_id, .. } => session_id.as_str(),
+        _ => "",
+    };
+    let counts = signing_progress_counts(app, session_id, received_shares);
 
-    let items: Vec<ListItem> = (1..=threshold)
+    let items: Vec<ListItem> = (1..=app.nostr_n_parties)
         .map(|idx| {
             let is_me = idx == app.nostr_my_index;
+            let has_nonce = app
+                .nostr_received_nonces
+                .get(session_id)
+                .is_some_and(|nonces| nonces.contains_key(&idx));
             let has_share = received_shares.contains_key(&idx);
 
-            let status = if has_share {
-                ("✓", Color::Green)
+            let nonce = if has_nonce {
+                ("nonce ok", Color::Green)
             } else if is_me {
-                ("●", Color::Yellow)
+                ("local nonce", Color::Yellow)
             } else {
-                ("○", Color::DarkGray)
+                ("nonce missing", Color::DarkGray)
+            };
+            let share = if has_share {
+                ("share ok", Color::Green)
+            } else if has_nonce {
+                ("share pending", Color::Yellow)
+            } else {
+                ("blocked", Color::DarkGray)
             };
 
             let name_style = if is_me {
@@ -528,10 +582,11 @@ fn render_shares_list(
             let me_indicator = if is_me { " (me)" } else { "" };
 
             ListItem::new(Line::from(vec![
-                Span::styled(format!("Signer {}{}", idx, me_indicator), name_style),
+                Span::styled(format!("Party {}{}", idx, me_indicator), name_style),
                 Span::raw("  "),
-                Span::styled("Share: ", Style::default().fg(Color::Gray)),
-                Span::styled(status.0, Style::default().fg(status.1)),
+                Span::styled(nonce.0, Style::default().fg(nonce.1)),
+                Span::raw("  "),
+                Span::styled(share.0, Style::default().fg(share.1)),
             ]))
         })
         .collect();
@@ -539,11 +594,48 @@ fn render_shares_list(
     let list = List::new(items).block(
         Block::default()
             .borders(Borders::ALL)
-            .title(" Signature Shares ")
+            .title(format!(
+                " Coordinator Progress · nonces {}/{} · shares {}/{} ",
+                counts.nonce_count, counts.threshold, counts.share_count, counts.threshold
+            ))
             .border_style(Style::default().fg(Color::DarkGray)),
     );
 
     frame.render_widget(list, area);
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SigningProgressCounts {
+    nonce_count: usize,
+    share_count: usize,
+    threshold: usize,
+    ready_to_combine: bool,
+}
+
+fn signing_progress_counts(
+    app: &App,
+    session_id: &str,
+    received_shares: &HashMap<u32, String>,
+) -> SigningProgressCounts {
+    let threshold = app.nostr_threshold as usize;
+    if let Some(coordinator) = app.nostr_signing_coordinators.get(session_id) {
+        return SigningProgressCounts {
+            nonce_count: coordinator.collector().nonce_count(),
+            share_count: coordinator.collector().share_count(),
+            threshold,
+            ready_to_combine: coordinator.ready_to_combine(),
+        };
+    }
+
+    SigningProgressCounts {
+        nonce_count: app
+            .nostr_received_nonces
+            .get(session_id)
+            .map_or(0, HashMap::len),
+        share_count: received_shares.len(),
+        threshold,
+        ready_to_combine: received_shares.len() >= threshold,
+    }
 }
 
 fn render_help(frame: &mut Frame, app: &App, area: Rect) {
@@ -587,5 +679,94 @@ fn format_timestamp(timestamp: u64) -> String {
         format!("{}h ago", diff / 3600)
     } else {
         format!("{}d ago", diff / 86400)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use frostdao::protocol::{
+        SigningAttemptConfig, SigningCoordinator, SigningNonceInput, SigningSchemePolicy,
+        SigningShareInput,
+    };
+
+    #[test]
+    fn signing_progress_counts_falls_back_to_session_inboxes() {
+        let mut app = App::new().unwrap();
+        app.nostr_threshold = 2;
+        app.nostr_received_nonces.insert(
+            "session-a".to_string(),
+            HashMap::from([(2, "nonce-2".to_string()), (3, "nonce-3".to_string())]),
+        );
+        let received_shares = HashMap::from([(2, "share-2".to_string())]);
+
+        let counts = signing_progress_counts(&app, "session-a", &received_shares);
+
+        assert_eq!(
+            counts,
+            SigningProgressCounts {
+                nonce_count: 2,
+                share_count: 1,
+                threshold: 2,
+                ready_to_combine: false,
+            }
+        );
+    }
+
+    #[test]
+    fn signing_progress_counts_prefers_coordinator_state() {
+        let mut app = App::new().unwrap();
+        app.nostr_threshold = 2;
+        let config = SigningAttemptConfig::new_with_attempt_id(
+            "treasury",
+            "session-a",
+            "attempt-a",
+            vec![1, 2, 3],
+            2,
+            "fingerprint-a",
+            SigningSchemePolicy::Tss,
+        )
+        .unwrap();
+        let mut coordinator = SigningCoordinator::new(config.clone()).unwrap();
+        for party_index in [1, 2] {
+            coordinator
+                .accept_nonce(SigningNonceInput {
+                    wallet: config.wallet.clone(),
+                    session: config.session.clone(),
+                    attempt_id: config.attempt_id.clone(),
+                    signer_set: config.signer_set.clone(),
+                    party_index,
+                    sighash_fingerprint: config.sighash_fingerprint.clone(),
+                    public_nonce: format!("nonce-{party_index}"),
+                })
+                .unwrap();
+        }
+        for party_index in [1, 2] {
+            coordinator
+                .accept_share(SigningShareInput {
+                    wallet: config.wallet.clone(),
+                    session: config.session.clone(),
+                    attempt_id: config.attempt_id.clone(),
+                    signer_set: config.signer_set.clone(),
+                    party_index,
+                    sighash_fingerprint: config.sighash_fingerprint.clone(),
+                    signature_share: format!("share-{party_index}"),
+                })
+                .unwrap();
+        }
+        app.nostr_signing_coordinators
+            .insert("session-a".to_string(), coordinator);
+
+        let counts = signing_progress_counts(&app, "session-a", &HashMap::new());
+
+        assert_eq!(
+            counts,
+            SigningProgressCounts {
+                nonce_count: 2,
+                share_count: 2,
+                threshold: 2,
+                ready_to_combine: true,
+            }
+        );
     }
 }
