@@ -1586,10 +1586,7 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
 
                     // If trying to select and already at threshold, don't allow
                     if !currently_selected && selected_count >= app.send_form.threshold as usize {
-                        app.send_form.error_message = Some(format!(
-                            "Cannot select more than {} parties",
-                            app.send_form.threshold
-                        ));
+                        app.send_form.error_message = Some(app.send_form.max_signers_message());
                         return;
                     }
 
@@ -1887,7 +1884,7 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     .collect();
 
                 if selected_parties.is_empty() {
-                    app.send_form.error_message = Some("No parties selected".to_string());
+                    app.send_form.error_message = Some(app.send_form.no_signers_selected_message());
                     return;
                 }
 
@@ -4182,6 +4179,28 @@ mod tests {
     }
 
     #[test]
+    fn send_signer_toggle_blocks_above_threshold_with_actionable_message() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::Send(SendState::SelectSigners {
+            wallet_name: "wallet-test".to_string(),
+        });
+        app.send_form.threshold = 2;
+        app.send_form.total_parties = 3;
+        app.send_form.selected_parties = vec![true, true, false];
+        app.send_form.party_selector_index = 2;
+
+        handle_send_keys(
+            &mut app,
+            KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE),
+        );
+
+        let message = app.send_form.error_message.as_deref().unwrap_or("");
+        assert!(message.contains("required threshold 2 of 3"));
+        assert!(message.contains("deselect one before adding another"));
+        assert_eq!(app.send_form.selected_parties, vec![true, true, false]);
+    }
+
+    #[test]
     fn help_bar_prefers_status_message() {
         let mut app = App::new().unwrap();
         app.message = Some("Balance updated for treasury".to_string());
@@ -4681,6 +4700,24 @@ mod tests {
         ));
         let message = app.send_form.error_message.as_deref().unwrap_or("");
         assert!(message.contains("amount in sats greater than 0"));
+        assert!(message.contains("before preparing review"));
+    }
+
+    #[test]
+    fn send_enter_details_requires_exact_signer_set_before_review() {
+        let mut app = app_ready_to_prepare_send();
+        app.send_form.threshold = 2;
+        app.send_form.total_parties = 3;
+        app.send_form.selected_parties = vec![false, false, false];
+
+        handle_send_keys(&mut app, enter_key());
+
+        assert!(matches!(
+            app.state,
+            AppState::Send(SendState::EnterDetails { .. })
+        ));
+        let message = app.send_form.error_message.as_deref().unwrap_or("");
+        assert!(message.contains("Select exactly 2 signer(s)"));
         assert!(message.contains("before preparing review"));
     }
 

@@ -353,6 +353,20 @@ impl SendFormData {
             .collect()
     }
 
+    pub fn max_signers_message(&self) -> String {
+        format!(
+            "Signer set already has required threshold {} of {}; deselect one before adding another",
+            self.threshold, self.total_parties
+        )
+    }
+
+    pub fn no_signers_selected_message(&self) -> String {
+        format!(
+            "Select exactly {} signer(s) before preparing review",
+            self.threshold
+        )
+    }
+
     pub fn htss_metadata_error(&self) -> Option<&'static str> {
         if !self.hierarchical {
             return None;
@@ -2717,6 +2731,22 @@ mod tests {
         form.signing_requirement = Some(vec![1, 1]);
 
         assert!(form.signer_selection_error().is_none());
+    }
+
+    #[test]
+    fn signer_selection_messages_explain_threshold_actions() {
+        let mut form = SendFormData::new();
+        form.threshold = 2;
+        form.total_parties = 3;
+
+        assert_eq!(
+            form.max_signers_message(),
+            "Signer set already has required threshold 2 of 3; deselect one before adding another"
+        );
+        assert_eq!(
+            form.no_signers_selected_message(),
+            "Select exactly 2 signer(s) before preparing review"
+        );
     }
 
     #[test]
