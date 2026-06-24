@@ -11,6 +11,7 @@ use ratatui::{
 use crate::tui::app::{balance_cache_key, wallet_address_for_network, App};
 use crate::tui::state::NetworkSelection;
 use crate::tui::{COPY_KEY_LABEL, REFRESH_KEY_LABEL};
+use frostdao::protocol::keygen::WalletSummary;
 
 /// Render the home screen
 pub fn render_home(frame: &mut Frame, app: &App, area: Rect) {
@@ -132,6 +133,8 @@ fn render_wallet_details(frame: &mut Frame, app: &App, area: Rect) {
 
         lines.push(Line::from(""));
         lines.extend(network_safety_lines(app.network));
+        lines.push(Line::from(""));
+        lines.extend(wallet_readiness_lines(app, wallet));
         lines.push(Line::from(""));
 
         // Address (network-specific)
@@ -327,10 +330,91 @@ fn balance_fetch_hint_line(app: &App) -> Line<'static> {
     ])
 }
 
+fn wallet_readiness_lines(app: &App, wallet: &WalletSummary) -> Vec<Line<'static>> {
+    let mut lines = vec![Line::from(vec![Span::styled(
+        "Readiness:",
+        Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD),
+    )])];
+
+    let has_network_address = wallet_address_for_network(wallet, app.network).is_some();
+    let send_line = match (has_network_address, app.utxo_source_unavailable_message()) {
+        (false, _) => (
+            format!(
+                "Send: Blocked - no {} source address",
+                app.network.display_name()
+            ),
+            Color::Red,
+        ),
+        (true, Some(message)) => (format!("Send: Blocked - {message}"), Color::Red),
+        (true, None) => (
+            "Send: Ready - source address and UTXO API available".to_string(),
+            Color::Green,
+        ),
+    };
+    lines.push(status_line(send_line.0, send_line.1));
+
+    lines.push(status_line(signing_readiness_text(wallet), Color::Cyan));
+
+    let hd_text = if has_network_address {
+        "HD: Addresses screen derives paths controlled by the same threshold key"
+    } else {
+        "HD: unavailable until this network has a source address"
+    };
+    lines.push(status_line(hd_text.to_string(), Color::Yellow));
+
+    let nostr_text = if app.nostr_local_simulation_transport_active() {
+        "Nostr: local rehearsal ready; relay signing is opt-in"
+    } else {
+        "Nostr: relay transport configured for signing; use CLI keygen first"
+    };
+    lines.push(status_line(nostr_text.to_string(), Color::Magenta));
+
+    lines
+}
+
+fn status_line(text: String, color: Color) -> Line<'static> {
+    Line::from(vec![
+        Span::raw("  "),
+        Span::styled(text, Style::default().fg(color)),
+    ])
+}
+
+fn signing_readiness_text(wallet: &WalletSummary) -> String {
+    let mode = if wallet.hierarchical.unwrap_or(false) {
+        "HTSS"
+    } else {
+        "TSS"
+    };
+
+    let threshold = match (wallet.threshold, wallet.total_parties) {
+        (Some(t), Some(n)) => format!("{t}-of-{n}"),
+        _ => "threshold metadata missing".to_string(),
+    };
+
+    if wallet.hierarchical.unwrap_or(false) {
+        match &wallet.signing_requirement {
+            Some(requirement) if !requirement.is_empty() => {
+                let requirement = requirement
+                    .iter()
+                    .map(u32::to_string)
+                    .collect::<Vec<_>>()
+                    .join(",");
+                format!("Signing: {mode} {threshold}; rank requirement {requirement}")
+            }
+            _ => format!("Signing: {mode} {threshold}; rank requirement missing"),
+        }
+    } else {
+        format!("Signing: {mode} {threshold}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serial_test::serial;
+    use std::collections::BTreeMap;
 
     fn lines_to_string(lines: Vec<Line<'_>>) -> String {
         lines
@@ -343,6 +427,23 @@ mod tests {
             })
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    fn wallet_summary(
+        address_testnet: Option<&str>,
+        address_mainnet: Option<&str>,
+    ) -> WalletSummary {
+        WalletSummary {
+            name: "treasury".to_string(),
+            threshold: Some(2),
+            total_parties: Some(3),
+            hierarchical: Some(false),
+            address: address_testnet.map(str::to_string),
+            address_testnet: address_testnet.map(str::to_string),
+            address_mainnet: address_mainnet.map(str::to_string),
+            signing_requirement: None,
+            party_ranks: Some(BTreeMap::new()),
+        }
     }
 
     #[test]
@@ -387,5 +488,62 @@ mod tests {
         assert!(rendered.contains(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV));
 
         std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
+    }
+
+    #[test]
+    fn wallet_readiness_lines_show_testnet_send_and_nostr_status() {
+        let app = App::new().unwrap();
+        let wallet = wallet_summary(Some("tb1qsource"), None);
+
+        let rendered = lines_to_string(wallet_readiness_lines(&app, &wallet));
+
+        assert!(rendered.contains("Readiness:"));
+        assert!(rendered.contains("Send: Ready"));
+        assert!(rendered.contains("Signing: TSS 2-of-3"));
+        assert!(rendered.contains("HD: Addresses screen derives paths"));
+        assert!(rendered.contains("Nostr: local rehearsal ready"));
+    }
+
+    #[test]
+    fn wallet_readiness_lines_block_mainnet_without_mainnet_address() {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Mainnet;
+        let wallet = wallet_summary(Some("tb1qsource"), None);
+
+        let rendered = lines_to_string(wallet_readiness_lines(&app, &wallet));
+
+        assert!(rendered.contains("Send: Blocked - no Mainnet source address"));
+        assert!(rendered.contains("HD: unavailable until this network has a source address"));
+    }
+
+    #[test]
+    #[serial]
+    fn wallet_readiness_lines_block_regtest_without_utxo_api() {
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
+
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Regtest;
+        let wallet = wallet_summary(Some("bcrt1qsource"), None);
+
+        let rendered = lines_to_string(wallet_readiness_lines(&app, &wallet));
+
+        assert!(rendered.contains("Send: Blocked"));
+        assert!(rendered.contains(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV));
+
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
+    }
+
+    #[test]
+    fn signing_readiness_text_includes_htss_requirement() {
+        let mut wallet = wallet_summary(Some("tb1qsource"), None);
+        wallet.hierarchical = Some(true);
+        wallet.threshold = Some(3);
+        wallet.total_parties = Some(5);
+        wallet.signing_requirement = Some(vec![1, 2]);
+
+        assert_eq!(
+            signing_readiness_text(&wallet),
+            "Signing: HTSS 3-of-5; rank requirement 1,2"
+        );
     }
 }
