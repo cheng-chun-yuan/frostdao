@@ -25,7 +25,7 @@ fn render_configure(frame: &mut Frame, app: &App, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // Title
-            Constraint::Length(5), // Info box
+            Constraint::Length(6), // Info box
             Constraint::Length(3), // Room ID
             Constraint::Length(3), // My Index
             Constraint::Length(3), // Threshold
@@ -132,6 +132,10 @@ fn room_config_info_lines(app: &App) -> Vec<Line<'static>> {
         )),
         Line::from(Span::styled(
             "Relay keygen is unavailable here; create keys with CLI keygen first.",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(Span::styled(
+            "Current TUI room joins are TSS-only; rank is n/a until HTSS room config is wired.",
             Style::default().fg(Color::DarkGray),
         )),
         Line::from(vec![
@@ -501,6 +505,9 @@ mod tests {
         assert!(rendered.contains("signing nonce/share payloads are encrypted"));
         assert!(rendered.contains("Relay keygen is unavailable"));
         assert!(rendered.contains("CLI keygen"));
+        assert!(rendered.contains("TSS-only"));
+        assert!(rendered.contains("rank is n/a"));
+        assert!(rendered.contains("HTSS room config is wired"));
         assert!(!rendered.contains("Distributed DKG"));
     }
 
