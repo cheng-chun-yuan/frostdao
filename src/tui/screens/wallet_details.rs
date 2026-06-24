@@ -238,7 +238,7 @@ fn render_wallet_info(frame: &mut Frame, app: &App, wallet_name: &str, area: Rec
             lines.push(Line::from(vec![
                 Span::styled("Balance: ", Style::default().fg(Color::Gray)),
                 Span::styled(
-                    "Press b/r/F5 to fetch",
+                    "Press r to fetch",
                     Style::default().fg(Color::DarkGray),
                 ),
             ]));

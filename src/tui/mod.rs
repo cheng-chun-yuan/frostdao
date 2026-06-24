@@ -3021,7 +3021,7 @@ fn help_bar_text(app: &App) -> String {
             if state.confirm_delete {
                 "Type wallet name | Enter:Delete | Backspace:Edit | Esc:Cancel".to_string()
             } else {
-                "j/k/↑/↓:Navigate | Enter:Select | b/r/F5:Balance | c/C:Copy | v:QR | Esc:Back"
+                "j/k/↑/↓:Navigate | Enter:Select | b/r:Balance | c/C:Copy | v:QR | Esc:Back"
                     .to_string()
             }
         }
@@ -3030,7 +3030,7 @@ fn help_bar_text(app: &App) -> String {
         AppState::Reshare(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
         AppState::Send(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
         AppState::AddressList(_) => {
-            "j/k/↑/↓:Navigate | c/C:Copy | b/r/F5:Balance | a:Add | x:Remove | Esc:Back".to_string()
+            "j/k/↑/↓:Navigate | c/C:Copy | b/r:Balance | a:Add | x:Remove | Esc:Back".to_string()
         }
         AppState::MnemonicBackup(state) => {
             if state.revealed {
@@ -3066,12 +3066,12 @@ fn help_bar_text(app: &App) -> String {
 fn home_help_bar_text() -> String {
     #[cfg(feature = "miniscript-policy")]
     {
-        "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | b/r/F5:Balance | c/C:Copy | q:Quit"
+        "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | b/r:Balance | c/C:Copy | q:Quit"
             .to_string()
     }
     #[cfg(not(feature = "miniscript-policy"))]
     {
-        "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | b/r/F5:Balance | c/C:Copy | q:Quit"
+        "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | b/r:Balance | c/C:Copy | q:Quit"
             .to_string()
     }
 }
@@ -3116,7 +3116,7 @@ mod tests {
         let help = help_bar_text(&app);
 
         assert!(help.contains("j/k/↑/↓"));
-        assert!(help.contains("b/r/F5:Balance"));
+        assert!(help.contains("b/r:Balance"));
         assert!(help.contains("Enter:Select"));
         assert!(help.contains("c/C:Copy"));
     }

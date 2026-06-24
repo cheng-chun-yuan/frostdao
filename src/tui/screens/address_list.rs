@@ -202,7 +202,7 @@ fn address_list_help_line() -> Line<'static> {
     Line::from(vec![
         Span::styled("c/C", Style::default().fg(Color::Yellow)),
         Span::styled(" Copy ", Style::default().fg(Color::DarkGray)),
-        Span::styled("b/r/F5", Style::default().fg(Color::Yellow)),
+        Span::styled("b/r", Style::default().fg(Color::Yellow)),
         Span::styled(" Bal ", Style::default().fg(Color::DarkGray)),
         Span::styled("+/a", Style::default().fg(Color::Green)),
         Span::styled(" Add ", Style::default().fg(Color::DarkGray)),
@@ -367,7 +367,7 @@ mod tests {
             .join("");
 
         assert!(rendered.contains("c/C"));
-        assert!(rendered.contains("b/r/F5"));
+        assert!(rendered.contains("b/r"));
         assert!(rendered.contains("j/k/↑/↓"));
     }
 }
