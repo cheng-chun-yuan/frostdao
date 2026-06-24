@@ -8,7 +8,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::tui::app::App;
+use crate::tui::app::{wallet_address_for_network, App};
 use crate::tui::components::{TextArea, TextInput};
 use crate::tui::state::{
     ReshareFinalizeField, ReshareFormField, ReshareLocalField, ReshareMode, ReshareState,
@@ -86,14 +86,16 @@ pub fn render_reshare(frame: &mut Frame, app: &App, form: &ReshareFormData, area
             ReshareState::ModeSelect => render_mode_select(frame, form, area),
             ReshareState::LocalSetup => render_local_setup(frame, app, form, area),
             ReshareState::LocalComplete { wallet_name } => {
-                render_local_complete(frame, wallet_name, area)
+                render_local_complete(frame, app, form, wallet_name, area)
             }
             ReshareState::Round1Setup => render_round1_setup(frame, app, form, area),
             ReshareState::Round1Output { output_json } => {
                 render_round1_output(frame, output_json, area)
             }
             ReshareState::FinalizeInput => render_finalize_input(frame, form, area),
-            ReshareState::Complete { wallet_name } => render_complete(frame, wallet_name, area),
+            ReshareState::Complete { wallet_name } => {
+                render_complete(frame, app, form, wallet_name, area)
+            }
         }
     }
 }
@@ -266,7 +268,13 @@ fn render_local_setup(frame: &mut Frame, app: &App, form: &ReshareFormData, area
     frame.render_widget(help, chunks[6]);
 }
 
-fn render_local_complete(frame: &mut Frame, wallet_name: &str, area: Rect) {
+fn render_local_complete(
+    frame: &mut Frame,
+    app: &App,
+    form: &ReshareFormData,
+    wallet_name: &str,
+    area: Rect,
+) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Green))
@@ -316,6 +324,7 @@ fn render_local_complete(frame: &mut Frame, wallet_name: &str, area: Rect) {
         Line::from("Only the wallet's public key and address remain unchanged."),
     ];
     info_lines.extend(reshare_address_stability_lines());
+    info_lines.extend(reshare_address_verification_lines(app, form, wallet_name));
     let info = Paragraph::new(info_lines);
     frame.render_widget(info, chunks[1]);
 
@@ -528,7 +537,13 @@ fn render_finalize_input(frame: &mut Frame, form: &ReshareFormData, area: Rect) 
     frame.render_widget(help, chunks[8]);
 }
 
-fn render_complete(frame: &mut Frame, wallet_name: &str, area: Rect) {
+fn render_complete(
+    frame: &mut Frame,
+    app: &App,
+    form: &ReshareFormData,
+    wallet_name: &str,
+    area: Rect,
+) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Green))
@@ -572,6 +587,7 @@ fn render_complete(frame: &mut Frame, wallet_name: &str, area: Rect) {
         Line::from("Funds are still accessible with the new shares."),
     ];
     distributed_info_lines.extend(reshare_address_stability_lines());
+    distributed_info_lines.extend(reshare_address_verification_lines(app, form, wallet_name));
     let info = Paragraph::new(distributed_info_lines);
     frame.render_widget(info, chunks[1]);
 
@@ -615,9 +631,71 @@ fn reshare_address_stability_lines() -> Vec<Line<'static>> {
     ]
 }
 
+fn reshare_address_verification_lines(
+    app: &App,
+    form: &ReshareFormData,
+    target_wallet_name: &str,
+) -> Vec<Line<'static>> {
+    let source_wallet = app.wallets.get(form.source_wallet_index);
+    let target_wallet = app
+        .wallets
+        .iter()
+        .find(|wallet| wallet.name == target_wallet_name);
+
+    let source_address =
+        source_wallet.and_then(|wallet| wallet_address_for_network(wallet, app.network));
+    let target_address =
+        target_wallet.and_then(|wallet| wallet_address_for_network(wallet, app.network));
+
+    match (source_address, target_address) {
+        (Some(source), Some(target)) if source == target => vec![
+            Line::from(vec![
+                Span::styled("Address check: ", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    format!("matched on {}", app.network.display_name()),
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("Source/target: ", Style::default().fg(Color::Gray)),
+                Span::styled(target.to_string(), Style::default().fg(Color::Green)),
+            ]),
+        ],
+        (Some(source), Some(target)) => vec![
+            Line::from(vec![
+                Span::styled("Address check: ", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    "MISMATCH - stop and inspect wallets",
+                    Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("Source: ", Style::default().fg(Color::Gray)),
+                Span::styled(source.to_string(), Style::default().fg(Color::Yellow)),
+            ]),
+            Line::from(vec![
+                Span::styled("Target: ", Style::default().fg(Color::Gray)),
+                Span::styled(target.to_string(), Style::default().fg(Color::Yellow)),
+            ]),
+        ],
+        _ => vec![Line::from(vec![
+            Span::styled("Address check: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                "verify manually - source or target address unavailable",
+                Style::default().fg(Color::Yellow),
+            ),
+        ])],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tui::state::NetworkSelection;
+    use frostdao::protocol::keygen::WalletSummary;
+    use std::collections::BTreeMap;
 
     fn line_to_string(line: &Line<'_>) -> String {
         line.spans
@@ -633,6 +711,30 @@ mod tests {
             .map(line_to_string)
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    fn wallet_summary(name: &str, testnet_address: Option<&str>) -> WalletSummary {
+        WalletSummary {
+            name: name.to_string(),
+            threshold: Some(2),
+            total_parties: Some(3),
+            hierarchical: Some(false),
+            address: testnet_address.map(str::to_string),
+            address_testnet: testnet_address.map(str::to_string),
+            address_mainnet: None,
+            signing_requirement: None,
+            party_ranks: Some(BTreeMap::new()),
+        }
+    }
+
+    fn app_with_reshare_wallets(source_address: Option<&str>, target_address: Option<&str>) -> App {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Testnet4;
+        app.wallets = vec![
+            wallet_summary("source", source_address),
+            wallet_summary("target", target_address),
+        ];
+        app
     }
 
     #[test]
@@ -663,5 +765,43 @@ mod tests {
         let rendered = lines_to_string(&reshare_address_stability_lines());
         assert!(rendered.contains("Address continuity"));
         assert!(rendered.contains("public key and root address should match source wallet"));
+    }
+
+    #[test]
+    fn reshare_address_verification_reports_match() {
+        let app = app_with_reshare_wallets(Some("tb1pmatch"), Some("tb1pmatch"));
+        let mut form = ReshareFormData::new();
+        form.source_wallet_index = 0;
+
+        let rendered = lines_to_string(&reshare_address_verification_lines(&app, &form, "target"));
+
+        assert!(rendered.contains("Address check"));
+        assert!(rendered.contains("matched on Testnet4"));
+        assert!(rendered.contains("tb1pmatch"));
+    }
+
+    #[test]
+    fn reshare_address_verification_reports_mismatch() {
+        let app = app_with_reshare_wallets(Some("tb1psource"), Some("tb1ptarget"));
+        let mut form = ReshareFormData::new();
+        form.source_wallet_index = 0;
+
+        let rendered = lines_to_string(&reshare_address_verification_lines(&app, &form, "target"));
+
+        assert!(rendered.contains("MISMATCH"));
+        assert!(rendered.contains("tb1psource"));
+        assert!(rendered.contains("tb1ptarget"));
+    }
+
+    #[test]
+    fn reshare_address_verification_handles_missing_address() {
+        let app = app_with_reshare_wallets(Some("tb1psource"), None);
+        let mut form = ReshareFormData::new();
+        form.source_wallet_index = 0;
+
+        let rendered = lines_to_string(&reshare_address_verification_lines(&app, &form, "target"));
+
+        assert!(rendered.contains("verify manually"));
+        assert!(rendered.contains("address unavailable"));
     }
 }
