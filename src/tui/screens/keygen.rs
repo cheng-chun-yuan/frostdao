@@ -11,6 +11,7 @@ use ratatui::{
 use crate::tui::app::App;
 use crate::tui::components::{TextArea, TextInput};
 use crate::tui::state::{KeygenFormField, KeygenState};
+use crate::tui::COPY_KEY_LABEL;
 
 /// Keygen wizard form data
 #[derive(Clone, Default)]
@@ -481,8 +482,10 @@ fn render_round1_output(frame: &mut Frame, output_json: &str, area: Rect) {
     frame.render_widget(output_para, chunks[1]);
 
     // Help
-    let help = Paragraph::new("c/C: Copy to clipboard | Enter: Continue to Round 2 | Esc: Cancel")
-        .style(Style::default().fg(Color::DarkGray));
+    let help = Paragraph::new(format!(
+        "{COPY_KEY_LABEL}: Copy to clipboard | Enter: Continue to Round 2 | Esc: Cancel",
+    ))
+    .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[2]);
 }
 
@@ -561,8 +564,10 @@ fn render_round2_output(frame: &mut Frame, output_json: &str, area: Rect) {
     frame.render_widget(output_para, chunks[1]);
 
     // Help
-    let help = Paragraph::new("c/C: Copy to clipboard | Enter: Continue to Finalize | Esc: Cancel")
-        .style(Style::default().fg(Color::DarkGray));
+    let help = Paragraph::new(format!(
+        "{COPY_KEY_LABEL}: Copy to clipboard | Enter: Continue to Finalize | Esc: Cancel",
+    ))
+    .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[2]);
 }
 

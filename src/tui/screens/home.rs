@@ -10,6 +10,9 @@ use ratatui::{
 
 use crate::tui::app::{balance_cache_key, wallet_address_for_network, App};
 use crate::tui::state::NetworkSelection;
+use crate::tui::{COPY_KEY_LABEL, REFRESH_KEY_LABEL};
+
+const BALANCE_FETCH_HINT: &str = "Press b/r/F5 to fetch";
 
 /// Render the home screen
 pub fn render_home(frame: &mut Frame, app: &App, area: Rect) {
@@ -265,9 +268,9 @@ fn render_shortcuts(frame: &mut Frame, has_wallet: bool, area: Rect) {
         shortcuts.push(Line::from(vec![
             Span::styled("h", Style::default().fg(Color::Yellow)),
             Span::raw(" Reshare   "),
-            Span::styled("b/r/F5", Style::default().fg(Color::Yellow)),
+            Span::styled(REFRESH_KEY_LABEL, Style::default().fg(Color::Yellow)),
             Span::raw(" Refresh   "),
-            Span::styled("c/C", Style::default().fg(Color::Yellow)),
+            Span::styled(COPY_KEY_LABEL, Style::default().fg(Color::Yellow)),
             Span::raw(" Copy addr"),
         ]));
     }
@@ -315,10 +318,7 @@ fn network_safety_lines(network: NetworkSelection) -> Vec<Line<'static>> {
 fn balance_fetch_hint_line() -> Line<'static> {
     Line::from(vec![
         Span::styled("Balance: ", Style::default().fg(Color::Gray)),
-        Span::styled(
-            "Press b/r/F5 to fetch",
-            Style::default().fg(Color::DarkGray),
-        ),
+        Span::styled(BALANCE_FETCH_HINT, Style::default().fg(Color::DarkGray)),
     ])
 }
 
@@ -361,8 +361,8 @@ mod tests {
     fn balance_fetch_hint_matches_home_refresh_shortcut() {
         let rendered = lines_to_string(vec![balance_fetch_hint_line()]);
 
-        assert!(rendered.contains("Press b/r/F5 to fetch"));
-        assert!(rendered.contains("b/r/F5"));
+        assert!(rendered.contains(&format!("Press {REFRESH_KEY_LABEL} to fetch")));
+        assert!(rendered.contains(REFRESH_KEY_LABEL));
         assert!(!rendered.contains("Press Enter to fetch"));
     }
 }

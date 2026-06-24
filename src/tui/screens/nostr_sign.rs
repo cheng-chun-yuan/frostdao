@@ -15,6 +15,7 @@ use std::collections::HashMap;
 
 use crate::tui::app::{wallet_address_for_network, App};
 use crate::tui::state::{NostrSignState, NostrTxField};
+use crate::tui::COPY_KEY_LABEL;
 
 /// Render the Nostr signing screen
 pub fn render_nostr_sign(frame: &mut Frame, app: &App, area: Rect) {
@@ -936,15 +937,19 @@ fn render_help(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(help, area);
 }
 
-pub(crate) fn nostr_sign_help_text(state: &NostrSignState) -> &'static str {
+pub(crate) fn nostr_sign_help_text(state: &NostrSignState) -> String {
     match state {
-        NostrSignState::SelectRole { .. } => "p: Propose | c: Consent | Enter: Propose | Esc: Back",
-        NostrSignState::ConfigureTx { .. } => {
-            "Tab:Field | Enter:Publish proposal | Ctrl+u:Clear field | Esc:Back"
+        NostrSignState::SelectRole { .. } => {
+            "p: Propose | c: Consent | Enter: Propose | Esc: Back".to_string()
         }
-        NostrSignState::ReviewProposal { .. } => "y: Consent | r: Reject | Esc: Back",
-        NostrSignState::Complete { .. } => "Enter: Done | c/C: Copy TXID",
-        _ => "Enter: Continue | Esc: Cancel",
+        NostrSignState::ConfigureTx { .. } => {
+            String::from("Tab:Field | Enter:Publish proposal | Ctrl+u:Clear field | Esc:Back")
+        }
+        NostrSignState::ReviewProposal { .. } => String::from("y: Consent | r: Reject | Esc: Back"),
+        NostrSignState::Complete { .. } => {
+            format!("Enter: Done | {COPY_KEY_LABEL}: Copy TXID")
+        }
+        _ => String::from("Enter: Continue | Esc: Cancel"),
     }
 }
 

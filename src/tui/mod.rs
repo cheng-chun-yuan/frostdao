@@ -42,6 +42,9 @@ use state::{
 use frostdao::protocol::{keygen, reshare, signing};
 use frostdao::storage::{FileStorage, Storage};
 
+pub(crate) const COPY_KEY_LABEL: &str = "c/C";
+pub(crate) const REFRESH_KEY_LABEL: &str = "b/r/F5";
+
 /// Run the terminal UI
 pub fn run_tui() -> Result<()> {
     // Setup terminal
@@ -3082,6 +3085,8 @@ fn centered_popup_rect(
 }
 
 fn global_help_lines() -> Vec<Line<'static>> {
+    let copy = COPY_KEY_LABEL;
+    let refresh = REFRESH_KEY_LABEL;
     let mut lines = vec![
         Line::from(Span::styled(
             "Global",
@@ -3095,15 +3100,16 @@ fn global_help_lines() -> Vec<Line<'static>> {
         Line::from(
             "j/k/↑/↓:Navigate | Enter:Select | g:New wallet | n:Network | h:Reshare | s:Send",
         ),
-        Line::from("o:Nostr | a:Address list | m:Mnemonic backup | c/C:Copy address"),
-        Line::from("b/r/F5 (Refresh):Refresh balances | R:Reload wallets"),
+        format!("o:Nostr | a:Address list | m:Mnemonic backup | {copy}:Copy address").into(),
+        format!("{refresh} (Refresh):Refresh balances | R:Reload wallets").into(),
         Line::from(""),
         Line::from("Wallet Details"),
         Line::from("j/k/↑/↓:Select action | Enter:Continue | v:QR"),
-        Line::from("c/C:Copy selected address | b/r/F5 (Refresh):Refresh selected"),
+        format!("{copy}:Copy selected address | {refresh} (Refresh):Refresh selected").into(),
         Line::from(""),
         Line::from("Address List"),
-        Line::from("j/k/↑/↓:Navigate | a:Add | x:Remove | c/C:Copy | b/r/F5 (Refresh):Refresh"),
+        format!("j/k/↑/↓:Navigate | a:Add | x:Remove | {copy}:Copy | {refresh} (Refresh):Refresh",)
+            .into(),
     ];
 
     lines.push(Line::from("Keygen / Reshare / Send"));
@@ -3111,24 +3117,22 @@ fn global_help_lines() -> Vec<Line<'static>> {
         "Tab:Next field | Enter:Continue | Esc:Back/Cancel",
     ));
     lines.push(Line::from("↑/↓/j/k/1/2:Select | p/P:Paste | ␠:Toggle"));
-    lines.push(Line::from(
-        "c/C:Copy outputs/JSON | Ctrl+u:Clear form (text fields)",
-    ));
+    lines.push(format!("{copy}:Copy outputs/JSON | Ctrl+u:Clear form (text fields)").into());
     lines.push(Line::from(""));
     lines.push(Line::from("Nostr"));
     lines.push(Line::from(
         "k/K:Start keygen (local rehearsal in local mode) | s/S:Sign | Esc:Leave room",
     ));
-    lines.push(Line::from(
-        "p/P:Propose | c/C:Consent role or copy TXID in complete | y:Consent | r/R:Reject",
-    ));
+    lines.push(Line::from(format!(
+        "p/P:Propose | {copy}:Consent role or copy TXID in complete | y:Consent | r/R:Reject"
+    )));
 
     #[cfg(feature = "miniscript-policy")]
     {
         lines.push(Line::from(""));
         lines.push(Line::from("Policy Preview"));
         lines.push(Line::from("Tab:Next field | Enter:Init draft | Esc:Back"));
-        lines.push(Line::from("[/]:Select template | c/C:Copy draft"));
+        lines.push(format!("[/]:Select template | {copy}:Copy draft").into());
     }
 
     lines.push(Line::from(""));
@@ -3144,6 +3148,8 @@ fn help_bar_text(app: &App) -> String {
     if let Some(msg) = &app.message {
         return msg.clone();
     }
+    let copy = COPY_KEY_LABEL;
+    let refresh = REFRESH_KEY_LABEL;
 
     match &app.state {
         AppState::Home => home_help_bar_text(),
@@ -3151,8 +3157,10 @@ fn help_bar_text(app: &App) -> String {
             if state.confirm_delete {
                 "Type wallet name | Enter:Delete | Backspace:Edit | Esc:Cancel".to_string()
             } else {
-                "j/k/↑/↓:Navigate | Enter:Select | b/r/F5 (Refresh):Balance | c/C:Copy | v:QR | Esc:Back"
-                    .to_string()
+                format!(
+                    "j/k/↑/↓:Navigate | Enter:Select | {refresh} (Refresh):Balance | {copy}:Copy | v:QR | Esc:Back"
+                )
+                .to_string()
             }
         }
         AppState::ChainSelect => "j/k/↑/↓:Select | Enter:Confirm | Esc:Cancel".to_string(),
@@ -3160,8 +3168,10 @@ fn help_bar_text(app: &App) -> String {
         AppState::Reshare(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
         AppState::Send(_) => "Tab:Next | Enter:Continue | Esc:Cancel".to_string(),
         AppState::AddressList(_) => {
-            "j/k/↑/↓:Navigate | c/C:Copy | b/r/F5 (Refresh):Refresh | a:Add | x:Remove | Esc:Back"
-                .to_string()
+            format!(
+                "j/k/↑/↓:Navigate | {copy}:Copy | {refresh} (Refresh):Refresh | a:Add | x:Remove | Esc:Back"
+            )
+            .to_string()
         }
         AppState::MnemonicBackup(state) => {
             if state.revealed {
@@ -3186,10 +3196,10 @@ fn help_bar_text(app: &App) -> String {
             }
         },
         AppState::NostrKeygen => "Enter:Continue | r:Retry | Esc:Cancel".to_string(),
-        AppState::NostrSign => screens::nostr_sign_help_text(&app.nostr_sign_state).to_string(),
+        AppState::NostrSign => screens::nostr_sign_help_text(&app.nostr_sign_state),
         #[cfg(feature = "miniscript-policy")]
         AppState::PolicyPreview => {
-            "Enter:Init draft | [/]:Template | Tab:Field | c/C:Copy | Esc:Back".to_string()
+            format!("Enter:Init draft | [/]:Template | Tab:Field | {copy}:Copy | Esc:Back").to_string()
         }
     }
 }
@@ -3197,13 +3207,21 @@ fn help_bar_text(app: &App) -> String {
 fn home_help_bar_text() -> String {
     #[cfg(feature = "miniscript-policy")]
     {
-        "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | b/r/F5 (Refresh):Balance | c/C:Copy | q:Quit | F1:Help"
-            .to_string()
+        format!(
+            "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | {0} (Refresh):Balance | {1}:Copy | q:Quit | F1:Help",
+            REFRESH_KEY_LABEL,
+            COPY_KEY_LABEL
+        )
+        .to_string()
     }
     #[cfg(not(feature = "miniscript-policy"))]
     {
-        "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | b/r/F5 (Refresh):Balance | c/C:Copy | q:Quit | F1:Help"
-            .to_string()
+        format!(
+            "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | {0} (Refresh):Balance | {1}:Copy | q:Quit | F1:Help",
+            REFRESH_KEY_LABEL,
+            COPY_KEY_LABEL
+        )
+        .to_string()
     }
 }
 

@@ -15,6 +15,7 @@ use ratatui::{
 use crate::tui::app::{wallet_address_for_network, App};
 use crate::tui::components::{TextArea, TextInput};
 use crate::tui::state::{SendFormField, SendState};
+use crate::tui::COPY_KEY_LABEL;
 
 /// Script type for Taproot spending conditions
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -2060,8 +2061,10 @@ fn render_show_sighash(frame: &mut Frame, sighash: &str, area: Rect) {
         .wrap(Wrap { trim: false });
     frame.render_widget(sighash_para, chunks[1]);
 
-    let help = Paragraph::new("c/C: Copy | Enter: Generate Nonce | Esc: Back")
-        .style(Style::default().fg(Color::DarkGray));
+    let help = Paragraph::new(format!(
+        "{COPY_KEY_LABEL}: Copy | Enter: Generate Nonce | Esc: Back",
+    ))
+    .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[2]);
 }
 
@@ -2115,8 +2118,10 @@ fn render_generate_nonce(frame: &mut Frame, nonce_output: &str, area: Rect) {
         .wrap(Wrap { trim: false });
     frame.render_widget(nonce_para, chunks[1]);
 
-    let help = Paragraph::new("c/C: Copy | Enter: Collect nonces from others | Esc: Back")
-        .style(Style::default().fg(Color::DarkGray));
+    let help = Paragraph::new(format!(
+        "{COPY_KEY_LABEL}: Copy | Enter: Collect nonces from others | Esc: Back",
+    ))
+    .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[2]);
 }
 
@@ -2236,8 +2241,10 @@ fn render_generate_share(frame: &mut Frame, share_output: &str, area: Rect) {
         .wrap(Wrap { trim: false });
     frame.render_widget(share_para, chunks[1]);
 
-    let help = Paragraph::new("c/C: Copy | Enter: Combine (Aggregator) | Esc: Done")
-        .style(Style::default().fg(Color::DarkGray));
+    let help = Paragraph::new(format!(
+        "{COPY_KEY_LABEL}: Copy | Enter: Combine (Aggregator) | Esc: Done",
+    ))
+    .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[2]);
 }
 
@@ -2336,9 +2343,9 @@ fn complete_status_lines(
         Some("broadcast_failed") => {
             lines.push(Line::from("Signed transaction created; broadcast failed."));
             if raw_tx.is_some() {
-                lines.push(Line::from(
-                    "Press c/C to copy the raw transaction for manual broadcast.",
-                ));
+                lines.push(Line::from(format!(
+                    "Press {COPY_KEY_LABEL} to copy the raw transaction for manual broadcast."
+                )));
             } else {
                 lines.push(Line::from(
                     "Use the CLI output or audit trail to recover the raw transaction.",
@@ -2406,7 +2413,7 @@ fn render_complete(
     frame.render_widget(info, chunks[1]);
 
     let help = Paragraph::new(Line::from(vec![
-        Span::styled("c/C", Style::default().fg(Color::Yellow)),
+        Span::styled(COPY_KEY_LABEL, Style::default().fg(Color::Yellow)),
         Span::raw(if raw_tx.is_some() {
             ": Copy raw TX | "
         } else {

@@ -13,6 +13,7 @@ use crate::tui::components::{TextArea, TextInput};
 use crate::tui::state::{
     ReshareFinalizeField, ReshareFormField, ReshareLocalField, ReshareMode, ReshareState,
 };
+use crate::tui::COPY_KEY_LABEL;
 
 /// Reshare wizard form data
 #[derive(Clone)]
@@ -429,9 +430,9 @@ fn render_round1_output(frame: &mut Frame, output_json: &str, area: Rect) {
     let boundary = Paragraph::new(reshare_distributed_output_boundary_lines());
     frame.render_widget(boundary, chunks[2]);
 
-    let help = Paragraph::new(
-        "c/C: Copy | Enter: Go to Finalize (if new party) | Esc: Done (if old party)",
-    )
+    let help = Paragraph::new(format!(
+        "{COPY_KEY_LABEL}: Copy | Enter: Go to Finalize (if new party) | Esc: Done (if old party)",
+    ))
     .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[3]);
 }

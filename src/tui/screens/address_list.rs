@@ -10,6 +10,7 @@ use ratatui::{
 };
 
 use crate::tui::state::AddressListState;
+use crate::tui::{COPY_KEY_LABEL, REFRESH_KEY_LABEL};
 
 /// Render the HD address list screen
 pub fn render_address_list(frame: &mut Frame, state: &AddressListState, area: Rect) {
@@ -200,9 +201,9 @@ fn render_details_panel(
 
 fn address_list_help_line() -> Line<'static> {
     Line::from(vec![
-        Span::styled("c/C", Style::default().fg(Color::Yellow)),
+        Span::styled(COPY_KEY_LABEL, Style::default().fg(Color::Yellow)),
         Span::styled(" Copy ", Style::default().fg(Color::DarkGray)),
-        Span::styled("b/r/F5", Style::default().fg(Color::Yellow)),
+        Span::styled(REFRESH_KEY_LABEL, Style::default().fg(Color::Yellow)),
         Span::styled(" Bal ", Style::default().fg(Color::DarkGray)),
         Span::styled("+/a", Style::default().fg(Color::Green)),
         Span::styled(" Add ", Style::default().fg(Color::DarkGray)),
@@ -366,8 +367,8 @@ mod tests {
             .collect::<Vec<_>>()
             .join("");
 
-        assert!(rendered.contains("c/C"));
-        assert!(rendered.contains("b/r/F5"));
+        assert!(rendered.contains(COPY_KEY_LABEL));
+        assert!(rendered.contains(REFRESH_KEY_LABEL));
         assert!(rendered.contains("j/k/↑/↓"));
     }
 }
