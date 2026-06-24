@@ -844,8 +844,26 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
                     // HTSS: Validate configuration and get threshold
                     match app.keygen_form.validate_htss_config() {
                         Ok(t) => {
-                            let parsed_ranks = app.keygen_form.parse_rank_distribution().unwrap();
-                            let signing_requirement = app.keygen_form.parse_signing_requirement();
+                            let parsed_ranks = match app.keygen_form.parse_rank_distribution() {
+                                Some(ranks) => ranks,
+                                None => {
+                                    app.keygen_form.error_message =
+                                        Some("Enter parties per rank (e.g., 2,3,3)".to_string());
+                                    return;
+                                }
+                            };
+
+                            let signing_requirement =
+                                match app.keygen_form.parse_signing_requirement() {
+                                    Some(req) => Some(req),
+                                    None => {
+                                        app.keygen_form.error_message = Some(
+                                            "Enter signing requirement (e.g., 1,2,2)".to_string(),
+                                        );
+                                        return;
+                                    }
+                                };
+
                             let n = parsed_ranks.len() as u32;
                             (n, t, Some(parsed_ranks), signing_requirement)
                         }
@@ -3515,6 +3533,27 @@ mod tests {
         );
 
         assert!(!app.keygen_form.hierarchical);
+    }
+
+    #[test]
+    fn keygen_htss_enter_reports_invalid_rank_distribution_without_panic() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::Keygen(KeygenState::ParamsSetup);
+        app.keygen_form.hierarchical = true;
+        app.keygen_form.name.set_value("wallet-htss");
+        app.keygen_form.rank_distribution.set_value("abc");
+        app.keygen_form.signing_requirement.set_value("1,1");
+
+        handle_keygen_keys(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+        assert!(matches!(
+            app.state,
+            AppState::Keygen(KeygenState::ParamsSetup)
+        ));
+        assert_eq!(
+            app.keygen_form.error_message.as_deref(),
+            Some("Enter parties per rank (e.g., 2,3,3)")
+        );
     }
 
     #[test]
