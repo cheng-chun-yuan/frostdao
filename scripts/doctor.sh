@@ -669,6 +669,27 @@ def check_audit_logging():
         doctor.ok("structured audit logging is present and excludes secret markers")
 
 
+def check_recovery_boundary_docs():
+    run_guide = read(Path("docs/RUN_GUIDE.md"))
+    keymap = read(Path("docs/TUI_KEYMAP.md"))
+    required = [
+        ("docs/TUI_KEYMAP.md", keymap, "Share recovery is CLI-only in the current TUI build"),
+        ("docs/TUI_KEYMAP.md", keymap, "Recovery reconstructs one lost party share, not the full wallet private key"),
+        ("docs/TUI_KEYMAP.md", keymap, "For HTSS, use the recovered party's original rank"),
+        ("docs/TUI_KEYMAP.md", keymap, "compare source and recovered wallet pubkey/root address"),
+        ("docs/RUN_GUIDE.md", run_guide, "Recovery is currently a CLI ceremony, not a TUI wizard"),
+        ("docs/RUN_GUIDE.md", run_guide, "Recovery reconstructs one lost party share only"),
+        ("docs/RUN_GUIDE.md", run_guide, "the recovered party must use the original rank"),
+        ("docs/RUN_GUIDE.md", run_guide, "root public key and root address should match the source wallet"),
+    ]
+    missing = [f"{path}: {marker}" for path, content, marker in required if marker not in content]
+
+    if missing:
+        doctor.fail(f"Recovery boundary docs missing: {', '.join(missing)}")
+    else:
+        doctor.ok("Recovery boundary docs clarify CLI-only share recovery")
+
+
 def check_nostr_transaction_review():
     events = read(Path("src/nostr/events.rs"))
     app = read(Path("src/tui/app.rs"))
@@ -831,6 +852,7 @@ check_transaction_review()
 check_mnemonic_backup_ux()
 check_wallet_delete_ux()
 check_audit_logging()
+check_recovery_boundary_docs()
 check_nostr_transaction_review()
 
 if doctor.failures:

@@ -137,7 +137,24 @@ Applies when a single-line input or multiline paste area is focused.
 Reshare boundaries:
 - Local reshare does not leave secret share material on copy; only new local share files are written.
 - Distributed round1 output is party-bound sub-shares; do not mix outputs or paste them into unrelated ceremonies.
-- Reshare and recover should keep wallet key/address continuity; compare source pubkey and root address on all parties before use.
+- Reshare should keep wallet key/address continuity; compare source pubkey and root address on all parties before use.
+
+## Share Recovery
+
+Share recovery is CLI-only in the current TUI build; there is no hidden TUI recovery wizard.
+
+Use:
+
+```bash
+frostdao recover-round1 --name <wallet> --lost-index <party>
+frostdao recover-finalize --source <wallet> --target <wallet_recovered> --my-index <party> --data '<recovery_outputs>'
+```
+
+Recovery boundaries:
+- Recovery reconstructs one lost party share, not the full wallet private key.
+- Helper outputs are party-bound recovery data; send them only to the recovering party.
+- For HTSS, use the recovered party's original rank.
+- After finalization, compare source and recovered wallet pubkey/root address on the selected network before signing.
 
 ## Send
 

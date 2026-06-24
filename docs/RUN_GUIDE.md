@@ -222,6 +222,9 @@ In every reshare ceremony:
 
 ## 9. Recover A Lost Share
 
+Recovery is currently a CLI ceremony, not a TUI wizard. The TUI keymap documents
+this boundary so operators do not look for a hidden recovery path.
+
 Helper parties create recovery outputs:
 
 ```bash
@@ -246,6 +249,13 @@ Verify the recovered address:
 frostdao dkg-address --name treasury
 frostdao dkg-address --name treasury_recovered
 ```
+
+In every recovery ceremony:
+
+- Recovery reconstructs one lost party share only, not the full wallet private key.
+- Helper outputs are intended for the recovering party and should not be pasted into unrelated ceremonies.
+- For HTSS, the recovered party must use the original rank, not a new rank chosen during recovery.
+- The recovered wallet root public key and root address should match the source wallet on the selected network before anyone signs with it.
 
 ## 10. Miniscript Agent Payment Policy
 
