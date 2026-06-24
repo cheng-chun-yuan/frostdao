@@ -452,6 +452,16 @@ impl App {
         }
     }
 
+    pub(crate) fn utxo_api_base_for_fetch(&self, what: &str) -> Result<String> {
+        self.network.mempool_api_base().map_err(|err| {
+            anyhow::anyhow!(
+                "Cannot fetch {what} on {}: {}",
+                self.network.display_name(),
+                err
+            )
+        })
+    }
+
     /// Fetch balance for a wallet on the current network
     fn fetch_balance(&self, wallet_name: &str) -> Result<BalanceInfo> {
         let state_dir = frostdao::protocol::keygen::get_state_dir(wallet_name);
@@ -471,7 +481,7 @@ impl App {
 
         // Fetch UTXOs from mempool.space where the selected network supports it.
         let client = reqwest::blocking::Client::new();
-        let api_base = self.network.mempool_api_base()?;
+        let api_base = self.utxo_api_base_for_fetch("wallet balance")?;
         let url = format!("{}/address/{}/utxo", api_base, address);
         let response = client.get(&url).send()?;
         let utxos: Vec<serde_json::Value> = response.json()?;
@@ -519,10 +529,13 @@ impl App {
                 set_fetch_error(self, &message);
                 return;
             }
-            None => self
-                .network
-                .mempool_api_base()
-                .expect("UTXO API should be available"),
+            None => match self.utxo_api_base_for_fetch("UTXOs") {
+                Ok(api_base) => api_base,
+                Err(err) => {
+                    set_fetch_error(self, &err.to_string());
+                    return;
+                }
+            },
         };
         let client = reqwest::blocking::Client::new();
 

@@ -2204,14 +2204,10 @@ fn handle_address_list_keys(app: &mut App, code: KeyCode) {
                 app.set_message(&format!("Fetching balance for address {}...", idx));
 
                 // Fetch balance from mempool.space where the selected network supports it.
-                let api_base = match app.network.mempool_api_base() {
+                let api_base = match app.utxo_api_base_for_fetch("address balance") {
                     Ok(api_base) => api_base,
-                    Err(e) => {
-                        app.set_message(&format!(
-                            "Cannot fetch address balance on {}: {}",
-                            app.network.display_name(),
-                            e
-                        ));
+                    Err(err) => {
+                        app.set_message(&err.to_string());
                         return;
                     }
                 };
@@ -3452,6 +3448,40 @@ mod tests {
         handle_address_list_keys(&mut app, KeyCode::Char('c'));
 
         assert_eq!(app.message.as_deref(), Some("No address selected to copy"));
+    }
+
+    #[test]
+    #[serial]
+    fn address_list_refresh_blocks_when_utxo_source_unavailable() {
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
+
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Regtest;
+        app.state = AppState::AddressList(AddressListState {
+            wallet_name: "treasury".to_string(),
+            network: NetworkSelection::Regtest,
+            addresses: vec![("tb1qaddr".to_string(), "02".to_string(), 0)],
+            selected: 0,
+            error: None,
+            hd_enabled: true,
+            balance_cache: std::collections::HashMap::new(),
+        });
+
+        handle_address_list_keys(&mut app, KeyCode::Char('b'));
+
+        assert!(matches!(
+            app.state,
+            AppState::AddressList(AddressListState {
+                wallet_name, ..
+            }) if wallet_name == "treasury"
+        ));
+        assert!(app
+            .message
+            .as_deref()
+            .unwrap_or("")
+            .contains("Cannot fetch address balance on Regtest"));
+
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
     }
 
     #[test]
