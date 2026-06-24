@@ -387,6 +387,8 @@ pub struct TxProposalEvent {
     pub amount_sats: u64,
     pub fee_rate: u64,
     pub sighash: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub unsigned_tx: String,
     #[serde(default)]
     pub review: TxReviewPayload,
     pub description: String,
@@ -882,6 +884,7 @@ mod tests {
             amount_sats: 10_000,
             fee_rate: 5,
             sighash: "00".repeat(32),
+            unsigned_tx: "02000000000100".to_string(),
             review: TxReviewPayload {
                 network: "testnet".to_string(),
                 source_path: "m/86'/0'/0'/0/0".to_string(),

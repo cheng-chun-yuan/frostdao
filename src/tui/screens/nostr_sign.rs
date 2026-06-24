@@ -708,6 +708,7 @@ fn render_proposals_list(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn review_checklist_lines(proposal: &crate::tui::state::TxProposal) -> Vec<Line<'static>> {
+    let unsigned_tx_summary = unsigned_tx_review_summary(&proposal.unsigned_tx);
     vec![
         Line::from(Span::styled(
             "Before consenting, compare these fields on every device:",
@@ -739,6 +740,7 @@ fn review_checklist_lines(proposal: &crate::tui::state::TxProposal) -> Vec<Line<
             "Sighash fingerprint",
             proposal.review.sighash_fingerprint.clone(),
         ),
+        checklist_line("Unsigned tx", unsigned_tx_summary),
         checklist_line("Proposer", format!("Party {}", proposal.proposer_index)),
         Line::from(""),
         Line::from(vec![
@@ -755,6 +757,15 @@ fn review_checklist_lines(proposal: &crate::tui::state::TxProposal) -> Vec<Line<
             ),
         ]),
     ]
+}
+
+fn unsigned_tx_review_summary(unsigned_tx: &str) -> String {
+    let byte_count = unsigned_tx.trim().len() / 2;
+    format!(
+        "{} bytes / {}",
+        byte_count,
+        frostdao::protocol::dkg_tx::sighash_fingerprint(unsigned_tx.trim())
+    )
 }
 
 fn checklist_line(label: &'static str, value: String) -> Line<'static> {
@@ -956,6 +967,7 @@ mod tests {
             amount_sats: 50_000,
             fee_rate: 7,
             sighash: "abcdef".to_string(),
+            unsigned_tx: "02000000000100".to_string(),
             review: frostdao::nostr::TxReviewPayload {
                 network: "Testnet3".to_string(),
                 source_path: "m/86'/1'/0'/0/0".to_string(),
@@ -1018,6 +1030,7 @@ mod tests {
             "Destination: tb1qrecipient",
             "50000 sats at 7 sat/vB",
             "Sighash fingerprint: abc12345",
+            "Unsigned tx: 7 bytes / 02000000000100",
             "Proposer: Party 2",
             "Only press y when every line matches",
             "press r to publish rejection",

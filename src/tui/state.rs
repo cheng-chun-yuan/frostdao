@@ -592,6 +592,8 @@ pub struct TxProposal {
     pub fee_rate: u64,
     /// Transaction sighash to sign
     pub sighash: String,
+    /// Unsigned transaction hex for later combine/broadcast handoff
+    pub unsigned_tx: String,
     /// Human-checkable transaction review data
     pub review: frostdao::nostr::TxReviewPayload,
     /// Human-readable description

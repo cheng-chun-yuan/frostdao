@@ -3058,6 +3058,7 @@ mod tests {
             amount_sats: 50_000,
             fee_rate: 10,
             sighash: "abc123".to_string(),
+            unsigned_tx: "02000000000100".to_string(),
             review: frostdao::nostr::TxReviewPayload {
                 network: "Testnet3".to_string(),
                 source_path: "m/86'/1'/0'/0/0".to_string(),

@@ -349,6 +349,7 @@ impl App {
             amount_sats: build.amount_sats,
             fee_rate: build.review.fee_rate_sats_vb,
             sighash: build.sighash,
+            unsigned_tx: build.unsigned_tx,
             review: frostdao::nostr::TxReviewPayload {
                 network: self.network.display_name().to_string(),
                 source_path: build.review.source_path,
@@ -777,6 +778,7 @@ impl App {
                             amount_sats: payload.amount_sats,
                             fee_rate: payload.fee_rate,
                             sighash: payload.sighash,
+                            unsigned_tx: payload.unsigned_tx,
                             review: payload.review,
                             description: payload.description,
                             timestamp: payload.timestamp,
@@ -1031,6 +1033,7 @@ impl App {
             amount_sats: proposal.amount_sats,
             fee_rate: proposal.fee_rate,
             sighash: proposal.sighash.clone(),
+            unsigned_tx: proposal.unsigned_tx.clone(),
             review: proposal.review.clone(),
             description: proposal.description.clone(),
             timestamp: proposal.timestamp,
@@ -1655,7 +1658,15 @@ impl App {
             || payload.amount_sats == 0
             || payload.fee_rate == 0
             || payload.sighash.trim().is_empty()
+            || payload.unsigned_tx.trim().is_empty()
         {
+            return false;
+        }
+
+        let Ok(tx_bytes) = hex::decode(payload.unsigned_tx.trim()) else {
+            return false;
+        };
+        if bitcoin::consensus::deserialize::<bitcoin::Transaction>(&tx_bytes).is_err() {
             return false;
         }
 
@@ -1962,6 +1973,7 @@ mod tests {
                 amount_sats: 10_000,
                 fee_rate: 2,
                 sighash: "stale-sighash".to_string(),
+                unsigned_tx: valid_transaction_hex(2_000),
                 review: frostdao::nostr::TxReviewPayload {
                     network: "Testnet3".to_string(),
                     source_path: "root key-path".to_string(),
@@ -2084,6 +2096,7 @@ mod tests {
             amount_sats: 25_000,
             fee_rate: 8,
             sighash: sighash.clone(),
+            unsigned_tx: valid_transaction_hex(2_000),
             review: frostdao::nostr::TxReviewPayload {
                 network: "Testnet3".to_string(),
                 source_path: "m/86'/1'/0'/0/1".to_string(),
@@ -2099,6 +2112,17 @@ mod tests {
     }
 
     fn valid_broadcast_event_with_value(value_sats: u64) -> frostdao::nostr::TxBroadcastEvent {
+        let raw_tx = valid_transaction_hex(value_sats);
+        let tx_bytes = hex::decode(&raw_tx).unwrap();
+        let tx: Transaction = bitcoin::consensus::deserialize(&tx_bytes).unwrap();
+        frostdao::nostr::TxBroadcastEvent {
+            txid: tx.compute_txid().to_string(),
+            raw_tx,
+            network: "Testnet3".to_string(),
+        }
+    }
+
+    fn valid_transaction_hex(value_sats: u64) -> String {
         let tx = Transaction {
             version: Version::TWO,
             lock_time: LockTime::ZERO,
@@ -2113,11 +2137,7 @@ mod tests {
                 script_pubkey: ScriptBuf::new(),
             }],
         };
-        frostdao::nostr::TxBroadcastEvent {
-            txid: tx.compute_txid().to_string(),
-            raw_tx: bitcoin::consensus::encode::serialize_hex(&tx),
-            network: "Testnet3".to_string(),
-        }
+        bitcoin::consensus::encode::serialize_hex(&tx)
     }
 
     #[test]
@@ -2155,6 +2175,7 @@ mod tests {
         assert_eq!(proposal.amount_sats, 50_000);
         assert_eq!(proposal.fee_rate, 10);
         assert_eq!(proposal.sighash, sighash);
+        assert_eq!(proposal.unsigned_tx, "02000000000100");
         assert_eq!(proposal.review.network, "Testnet3");
         assert_eq!(proposal.review.from_address, test_address(Network::Testnet));
         assert_eq!(proposal.review.to_address, app.nostr_to_address);
@@ -2462,6 +2483,7 @@ mod tests {
             amount_sats: 50_000,
             fee_rate: 10,
             sighash: "abc123".to_string(),
+            unsigned_tx: valid_transaction_hex(2_000),
             review: frostdao::nostr::TxReviewPayload {
                 network: "testnet".to_string(),
                 source_path: "m/86'/1'/0'/0/0".to_string(),
@@ -2708,6 +2730,7 @@ mod tests {
             amount_sats: proposal_event.amount_sats,
             fee_rate: proposal_event.fee_rate,
             sighash: proposal_event.sighash.clone(),
+            unsigned_tx: proposal_event.unsigned_tx.clone(),
             review: proposal_event.review.clone(),
             description: "remote proposal".to_string(),
             timestamp: 1_700_000_010,
@@ -2994,6 +3017,42 @@ mod tests {
             .publish_local_simulation_message(wrong_fingerprint_message)
             .unwrap();
 
+        let mut missing_unsigned_tx = valid_remote_proposal_event(2);
+        missing_unsigned_tx.unsigned_tx.clear();
+        let missing_unsigned_tx_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxProposal,
+            2,
+            &missing_unsigned_tx,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-missing-unsigned-tx")
+        .with_tss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_local_simulation_message(missing_unsigned_tx_message)
+            .unwrap();
+
+        let mut invalid_unsigned_tx = valid_remote_proposal_event(2);
+        invalid_unsigned_tx.unsigned_tx = "not-hex".to_string();
+        let invalid_unsigned_tx_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxProposal,
+            2,
+            &invalid_unsigned_tx,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-invalid-unsigned-tx")
+        .with_tss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_local_simulation_message(invalid_unsigned_tx_message)
+            .unwrap();
+
         let valid = valid_remote_proposal_event(2);
         let valid_message = frostdao::nostr::NostrProtocolMessage::new(
             app.nostr_room_id.clone(),
@@ -3024,6 +3083,12 @@ mod tests {
         assert!(!app
             .nostr_pending_proposals
             .contains_key("session-wrong-fingerprint"));
+        assert!(!app
+            .nostr_pending_proposals
+            .contains_key("session-missing-unsigned-tx"));
+        assert!(!app
+            .nostr_pending_proposals
+            .contains_key("session-invalid-unsigned-tx"));
         assert_eq!(
             app.nostr_pending_proposals
                 .get("session-valid")
@@ -3032,6 +3097,12 @@ mod tests {
                 .sighash_fingerprint,
             frostdao::protocol::dkg_tx::sighash_fingerprint("remote-sighash")
         );
+        assert!(!app
+            .nostr_pending_proposals
+            .get("session-valid")
+            .unwrap()
+            .unsigned_tx
+            .is_empty());
 
         let _ = std::fs::remove_file(&cache_path);
     }
@@ -3581,6 +3652,7 @@ mod tests {
             amount_sats: proposal_event.amount_sats,
             fee_rate: proposal_event.fee_rate,
             sighash: proposal_event.sighash.clone(),
+            unsigned_tx: proposal_event.unsigned_tx.clone(),
             review: proposal_event.review.clone(),
             description: "proposal with rejection".to_string(),
             timestamp: 1_700_000_010,
