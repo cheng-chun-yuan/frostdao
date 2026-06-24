@@ -106,7 +106,7 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut A
                 }
 
                 // Global quit
-                if matches!(key.code, KeyCode::Char('q')) && matches!(app.state, AppState::Home) {
+                if is_shortcut_key(&key.code, 'q') && matches!(app.state, AppState::Home) {
                     return Ok(());
                 }
 
@@ -1753,7 +1753,7 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     config.focused_field = (config.focused_field + 1) % max_fields;
                 }
             }
-            KeyCode::Char('m') | KeyCode::Char('M') => {
+            code if is_shortcut_key(&code, 'm') => {
                 // Toggle timelock mode (blocks vs time)
                 use crate::tui::screens::ScriptType;
                 if app.send_form.script_config.script_type == ScriptType::TimelockRelative {
@@ -1912,7 +1912,7 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     wallet_name: wallet_name.clone(),
                 });
             }
-            KeyCode::Char('y') | KeyCode::Char('Y') => {
+            code if is_shortcut_key(&code, 'y') => {
                 let to_addr = app.send_form.to_address.value().to_string();
                 let amount: u64 = app.send_form.amount.value().parse().unwrap_or(0);
                 let selected_parties = app.send_form.get_selected_indices();
@@ -2554,7 +2554,7 @@ fn handle_nostr_room_ready(app: &mut App, key: KeyEvent) {
             app.leave_nostr_room_runtime();
             app.set_message("Left room");
         }
-        KeyCode::Char('k') | KeyCode::Char('K') => {
+        code if is_shortcut_key(&code, 'k') => {
             if !app.nostr_local_simulation_transport_active() {
                 app.set_message(nostr_relay_keygen_blocked_message());
                 return;
@@ -2563,7 +2563,7 @@ fn handle_nostr_room_ready(app: &mut App, key: KeyEvent) {
             app.nostr_keygen_state = NostrKeygenState::ModeSelect;
             app.state = AppState::NostrKeygen;
         }
-        KeyCode::Char('s') | KeyCode::Char('S') => {
+        code if is_shortcut_key(&code, 's') => {
             // Start Nostr signing
             app.nostr_sign_state = NostrSignState::SelectWallet;
             app.state = AppState::NostrSign;
@@ -2642,7 +2642,7 @@ fn handle_nostr_keygen_keys(app: &mut App, code: KeyCode) {
                 }
             }
         }
-        KeyCode::Char('r') | KeyCode::Char('R') => {
+        code if is_shortcut_key(&code, 'r') => {
             // Retry - reset to mode select
             app.nostr_keygen_state = NostrKeygenState::ModeSelect;
         }
@@ -2899,7 +2899,7 @@ fn handle_nostr_sign_keys(app: &mut App, key: KeyEvent) {
                 app.next_wallet();
             }
         }
-        KeyCode::Char('p') | KeyCode::Char('P') => {
+        code if is_shortcut_key(&code, 'p') => {
             // Select Propose role
             if let NostrSignState::SelectRole { wallet_name } = &app.nostr_sign_state {
                 app.nostr_tx_focus = NostrTxField::Recipient;
@@ -2924,7 +2924,7 @@ fn handle_nostr_sign_keys(app: &mut App, key: KeyEvent) {
                 _ => {}
             }
         }
-        KeyCode::Char('r') | KeyCode::Char('R') => {
+        code if is_shortcut_key(&code, 'r') => {
             if let NostrSignState::ReviewProposal {
                 wallet_name,
                 proposal,
@@ -2949,7 +2949,7 @@ fn handle_nostr_sign_keys(app: &mut App, key: KeyEvent) {
                 ));
             }
         }
-        KeyCode::Char('y') | KeyCode::Char('Y') => {
+        code if is_shortcut_key(&code, 'y') => {
             if let NostrSignState::ReviewProposal {
                 wallet_name,
                 proposal,
@@ -3582,6 +3582,10 @@ mod tests {
         } else {
             panic!("expected AppState::WalletDetails");
         }
+
+        assert!(is_shortcut_key(&KeyCode::Char('Y'), 'y'));
+        assert!(is_shortcut_key(&KeyCode::Char('y'), 'Y'));
+        assert!(!is_shortcut_key(&KeyCode::Char('2'), 'y'));
     }
 
     #[test]
@@ -4232,6 +4236,67 @@ mod tests {
             app.message.as_deref(),
             Some(nostr_relay_keygen_blocked_message())
         );
+    }
+
+    #[test]
+    fn nostr_room_ready_blocks_relay_keygen_shortcut_uppercase() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::NostrRoom;
+        app.nostr_room_phase = NostrRoomPhase::Ready;
+        app.force_relay_transport_for_tests = true;
+
+        handle_nostr_room_ready(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('K'), KeyModifiers::NONE),
+        );
+
+        assert!(matches!(app.state, AppState::NostrRoom));
+        assert!(matches!(app.nostr_room_phase, NostrRoomPhase::Ready));
+        assert_eq!(
+            app.message.as_deref(),
+            Some(nostr_relay_keygen_blocked_message())
+        );
+    }
+
+    #[test]
+    fn nostr_review_consent_key_is_case_insensitive() {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Testnet3;
+        app.nostr_room_id = format!("tui-approve-proposal-test-{}", std::process::id());
+        app.nostr_my_index = 1;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 2;
+        let cache_path = app.nostr_replay_cache_path();
+        let _ = std::fs::remove_file(&cache_path);
+
+        app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
+        app.state = AppState::NostrSign;
+        app.nostr_sign_state = NostrSignState::ReviewProposal {
+            wallet_name: "wallet-test".to_string(),
+            proposal: reviewable_proposal(),
+        };
+
+        handle_nostr_sign_keys(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('Y'), KeyModifiers::NONE),
+        );
+
+        assert!(matches!(
+            app.nostr_sign_state,
+            NostrSignState::WaitingForExecution { .. }
+        ));
+        assert_eq!(app.audit_events[0].event, "nostr_tx_consent");
+        assert_eq!(app.audit_events[0].status, "consented");
+        assert_eq!(
+            app.audit_events[0].fields["sighash_fingerprint"],
+            "abc12345"
+        );
+        assert!(app
+            .message
+            .as_deref()
+            .unwrap_or("")
+            .contains("Consent sent"));
+        let _ = std::fs::remove_file(&cache_path);
     }
 
     #[test]
