@@ -376,11 +376,12 @@ impl App {
     }
 
     pub(crate) fn apply_nostr_room_config_text(&mut self, text: &str) -> Result<(), String> {
-        let mut room_id: Option<String> = None;
-        let mut network: Option<String> = None;
-        let mut my_index: Option<u32> = None;
-        let mut threshold: Option<u32> = None;
-        let mut n_parties: Option<u32> = None;
+        let mut room_id = self.nostr_room_id.clone();
+        let mut network = self.network;
+        let mut my_index = self.nostr_my_index;
+        let mut threshold = self.nostr_threshold;
+        let mut n_parties = self.nostr_n_parties;
+        let mut has_room_id = false;
 
         for line in text.lines() {
             let line = line.trim();
@@ -399,50 +400,55 @@ impl App {
 
             match key.as_str() {
                 "room id" | "room" => {
-                    room_id = Some(value.to_string());
+                    room_id = value.to_string();
+                    has_room_id = true;
                 }
                 "network" => {
-                    network = Some(value.to_string());
+                    network = crate::tui::state::NetworkSelection::from_display_name(&value)
+                        .ok_or_else(|| format!("Unsupported network '{}'", value))?;
                 }
                 "my index" => {
-                    my_index = value.parse::<u32>().ok();
+                    my_index = value
+                        .parse::<u32>()
+                        .map_err(|_| format!("Invalid My Index value '{}'", value))?;
                 }
                 "threshold" => {
-                    threshold = value.parse::<u32>().ok();
+                    threshold = value
+                        .parse::<u32>()
+                        .map_err(|_| format!("Invalid Threshold value '{}'", value))?;
                 }
                 "parties" => {
-                    n_parties = value.parse::<u32>().ok();
+                    n_parties = value
+                        .parse::<u32>()
+                        .map_err(|_| format!("Invalid Parties value '{}'", value))?;
                 }
                 _ => {}
             }
         }
 
-        let room_id = room_id.ok_or_else(|| "Clipboard text missing Room ID".to_string())?;
-        if room_id.trim().is_empty() {
+        if !has_room_id || room_id.trim().is_empty() {
+            if !has_room_id {
+                return Err("Clipboard text missing Room ID".to_string());
+            }
             return Err("Room ID cannot be empty".to_string());
         }
 
-        if let Some(network_value) = network {
-            let Some(parsed_network) =
-                crate::tui::state::NetworkSelection::from_display_name(&network_value)
-            else {
-                return Err(format!("Unsupported network '{}'", network_value));
-            };
-            self.network = parsed_network;
-            self.chain_selector_index = parsed_network.index();
+        if n_parties < 2 {
+            return Err("Parties must be at least 2".to_string());
+        }
+        if my_index == 0 || my_index > n_parties {
+            return Err("My Index must be between 1 and Parties".to_string());
+        }
+        if threshold == 0 || threshold > n_parties {
+            return Err("Threshold must be between 1 and Parties".to_string());
         }
 
-        if let Some(value) = my_index {
-            self.nostr_my_index = value;
-        }
-        if let Some(value) = threshold {
-            self.nostr_threshold = value;
-        }
-        if let Some(value) = n_parties {
-            self.nostr_n_parties = value;
-        }
-
+        self.network = network;
+        self.chain_selector_index = network.index();
         self.nostr_room_id = room_id;
+        self.nostr_my_index = my_index;
+        self.nostr_threshold = threshold;
+        self.nostr_n_parties = n_parties;
 
         match self.nostr_room_config_error() {
             Some(error) => Err(error.to_string()),
@@ -4921,5 +4927,37 @@ mod tests {
             "Room ID: joined-room\nNetwork: Testnet4\nMy Index: 0\nThreshold: 2\nParties: 1\n";
         let err = app.apply_nostr_room_config_text(pasted).unwrap_err();
         assert_eq!(err, "Parties must be at least 2");
+    }
+
+    #[test]
+    fn apply_nostr_room_config_text_rejects_invalid_numeric_values() {
+        let mut app = App::new().unwrap();
+        app.nostr_room_id = "stable-room".to_string();
+        app.nostr_my_index = 2;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 3;
+
+        let pasted = "Room ID: next-room\nMy Index: bad\nThreshold: 2\nParties: 3\n";
+        let err = app.apply_nostr_room_config_text(pasted).unwrap_err();
+        assert_eq!(err, "Invalid My Index value 'bad'");
+        assert_eq!(app.nostr_room_id, "stable-room");
+        assert_eq!(app.nostr_my_index, 2);
+        assert_eq!(app.nostr_threshold, 2);
+        assert_eq!(app.nostr_n_parties, 3);
+    }
+
+    #[test]
+    fn apply_nostr_room_config_text_rejects_invalid_network_without_mutation() {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Testnet3;
+        app.chain_selector_index = app.network.index();
+
+        let pasted =
+            "Room ID: next-room\nNetwork: not-a-network\nMy Index: 2\nThreshold: 2\nParties: 3\n";
+        let err = app.apply_nostr_room_config_text(pasted).unwrap_err();
+        assert_eq!(err, "Unsupported network 'not-a-network'");
+        assert_eq!(app.network, NetworkSelection::Testnet3);
+        assert_eq!(app.chain_selector_index, NetworkSelection::Testnet3.index());
+        assert_eq!(app.nostr_room_id, String::new());
     }
 }
