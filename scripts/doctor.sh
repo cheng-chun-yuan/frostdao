@@ -359,7 +359,7 @@ def check_replay_cache_persistence():
         "Scheme: ",
         "Rank: ",
         "Multi-device signing room",
-        "Current TUI room joins are TSS-only",
+        "Room joins include scheme (TSS or HTSS)",
         "Room joins are public; signing nonce/share payloads are encrypted",
         "room_config_status_line",
         "room_config_status_shows_blocker_before_join",
@@ -406,10 +406,10 @@ def check_replay_cache_persistence():
         missing.append("RUN_GUIDE TUI relay room join public-key documentation")
     if "room configure status line shows `Blocked` until the room ID, party index, threshold, and party count form a valid room" not in run_guide:
         missing.append("RUN_GUIDE TUI Nostr room configure validation documentation")
-    if "current TUI room joins are guarded as `Scheme: TSS` with `Rank: n/a`" not in run_guide:
+    if "scheme" not in run_guide or "rank" not in run_guide:
         missing.append("RUN_GUIDE TUI Nostr room scheme/rank documentation")
-    if "current room join shape is TSS-only" not in run_guide:
-        missing.append("RUN_GUIDE TUI Nostr room TSS-only boundary documentation")
+    if "joins honor the selected scheme and include `Rank` only for HTSS" not in run_guide:
+        missing.append("RUN_GUIDE TUI Nostr room scheme-aware room join documentation")
     if "TUI Nostr room configure screen labels this as a multi-device signing room" not in run_guide:
         missing.append("RUN_GUIDE TUI Nostr room signing boundary documentation")
     if "recipient party to have joined the active room" not in run_guide:
@@ -438,8 +438,8 @@ def check_replay_cache_persistence():
         missing.append("TUI_KEYMAP Nostr signing ceremony context documentation")
     if "The room info line shows room ID, party index, threshold, scheme, rank, and" not in keymap:
         missing.append("TUI_KEYMAP Nostr room ceremony state documentation")
-    if "current room join shape as TSS-only" not in keymap:
-        missing.append("TUI_KEYMAP Nostr room TSS-only boundary documentation")
+    if "honors the configured scheme and requires `Rank` only in HTSS mode" not in keymap:
+        missing.append("TUI_KEYMAP Nostr room scheme-aware room join documentation")
     if "The configure screen labels this as a multi-device signing room" not in keymap:
         missing.append("TUI_KEYMAP Nostr room signing boundary documentation")
     if "The configure status line shows `Blocked` until the room ID, party index" not in keymap:
