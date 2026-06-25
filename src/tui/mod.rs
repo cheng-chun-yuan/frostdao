@@ -1956,7 +1956,10 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 app.send_form.focused_field = app.send_form.focused_field.prev();
             }
             KeyCode::Enter => {
-                if let Some(error) = send_preflight_error(&mut app.send_form, app.network) {
+                let source_address = send_selected_source_address(app, &wallet_name);
+                if let Some(error) =
+                    send_preflight_error(&mut app.send_form, app.network, source_address.as_deref())
+                {
                     app.send_form.error_message = Some(error);
                     return;
                 }
@@ -1989,7 +1992,10 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     return;
                 }
 
-                if let Some(error) = send_preflight_error(&mut app.send_form, app.network) {
+                let source_address = send_selected_source_address(app, &wallet_name);
+                if let Some(error) =
+                    send_preflight_error(&mut app.send_form, app.network, source_address.as_deref())
+                {
                     app.send_form.error_message = Some(format!(
                         "Review is stale: {error}. Go back to edit and review again"
                     ));
@@ -2485,13 +2491,27 @@ fn send_entry_unavailable_message(
     })
 }
 
+fn send_selected_source_address(app: &App, wallet_name: &str) -> Option<String> {
+    app.send_form.get_selected_hd_address().or_else(|| {
+        app.wallets
+            .iter()
+            .find(|wallet| wallet.name == wallet_name)
+            .and_then(|wallet| app::wallet_address_for_network(wallet, app.network))
+            .map(str::to_string)
+    })
+}
+
 fn send_preflight_error(
     form: &mut crate::tui::screens::SendFormData,
     network: state::NetworkSelection,
+    source_address: Option<&str>,
 ) -> Option<String> {
     let to_addr = form.to_address.value().to_string();
     let amount: u64 = form.amount.value().parse().unwrap_or(0);
 
+    if let Some(error) = send_source_network_error(source_address, network) {
+        return Some(error);
+    }
     if let Some(error) = send_recipient_network_error(&to_addr, network) {
         return Some(error);
     }
@@ -2527,6 +2547,35 @@ fn send_preflight_error(
     }
 
     None
+}
+
+fn send_source_network_error(
+    source_address: Option<&str>,
+    network: state::NetworkSelection,
+) -> Option<String> {
+    let Some(trimmed) = source_address
+        .map(str::trim)
+        .filter(|addr| !addr.is_empty())
+    else {
+        return Some(format!(
+            "Missing {} source address before preparing review; select a wallet or HD address for this network",
+            network.display_name()
+        ));
+    };
+
+    match bitcoin::Address::from_str(trimmed) {
+        Ok(address) => address
+            .require_network(network.to_bitcoin_network())
+            .map(|_| None)
+            .unwrap_or_else(|err| {
+                Some(format!(
+                    "Source address is invalid for {}: {}",
+                    network.display_name(),
+                    err
+                ))
+            }),
+        Err(err) => Some(format!("Invalid source address: {}", err)),
+    }
 }
 
 fn send_recipient_network_error(
@@ -5509,6 +5558,7 @@ mod tests {
 
     fn app_ready_to_prepare_send() -> App {
         let mut app = App::new().unwrap();
+        app.wallets = vec![wallet_summary_testnet_only("wallet-test")];
         app.state = AppState::Send(SendState::EnterDetails {
             wallet_name: "wallet-test".to_string(),
         });
@@ -5520,6 +5570,72 @@ mod tests {
         app.send_form.total_parties = 1;
         app.send_form.selected_parties = vec![true];
         app
+    }
+
+    #[test]
+    fn send_enter_details_requires_selected_network_source_before_review() {
+        let mut app = app_ready_to_prepare_send();
+        app.wallets.clear();
+
+        handle_send_keys(&mut app, enter_key());
+
+        assert!(matches!(
+            app.state,
+            AppState::Send(SendState::EnterDetails { .. })
+        ));
+        let message = app.send_form.error_message.as_deref().unwrap_or("");
+        assert!(message.contains("Missing Testnet4 source address"));
+        assert!(message.contains("before preparing review"));
+    }
+
+    #[test]
+    fn send_enter_details_rejects_wrong_network_source_before_review() {
+        let mut app = app_ready_to_prepare_send();
+        app.network = NetworkSelection::Mainnet;
+        app.send_form
+            .to_address
+            .set_value(&valid_recipient_address(Network::Bitcoin));
+
+        handle_send_keys(&mut app, enter_key());
+
+        assert!(matches!(
+            app.state,
+            AppState::Send(SendState::EnterDetails { .. })
+        ));
+        let message = app.send_form.error_message.as_deref().unwrap_or("");
+        assert!(message.contains("Missing Mainnet source address"));
+        assert!(message.contains("before preparing review"));
+    }
+
+    #[test]
+    fn send_enter_details_rejects_stale_hd_source_before_review() {
+        let mut app = app_ready_to_prepare_send();
+        app.network = NetworkSelection::Signet;
+        app.send_form
+            .to_address
+            .set_value(&valid_recipient_address(Network::Signet));
+        app.send_form.hd_enabled = true;
+        app.send_form.use_hd_address = true;
+        app.send_form.hd_addresses = vec![(
+            valid_recipient_address(Network::Bitcoin),
+            "pubkey".to_string(),
+            0,
+        )];
+        app.send_form.utxos = vec![screens::UtxoDisplay {
+            txid: "00".repeat(32),
+            vout: 0,
+            value: 2_000,
+            confirmed: true,
+        }];
+
+        handle_send_keys(&mut app, enter_key());
+
+        assert!(matches!(
+            app.state,
+            AppState::Send(SendState::EnterDetails { .. })
+        ));
+        let message = app.send_form.error_message.as_deref().unwrap_or("");
+        assert!(message.contains("Source address is invalid for Signet"));
     }
 
     #[test]
@@ -5741,6 +5857,35 @@ mod tests {
         let message = app.send_form.error_message.as_deref().unwrap_or("");
         assert!(message.contains("Review is stale"));
         assert!(message.contains("recipient address valid for Testnet4"));
+        assert!(message.contains("Go back to edit and review again"));
+    }
+
+    #[test]
+    fn send_review_revalidates_stale_source_before_signing() {
+        let mut app = app_ready_to_prepare_send();
+        app.wallets.clear();
+        app.send_form.utxos = vec![screens::UtxoDisplay {
+            txid: "00".repeat(32),
+            vout: 0,
+            value: 2_000,
+            confirmed: true,
+        }];
+        app.state = AppState::Send(SendState::ReviewTransaction {
+            wallet_name: "wallet-test".to_string(),
+        });
+
+        handle_send_keys(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE),
+        );
+
+        assert!(matches!(
+            app.state,
+            AppState::Send(SendState::ReviewTransaction { .. })
+        ));
+        let message = app.send_form.error_message.as_deref().unwrap_or("");
+        assert!(message.contains("Review is stale"));
+        assert!(message.contains("Missing Testnet4 source address"));
         assert!(message.contains("Go back to edit and review again"));
     }
 
