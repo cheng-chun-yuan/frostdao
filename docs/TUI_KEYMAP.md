@@ -181,7 +181,8 @@ Recovery boundaries:
 | Any phase | `Esc` | Back/cancel |
 
 The address selection step shows the selected network and either the root
-key-path source or the full BIP-86 HD source path before transaction details.
+key-path source or the full BIP-86 HD source path and source address before
+transaction details.
 Signer selection blocks review until exactly the required threshold signer set
 is selected; adding another signer after threshold requires deselecting one
 first.

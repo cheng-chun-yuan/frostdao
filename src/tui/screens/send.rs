@@ -490,7 +490,7 @@ fn review_control_statement(form: &SendFormData) -> &'static str {
 
 fn selected_address_lines(form: &SendFormData, network: NetworkSelection) -> Vec<Line<'static>> {
     if form.use_hd_address && form.hd_enabled {
-        if let Some((_addr, pubkey, idx)) = form.hd_addresses.get(form.hd_selected_index) {
+        if let Some((addr, pubkey, idx)) = form.hd_addresses.get(form.hd_selected_index) {
             let path =
                 frostdao::crypto::hd::format_bip86_path(network.to_bitcoin_network(), 0, *idx);
             return vec![
@@ -511,6 +511,10 @@ fn selected_address_lines(form: &SendFormData, network: NetworkSelection) -> Vec
                             .fg(Color::Green)
                             .add_modifier(Modifier::BOLD),
                     ),
+                ]),
+                Line::from(vec![
+                    Span::styled("Source address: ", Style::default().fg(Color::Gray)),
+                    Span::styled(addr.clone(), Style::default().fg(Color::White)),
                 ]),
                 Line::from(vec![
                     Span::styled("Control: ", Style::default().fg(Color::Gray)),
@@ -1141,7 +1145,7 @@ fn render_select_address(frame: &mut Frame, app: &App, form: &SendFormData, area
         .constraints([
             Constraint::Length(4), // Header info
             Constraint::Min(8),    // Address list
-            Constraint::Length(4), // Selection info
+            Constraint::Length(6), // Selection info
             Constraint::Length(2), // Error
             Constraint::Length(2), // Help
         ])
@@ -2819,6 +2823,7 @@ mod tests {
 
         assert!(rendered.contains("Network: Signet"));
         assert!(rendered.contains("HD Address at m/86'/1'/0'/0/7"));
+        assert!(rendered.contains("Source address: tb1ptest"));
         assert!(rendered.contains("same MPC threshold shares"));
         assert!(rendered.contains("HD tweak"));
         assert!(rendered.contains("child x-only pubkey 0123456789abcdef...89abcdef"));
