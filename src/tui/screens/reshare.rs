@@ -463,7 +463,7 @@ fn render_finalize_input(frame: &mut Frame, form: &ReshareFormData, area: Rect) 
             Constraint::Length(3), // My rank
             Constraint::Length(3), // Hierarchical
             Constraint::Length(2), // Instructions
-            Constraint::Length(2), // Input context
+            Constraint::Length(4), // Input context
             Constraint::Min(4),    // Input area
             Constraint::Length(2), // Error
             Constraint::Length(2), // Help
@@ -515,9 +515,8 @@ fn render_finalize_input(frame: &mut Frame, form: &ReshareFormData, area: Rect) 
         .style(Style::default().fg(Color::Yellow));
     frame.render_widget(instructions, chunks[4]);
 
-    let finalize_context =
-        Paragraph::new("Only paste JSON for this ceremony's source wallet and your target wallet.")
-            .style(Style::default().fg(Color::Gray));
+    let finalize_context = Paragraph::new(reshare_finalize_context_lines(form))
+        .style(Style::default().fg(Color::Gray));
     frame.render_widget(finalize_context, chunks[5]);
 
     form.finalize_input.render(
@@ -619,6 +618,24 @@ fn reshare_distributed_output_boundary_lines() -> Vec<Line<'static>> {
         Line::from("Boundary: copy only"),
         Line::from("- This output is for a single recipient party."),
         Line::from("- Verify recipient identity before transfer."),
+    ]
+}
+
+fn reshare_finalize_context_lines(form: &ReshareFormData) -> Vec<Line<'static>> {
+    let mode = if form.hierarchical {
+        format!("HTSS rank {}", form.my_rank.value())
+    } else {
+        "TSS rank n/a".to_string()
+    };
+
+    vec![
+        Line::from("Only paste JSON for this ceremony's source wallet and target wallet."),
+        Line::from(format!(
+            "Target party index: {} | Mode: {}",
+            form.my_new_index.value(),
+            mode
+        )),
+        Line::from("Reject outputs for another party index, rank, or wallet."),
     ]
 }
 
@@ -777,6 +794,34 @@ mod tests {
         assert!(rendered.contains("copy only"));
         assert!(rendered.contains("single recipient party"));
         assert!(rendered.contains("Verify recipient identity"));
+    }
+
+    #[test]
+    fn reshare_finalize_context_names_target_party_for_tss() {
+        let mut form = ReshareFormData::new();
+        form.my_new_index.set_value("3");
+        form.my_rank.set_value("2");
+        form.hierarchical = false;
+
+        let rendered = lines_to_string(&reshare_finalize_context_lines(&form));
+
+        assert!(rendered.contains("Target party index: 3"));
+        assert!(rendered.contains("Mode: TSS rank n/a"));
+        assert!(rendered.contains("Reject outputs for another party index"));
+        assert!(rendered.contains("rank, or wallet"));
+    }
+
+    #[test]
+    fn reshare_finalize_context_names_htss_rank() {
+        let mut form = ReshareFormData::new();
+        form.my_new_index.set_value("4");
+        form.my_rank.set_value("2");
+        form.hierarchical = true;
+
+        let rendered = lines_to_string(&reshare_finalize_context_lines(&form));
+
+        assert!(rendered.contains("Target party index: 4"));
+        assert!(rendered.contains("Mode: HTSS rank 2"));
     }
 
     #[test]

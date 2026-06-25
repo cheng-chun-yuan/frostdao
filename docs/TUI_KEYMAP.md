@@ -139,6 +139,7 @@ Applies when a single-line input or multiline paste area is focused.
 Reshare boundaries:
 - Local reshare does not leave secret share material on copy; only new local share files are written.
 - Distributed round1 output is party-bound sub-shares; do not mix outputs or paste them into unrelated ceremonies.
+- Finalize shows the target party index and HTSS rank context before paste; reject outputs for another party index, rank, or wallet.
 - Reshare should keep wallet key/address continuity; compare source pubkey and root address on all parties before use.
 - The TUI address check reports match, mismatch, or missing-address results on the selected network.
 
