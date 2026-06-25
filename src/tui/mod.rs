@@ -164,8 +164,8 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
             }
         }
         code if is_shortcut_key(&code, 's') => {
-            if app.selected_wallet().is_some() {
-                if let Some(message) = app.utxo_source_unavailable_message() {
+            if let Some(wallet) = app.selected_wallet() {
+                if let Some(message) = send_entry_unavailable_message(app, wallet) {
                     app.set_message(&message);
                 } else {
                     app.state = AppState::Send(state::SendState::default());
@@ -637,7 +637,12 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
             match selected_action {
                 WalletAction::Send => {
                     // Go to send flow with wallet pre-selected
-                    if let Some(message) = app.utxo_source_unavailable_message() {
+                    let Some(selected_wallet) = app.wallets.iter().find(|w| w.name == wallet_name)
+                    else {
+                        app.set_message("Selected wallet is not loaded");
+                        return;
+                    };
+                    if let Some(message) = send_entry_unavailable_message(app, selected_wallet) {
                         app.set_message(&message);
                     } else {
                         app.send_form = screens::SendFormData::new();
@@ -1611,6 +1616,10 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                     app.send_form.error_message = Some("No wallets available".to_string());
                     return;
                 };
+                if let Some(error) = send_entry_unavailable_message(app, &wallet) {
+                    app.send_form.error_message = Some(error);
+                    return;
+                }
                 let wallet_name = wallet.name.clone();
 
                 // Load wallet info for party selection
@@ -2461,6 +2470,19 @@ fn send_missing_destination_message(network: state::NetworkSelection) -> String 
 
 fn send_invalid_amount_message() -> String {
     "Enter an amount in sats greater than 0 before preparing review".to_string()
+}
+
+fn send_entry_unavailable_message(
+    app: &App,
+    wallet: &frostdao::protocol::keygen::WalletSummary,
+) -> Option<String> {
+    app.utxo_source_unavailable_message().or_else(|| {
+        if app::wallet_address_for_network(wallet, app.network).is_none() {
+            Some(app::missing_network_address_message(app.network))
+        } else {
+            None
+        }
+    })
 }
 
 fn send_preflight_error(
@@ -3801,6 +3823,21 @@ mod tests {
         }
     }
 
+    fn wallet_summary_testnet_only(name: &str) -> WalletSummary {
+        WalletSummary {
+            name: name.to_string(),
+            threshold: Some(2),
+            total_parties: Some(3),
+            hierarchical: Some(false),
+            address: Some(valid_recipient_address(Network::Testnet)),
+            address_testnet: Some(valid_recipient_address(Network::Testnet)),
+            address_mainnet: None,
+            address_regtest: None,
+            signing_requirement: None,
+            party_ranks: Some(BTreeMap::new()),
+        }
+    }
+
     #[test]
     fn home_help_bar_exposes_balance_refresh_shortcut() {
         let app = App::new().unwrap();
@@ -3866,6 +3903,22 @@ mod tests {
             .contains("Cannot fetch UTXOs on Regtest"));
 
         std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
+    }
+
+    #[test]
+    fn home_send_action_blocks_without_selected_network_address() {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Mainnet;
+        app.wallets = vec![wallet_summary_testnet_only("treasury")];
+        app.wallet_list_state.select(Some(0));
+
+        handle_home_keys(&mut app, KeyCode::Char('s'));
+
+        assert!(matches!(app.state, AppState::Home));
+        assert_eq!(
+            app.message.as_deref(),
+            Some(app::missing_network_address_message(NetworkSelection::Mainnet).as_str())
+        );
     }
 
     #[test]
@@ -3946,6 +3999,28 @@ mod tests {
             .contains("Cannot fetch UTXOs on Regtest"));
 
         std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
+    }
+
+    #[test]
+    fn wallet_details_send_action_blocks_without_selected_network_address() {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Mainnet;
+        app.wallets = vec![wallet_summary_testnet_only("treasury")];
+        app.state = AppState::WalletDetails(WalletDetailsState {
+            wallet_name: "treasury".to_string(),
+            selected_action: 0,
+            confirm_delete: false,
+            delete_confirmation_input: String::new(),
+            show_qr: false,
+        });
+
+        handle_wallet_details_keys(&mut app, KeyCode::Enter);
+
+        assert!(matches!(app.state, AppState::WalletDetails(_)));
+        assert_eq!(
+            app.message.as_deref(),
+            Some(app::missing_network_address_message(NetworkSelection::Mainnet).as_str())
+        );
     }
 
     #[test]
@@ -4321,7 +4396,8 @@ mod tests {
     #[test]
     fn send_select_wallet_enter_clamps_stale_index() {
         let mut app = App::new().unwrap();
-        app.wallets = vec![wallet_summary_no_address("wallet-a")];
+        app.network = NetworkSelection::Testnet3;
+        app.wallets = vec![wallet_summary_testnet_only("wallet-a")];
         app.state = AppState::Send(SendState::SelectWallet);
         app.send_form.wallet_index = 9;
 
@@ -4335,12 +4411,30 @@ mod tests {
     }
 
     #[test]
+    fn send_select_wallet_blocks_missing_selected_network_address() {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Mainnet;
+        app.wallets = vec![wallet_summary_testnet_only("wallet-a")];
+        app.wallet_list_state.select(Some(0));
+        app.state = AppState::Send(SendState::SelectWallet);
+
+        handle_send_keys(&mut app, enter_key());
+
+        assert!(matches!(app.state, AppState::Send(SendState::SelectWallet)));
+        assert_eq!(
+            app.send_form.error_message.as_deref(),
+            Some(app::missing_network_address_message(NetworkSelection::Mainnet).as_str())
+        );
+    }
+
+    #[test]
     fn send_select_wallet_blocks_invalid_signer_metadata() {
-        let mut wallet = wallet_summary_no_address("wallet-a");
+        let mut wallet = wallet_summary_testnet_only("wallet-a");
         wallet.threshold = Some(1);
         wallet.total_parties = Some(0);
 
         let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Testnet3;
         app.wallets = vec![wallet];
         app.state = AppState::Send(SendState::SelectWallet);
 
