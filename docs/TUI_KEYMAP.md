@@ -15,12 +15,12 @@ This is the maintained keyboard convention for FrostDAO TUI.
 | `Tab` / `Shift-Tab` | Next/previous form field |
 | `Space` | Toggle checkbox or binary option |
 | `c` / `C` | Copy current selected/output value when the screen has copyable output. |
-| `b` / `r` / `F5` / `B` / `R` | Refresh wallet/address balance (context dependent). |
+| `b` / `B` / `F5` | Refresh wallet/address balance (context dependent). |
 | `q` | Quit only from home; close QR popup when shown |
 
 Core command shortcuts are case-insensitive for single-letter actions (for example, `c` and `C` are treated the same).
 
-`R` is only used for wallet reload on Home; in other screens it is also accepted as refresh with `b/B/r/R/F5`.
+`R`/`r` are used for wallet reload on Home; `b/B/F5` are used for balance refresh.
 
 ## Home
 
@@ -37,8 +37,8 @@ Core command shortcuts are case-insensitive for single-letter actions (for examp
 | `a` | View derived addresses |
 | `m` | Show mnemonic backup flow |
 | `c` / `C` | Copy selected wallet address |
-| `b` / `B` / `r` / `R` / `F5` | Refresh selected wallet balance |
-| `R` | Reload wallet list |
+| `b` / `B` / `F5` | Refresh selected wallet balance |
+| `R` / `r` | Reload wallet list |
 | `q` | Quit |
 
 ## Wallet Details
@@ -47,7 +47,7 @@ Core command shortcuts are case-insensitive for single-letter actions (for examp
 |-----|--------|
 | `↑/↓`, `j/k` | Select action |
 | `Enter` | Run selected action |
-| `b` / `B` / `r` / `R` / `F5` | Fetch balance |
+| `b` / `B` / `F5` | Fetch balance |
 | `c` / `C` | Copy wallet address |
 | `v` | Show QR code |
 | `Esc` | Back |
@@ -209,7 +209,7 @@ fails, use `c`/`C` to copy the raw transaction for manual broadcast.
 |-----|--------|
 | `↑/↓`, `j/k` | Select derived address |
 | `c` / `C` | Copy selected wallet address |
-| `b` / `r` / `F5` | Fetch selected address balance |
+| `b` / `B` / `F5` | Fetch selected address balance |
 | `+` / `a` / `A` | Add next derived address |
 | `-` / `x` / `X` | Remove last derived address |
 | `Esc` | Back |

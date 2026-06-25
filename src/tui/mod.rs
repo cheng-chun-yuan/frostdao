@@ -42,7 +42,8 @@ use frostdao::protocol::{keygen, reshare, signing};
 use frostdao::storage::{FileStorage, Storage};
 
 pub(crate) const COPY_KEY_LABEL: &str = "c/C";
-pub(crate) const REFRESH_KEY_LABEL: &str = "b/B/r/R/F5";
+pub(crate) const REFRESH_KEY_LABEL: &str = "b/B/F5";
+pub(crate) const HOME_RELOAD_KEY_LABEL: &str = "R/r";
 const HELP_KEY_LABEL: &str = "F1/?";
 
 /// Run the terminal UI
@@ -79,7 +80,7 @@ fn is_copy_key(code: &KeyCode) -> bool {
 }
 
 fn is_refresh_key(code: &KeyCode) -> bool {
-    is_shortcut_key(code, 'b') || is_shortcut_key(code, 'r') || matches!(code, KeyCode::F(5))
+    is_shortcut_key(code, 'b') || matches!(code, KeyCode::F(5))
 }
 
 fn is_help_key(code: &KeyCode) -> bool {
@@ -88,6 +89,10 @@ fn is_help_key(code: &KeyCode) -> bool {
 
 fn is_shortcut_key(code: &KeyCode, target: char) -> bool {
     matches!(code, KeyCode::Char(c) if c.eq_ignore_ascii_case(&target))
+}
+
+fn is_home_reload_key(code: &KeyCode) -> bool {
+    is_shortcut_key(code, 'r')
 }
 
 fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> {
@@ -151,7 +156,7 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
                 app.set_message("No wallet selected");
             }
         }
-        KeyCode::Char('R') => app.reload_wallets(),
+        code if is_home_reload_key(&code) => app.reload_wallets(),
         code if is_refresh_key(&code) => app.refresh_balance(),
         code if is_shortcut_key(&code, 'n') => {
             app.chain_selector_index = app.network.index();
@@ -3712,7 +3717,7 @@ fn global_help_lines(app: &App) -> Vec<Line<'static>> {
             "j/k/↑/↓:Navigate | Enter:Select | g:New wallet | n:Network | h:Reshare | s:Send{home_policy_line}"
         )),
         format!("o:Nostr | a:Address list | m:Mnemonic backup | {copy}:Copy address").into(),
-        format!("{refresh} (Refresh):Refresh balances | R:Reload wallets").into(),
+        format!("{refresh} (Refresh):Refresh balances | {HOME_RELOAD_KEY_LABEL}:Reload wallets").into(),
         Line::from(""),
         Line::from("Wallet Details"),
         Line::from("j/k/↑/↓:Select action | Enter:Continue | v:QR"),
@@ -4205,9 +4210,9 @@ mod tests {
 
         assert!(is_refresh_key(&KeyCode::Char('b')));
         assert!(is_refresh_key(&KeyCode::Char('B')));
-        assert!(is_refresh_key(&KeyCode::Char('r')));
         assert!(is_refresh_key(&KeyCode::F(5)));
-        assert!(is_refresh_key(&KeyCode::Char('R')));
+        assert!(is_home_reload_key(&KeyCode::Char('r')));
+        assert!(is_home_reload_key(&KeyCode::Char('R')));
 
         let mut app = App::new().unwrap();
         app.network = NetworkSelection::Signet;
@@ -4259,7 +4264,7 @@ mod tests {
 
     #[test]
     #[serial]
-    fn home_reload_key_is_case_sensitive_and_independent() {
+    fn home_reload_key_is_case_insensitive() {
         let mut app = App::new().unwrap();
         app.wallets = vec![wallet_summary_testnet_only("treasury")];
         app.wallet_list_state.select(Some(0));
@@ -4273,8 +4278,7 @@ mod tests {
         app.wallet_list_state.select(Some(0));
         app.message = None;
         handle_home_keys(&mut app, KeyCode::Char('r'));
-        assert!(app.message.as_deref().is_some());
-        assert_ne!(app.message.as_deref(), Some("Wallet list refreshed"));
+        assert_eq!(app.message.as_deref(), Some("Wallet list refreshed"));
     }
 
     #[test]

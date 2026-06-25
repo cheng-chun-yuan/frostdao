@@ -12,7 +12,7 @@ use crate::tui::app::{
     balance_cache_key, missing_network_address_message, wallet_address_for_network, App,
 };
 use crate::tui::state::NetworkSelection;
-use crate::tui::{COPY_KEY_LABEL, REFRESH_KEY_LABEL};
+use crate::tui::{COPY_KEY_LABEL, HOME_RELOAD_KEY_LABEL, REFRESH_KEY_LABEL};
 use frostdao::protocol::keygen::WalletSummary;
 
 /// Render the home screen
@@ -276,6 +276,8 @@ fn render_shortcuts(frame: &mut Frame, has_wallet: bool, area: Rect) {
             Span::raw(" Reshare   "),
             Span::styled(REFRESH_KEY_LABEL, Style::default().fg(Color::Yellow)),
             Span::raw(" Refresh   "),
+            Span::styled(HOME_RELOAD_KEY_LABEL, Style::default().fg(Color::Yellow)),
+            Span::raw(" Reload list   "),
             Span::styled(COPY_KEY_LABEL, Style::default().fg(Color::Yellow)),
             Span::raw(" Copy addr"),
         ]));
