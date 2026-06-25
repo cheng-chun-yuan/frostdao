@@ -2292,7 +2292,19 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
     }
 }
 
+fn normalize_address_selection(state: &mut AddressListState) {
+    if state.addresses.is_empty() {
+        state.selected = 0;
+    } else if state.selected >= state.addresses.len() {
+        state.selected = state.addresses.len() - 1;
+    }
+}
+
 fn handle_address_list_keys(app: &mut App, code: KeyCode) {
+    if let AppState::AddressList(ref mut state) = app.state {
+        normalize_address_selection(state);
+    }
+
     match code {
         KeyCode::Esc => {
             app.state = AppState::Home;
@@ -2495,7 +2507,19 @@ fn send_invalid_amount_message() -> String {
     "Enter an amount in sats greater than 0 before preparing review".to_string()
 }
 
+fn normalize_mnemonic_party_selection(state: &mut MnemonicState) {
+    if state.available_parties.is_empty() {
+        state.selected_party = 0;
+    } else if state.selected_party >= state.available_parties.len() {
+        state.selected_party = state.available_parties.len() - 1;
+    }
+}
+
 fn handle_mnemonic_keys(app: &mut App, code: KeyCode) {
+    if let AppState::MnemonicBackup(ref mut state) = app.state {
+        normalize_mnemonic_party_selection(state);
+    }
+
     match code {
         KeyCode::Esc => {
             app.state = AppState::Home;
@@ -4015,6 +4039,34 @@ mod tests {
     }
 
     #[test]
+    fn address_list_copy_clamps_stale_selection() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::AddressList(AddressListState {
+            wallet_name: "treasury".to_string(),
+            network: NetworkSelection::Testnet4,
+            addresses: vec![
+                ("tb1qtest1".to_string(), "02".to_string(), 0),
+                ("tb1qtest2".to_string(), "03".to_string(), 1),
+            ],
+            selected: 99,
+            error: None,
+            hd_enabled: true,
+            balance_cache: std::collections::HashMap::new(),
+        });
+
+        handle_address_list_keys(&mut app, KeyCode::Char('c'));
+
+        let AppState::AddressList(state) = &app.state else {
+            panic!("expected address list");
+        };
+        assert_eq!(state.selected, 1);
+        assert_eq!(
+            app.message.as_deref(),
+            Some("Copied Testnet4 HD address m/86'/1'/0'/0/1: tb1qtest2")
+        );
+    }
+
+    #[test]
     fn address_copy_messages_include_network_and_source_scope() {
         let root = root_address_copy_message(NetworkSelection::Regtest, "bcrt1proot");
         assert_eq!(root, "Copied Regtest root address: bcrt1proot");
@@ -4717,6 +4769,30 @@ mod tests {
             },
             0
         );
+    }
+
+    #[test]
+    fn mnemonic_enter_clamps_stale_party_selection() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::MnemonicBackup(MnemonicState {
+            wallet_name: "treasury".to_string(),
+            available_parties: vec![2, 3],
+            selected_party: 99,
+            words: Vec::new(),
+            error: None,
+            party_selected: false,
+            revealed: false,
+            hierarchical: false,
+            party_ranks: BTreeMap::new(),
+        });
+
+        handle_mnemonic_keys(&mut app, KeyCode::Enter);
+
+        let AppState::MnemonicBackup(state) = &app.state else {
+            panic!("expected mnemonic backup");
+        };
+        assert_eq!(state.selected_party, 1);
+        assert!(state.party_selected);
     }
 
     #[test]
