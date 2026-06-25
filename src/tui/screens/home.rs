@@ -358,7 +358,7 @@ fn wallet_readiness_lines(app: &App, wallet: &WalletSummary) -> Vec<Line<'static
         ),
         (true, Some(message)) => (format!("Send: Blocked - {message}"), Color::Red),
         (true, None) => (
-            "Send: Ready - source address and UTXO API available".to_string(),
+            "Send: Ready to fetch UTXOs - source address and API available".to_string(),
             Color::Green,
         ),
     };
@@ -538,7 +538,8 @@ mod tests {
         let rendered = lines_to_string(wallet_readiness_lines(&app, &wallet));
 
         assert!(rendered.contains("Readiness:"));
-        assert!(rendered.contains("Send: Ready"));
+        assert!(rendered.contains("Send: Ready to fetch UTXOs"));
+        assert!(rendered.contains("source address and API available"));
         assert!(rendered.contains("Signing: TSS 2-of-3"));
         assert!(rendered.contains("HD: Addresses screen derives paths"));
         assert!(rendered.contains("Nostr: configure and join a room"));
