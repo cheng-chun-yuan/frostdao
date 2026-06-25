@@ -1224,6 +1224,8 @@ impl App {
         wallet_name: &str,
         proposal: &TxProposal,
     ) -> Result<()> {
+        self.validate_nostr_tx_proposal_publish(wallet_name, proposal)?;
+
         let Some(runtime) = self.nostr_runtime.as_mut() else {
             anyhow::bail!("join a Nostr room before publishing a transaction proposal");
         };
@@ -2025,6 +2027,79 @@ impl App {
         if tx.compute_txid().to_string() != txid {
             anyhow::bail!("broadcast txid does not match raw transaction");
         }
+        Ok(())
+    }
+
+    fn validate_nostr_tx_proposal_publish(
+        &self,
+        wallet_name: &str,
+        proposal: &TxProposal,
+    ) -> Result<()> {
+        if wallet_name.trim().is_empty() {
+            anyhow::bail!("wallet name is required");
+        }
+        if proposal.wallet_name != wallet_name {
+            anyhow::bail!("proposal wallet must match the selected wallet");
+        }
+        if proposal.session_id.trim().is_empty() {
+            anyhow::bail!("proposal session is required");
+        }
+        if proposal.proposer_index != self.nostr_my_index
+            || proposal.proposer_index == 0
+            || proposal.proposer_index > self.nostr_n_parties
+        {
+            anyhow::bail!("proposal proposer must match this party inside the active room");
+        }
+        if proposal.amount_sats == 0 {
+            anyhow::bail!("proposal amount must be greater than zero");
+        }
+        if proposal.fee_rate == 0 {
+            anyhow::bail!("proposal fee rate must be greater than zero");
+        }
+        if proposal.sighash.trim().is_empty() {
+            anyhow::bail!("proposal sighash is required");
+        }
+        if proposal.unsigned_tx.trim().is_empty() {
+            anyhow::bail!("proposal unsigned transaction is required");
+        }
+        let tx_bytes = hex::decode(proposal.unsigned_tx.trim())
+            .map_err(|err| anyhow::anyhow!("proposal unsigned transaction must be hex: {err}"))?;
+        bitcoin::consensus::deserialize::<bitcoin::Transaction>(&tx_bytes)
+            .map_err(|err| anyhow::anyhow!("proposal unsigned transaction is invalid: {err}"))?;
+
+        if proposal.review.network != self.network.display_name() {
+            anyhow::bail!("proposal network must match the selected TUI network");
+        }
+        if proposal.review.source_path.trim().is_empty() {
+            anyhow::bail!("proposal source path is required");
+        }
+        if proposal.review.from_address.trim().is_empty() {
+            anyhow::bail!("proposal source address is required");
+        }
+        if proposal.review.to_address.trim().is_empty() {
+            anyhow::bail!("proposal destination address is required");
+        }
+        if proposal.review.amount_sats != proposal.amount_sats {
+            anyhow::bail!("proposal review amount must match the transaction amount");
+        }
+        if proposal.review.fee_rate_sats_vb != proposal.fee_rate {
+            anyhow::bail!("proposal review fee rate must match the transaction fee rate");
+        }
+        if proposal.review.sighash_fingerprint
+            != frostdao::protocol::dkg_tx::sighash_fingerprint(&proposal.sighash)
+        {
+            anyhow::bail!("proposal sighash fingerprint does not match the sighash");
+        }
+
+        let network = self.network.to_bitcoin_network();
+        let network_name = self.network.display_name();
+        let to_address =
+            parse_tui_recipient_address(proposal.to_address.trim(), network, network_name)?;
+        if proposal.review.to_address != to_address {
+            anyhow::bail!("proposal review destination must match the destination address");
+        }
+        parse_tui_recipient_address(proposal.review.from_address.trim(), network, network_name)?;
+
         Ok(())
     }
 
@@ -3091,23 +3166,26 @@ mod tests {
         let _ = std::fs::remove_file(&cache_path);
 
         app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
+        let sighash = "abc123".to_string();
+        let to_address = test_address(Network::Testnet);
+        let from_address = test_address(Network::Testnet);
         let proposal = crate::tui::state::TxProposal {
             session_id: "session-test".to_string(),
             wallet_name: "wallet-test".to_string(),
             proposer_index: 1,
-            to_address: "tb1qrecipient".to_string(),
+            to_address: to_address.clone(),
             amount_sats: 50_000,
             fee_rate: 10,
-            sighash: "abc123".to_string(),
+            sighash: sighash.clone(),
             unsigned_tx: valid_transaction_hex(2_000),
             review: frostdao::nostr::TxReviewPayload {
-                network: "testnet".to_string(),
+                network: "Testnet3".to_string(),
                 source_path: "m/86'/1'/0'/0/0".to_string(),
-                from_address: "tb1qfrom".to_string(),
-                to_address: "tb1qrecipient".to_string(),
+                from_address,
+                to_address,
                 amount_sats: 50_000,
                 fee_rate_sats_vb: 10,
-                sighash_fingerprint: "abc12345".to_string(),
+                sighash_fingerprint: frostdao::protocol::dkg_tx::sighash_fingerprint(&sighash),
             },
             description: "test proposal".to_string(),
             timestamp: 1_700_000_000,
@@ -3120,7 +3198,7 @@ mod tests {
         assert_eq!(app.audit_events[0].fields["session_id"], "session-test");
         assert_eq!(
             app.audit_events[0].fields["sighash_fingerprint"],
-            "abc12345"
+            frostdao::protocol::dkg_tx::sighash_fingerprint(&sighash)
         );
         assert!(app.audit_events[0].fields.get("sighash").is_none());
         assert_eq!(
@@ -3202,6 +3280,34 @@ mod tests {
         let _ = std::fs::remove_file(&cache_path);
 
         app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
+
+        let sighash = "publish-sighash".to_string();
+        let stale_network_proposal = crate::tui::state::TxProposal {
+            session_id: "session-stale-network".to_string(),
+            wallet_name: "wallet-test".to_string(),
+            proposer_index: 1,
+            to_address: test_address(Network::Testnet),
+            amount_sats: 50_000,
+            fee_rate: 10,
+            sighash: sighash.clone(),
+            unsigned_tx: valid_transaction_hex(2_000),
+            review: frostdao::nostr::TxReviewPayload {
+                network: "Signet".to_string(),
+                source_path: "m/86'/1'/0'/0/0".to_string(),
+                from_address: test_address(Network::Testnet),
+                to_address: test_address(Network::Testnet),
+                amount_sats: 50_000,
+                fee_rate_sats_vb: 10,
+                sighash_fingerprint: frostdao::protocol::dkg_tx::sighash_fingerprint(&sighash),
+            },
+            description: "stale proposal".to_string(),
+            timestamp: 1_700_000_000,
+        };
+        assert!(app
+            .publish_nostr_tx_proposal("wallet-test", &stale_network_proposal)
+            .unwrap_err()
+            .to_string()
+            .contains("proposal network must match the selected TUI network"));
 
         assert!(app
             .publish_nostr_signing_nonce("wallet-test", "session-test", 0, "cipher".to_string())
