@@ -1420,7 +1420,17 @@ impl App {
 
     /// Confirm network selection
     pub fn confirm_network(&mut self) {
-        self.network = NetworkSelection::from_index(self.chain_selector_index);
+        let selected_network = NetworkSelection::from_index(self.chain_selector_index);
+        if selected_network == self.network {
+            self.state = AppState::Home;
+            self.message = Some(format!(
+                "Already on {}; no pending send, reshare, or Nostr ceremony state was changed",
+                self.network.display_name()
+            ));
+            return;
+        }
+
+        self.network = selected_network;
         self.clear_network_volatile_state();
         self.state = AppState::Home;
         self.message = Some(format!(
@@ -2219,6 +2229,58 @@ mod tests {
             .as_deref()
             .unwrap_or("")
             .contains("cleared pending send, reshare, and Nostr ceremony state"));
+    }
+
+    #[test]
+    fn confirming_current_network_preserves_volatile_ceremony_state() {
+        let mut app = App::new().unwrap();
+        app.chain_selector_index = app.network.index();
+        app.state = AppState::NostrSign;
+        app.send_form.to_address.set_value("tb1qdraft");
+        app.send_form.total_balance = 50_000;
+        app.reshare_form.round1_output = "draft reshare round".to_string();
+        app.nostr_connected = true;
+        app.nostr_room_phase = NostrRoomPhase::Ready;
+        app.nostr_participants.insert(1, "npub-local-1".to_string());
+        app.nostr_pending_proposals.insert(
+            "session-draft".to_string(),
+            TxProposal {
+                session_id: "session-draft".to_string(),
+                wallet_name: "wallet-test".to_string(),
+                proposer_index: 2,
+                to_address: test_address(Network::Testnet),
+                amount_sats: 10_000,
+                fee_rate: 2,
+                sighash: "draft-sighash".to_string(),
+                unsigned_tx: valid_transaction_hex(2_001),
+                review: frostdao::nostr::TxReviewPayload {
+                    network: "Testnet4".to_string(),
+                    source_path: "root key-path".to_string(),
+                    from_address: test_address(Network::Testnet4),
+                    to_address: test_address(Network::Testnet4),
+                    amount_sats: 10_000,
+                    fee_rate_sats_vb: 2,
+                    sighash_fingerprint: "draft-fingerprint".to_string(),
+                },
+                description: "draft proposal".to_string(),
+                timestamp: 1_700_000_000,
+            },
+        );
+
+        app.confirm_network();
+
+        assert_eq!(app.network, NetworkSelection::Testnet4);
+        assert!(matches!(app.state, AppState::Home));
+        assert_eq!(app.send_form.to_address.value(), "tb1qdraft");
+        assert_eq!(app.send_form.total_balance, 50_000);
+        assert_eq!(app.reshare_form.round1_output, "draft reshare round");
+        assert!(app.nostr_connected);
+        assert!(matches!(app.nostr_room_phase, NostrRoomPhase::Ready));
+        assert_eq!(app.nostr_participants.len(), 1);
+        assert_eq!(app.nostr_pending_proposals.len(), 1);
+        let message = app.message.as_deref().unwrap_or_default();
+        assert!(message.contains("Already on Testnet4"));
+        assert!(message.contains("no pending send, reshare, or Nostr ceremony state was changed"));
     }
 
     #[test]
