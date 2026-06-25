@@ -10,6 +10,7 @@ use ratatui::{
 
 use crate::tui::app::App;
 use crate::tui::state::{NostrRoomField, NostrRoomPhase};
+use frostdao::nostr::ThresholdScheme;
 
 /// Render the Nostr room configuration screen
 pub fn render_nostr_room(frame: &mut Frame, app: &App, area: Rect) {
@@ -30,6 +31,8 @@ fn render_configure(frame: &mut Frame, app: &App, area: Rect) {
             Constraint::Length(3), // My Index
             Constraint::Length(3), // Threshold
             Constraint::Length(3), // N Parties
+            Constraint::Length(3), // Scheme
+            Constraint::Length(3), // My Rank
             Constraint::Length(3), // Status
             Constraint::Min(0),    // Spacer
             Constraint::Length(4), // Help
@@ -87,6 +90,22 @@ fn render_configure(frame: &mut Frame, app: &App, area: Rect) {
         app.nostr_room_focus == NostrRoomField::NParties,
     );
 
+    render_text_field(
+        frame,
+        chunks[6],
+        "Scheme",
+        room_scheme_label(app.nostr_room_scheme),
+        app.nostr_room_focus == NostrRoomField::Scheme,
+    );
+
+    render_text_field(
+        frame,
+        chunks[7],
+        "My Rank",
+        &room_rank_text_for_editing(app.nostr_room_scheme, app.nostr_room_my_rank),
+        app.nostr_room_focus == NostrRoomField::MyRank,
+    );
+
     let status = Paragraph::new(vec![
         room_config_status_line(app),
         Line::from(vec![
@@ -97,12 +116,16 @@ fn render_configure(frame: &mut Frame, app: &App, area: Rect) {
             ),
         ]),
     ]);
-    frame.render_widget(status, chunks[6]);
+    frame.render_widget(status, chunks[8]);
 
     // Help
     let help_lines = vec![Line::from(vec![
         Span::styled("Tab", Style::default().fg(Color::Yellow)),
         Span::raw(": Next field  "),
+        Span::styled("S", Style::default().fg(Color::Yellow)),
+        Span::raw("/"),
+        Span::styled("s", Style::default().fg(Color::Yellow)),
+        Span::raw(": Toggle scheme  "),
         Span::styled("Enter", Style::default().fg(Color::Yellow)),
         Span::raw(": Join Room  "),
         Span::styled("P", Style::default().fg(Color::Yellow)),
@@ -121,7 +144,7 @@ fn render_configure(frame: &mut Frame, app: &App, area: Rect) {
             .borders(Borders::TOP)
             .border_style(Style::default().fg(Color::DarkGray)),
     );
-    frame.render_widget(help, chunks[8]);
+    frame.render_widget(help, chunks[9]);
 }
 
 fn room_config_info_lines(app: &App) -> Vec<Line<'static>> {
@@ -143,7 +166,7 @@ fn room_config_info_lines(app: &App) -> Vec<Line<'static>> {
             Style::default().fg(Color::DarkGray),
         )),
         Line::from(Span::styled(
-            "Current TUI room joins are TSS-only; rank is n/a until HTSS room config is wired.",
+            "Room joins include scheme (TSS or HTSS); HTSS also carries party rank.",
             Style::default().fg(Color::DarkGray),
         )),
         Line::from(vec![
@@ -386,10 +409,16 @@ fn room_info_line(app: &App) -> Line<'static> {
         ),
         Span::raw("  |  "),
         Span::styled("Scheme: ", Style::default().fg(Color::Gray)),
-        Span::styled("TSS", Style::default().fg(Color::Cyan)),
+        Span::styled(
+            room_scheme_label(app.nostr_room_scheme),
+            Style::default().fg(Color::Cyan),
+        ),
         Span::raw("  |  "),
         Span::styled("Rank: ", Style::default().fg(Color::Gray)),
-        Span::styled("n/a", Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            room_rank_text(app.nostr_room_scheme, app.nostr_room_my_rank),
+            Style::default().fg(Color::DarkGray),
+        ),
         Span::raw("  |  "),
         Span::styled("Transport: ", Style::default().fg(Color::Gray)),
         Span::styled(
@@ -401,6 +430,31 @@ fn room_info_line(app: &App) -> Line<'static> {
             },
         ),
     ])
+}
+
+fn room_scheme_label(scheme: ThresholdScheme) -> &'static str {
+    match scheme {
+        ThresholdScheme::Tss => "TSS",
+        ThresholdScheme::Htss => "HTSS",
+    }
+}
+
+fn room_rank_text(scheme: ThresholdScheme, rank: Option<u32>) -> String {
+    match scheme {
+        ThresholdScheme::Tss => "n/a".to_string(),
+        ThresholdScheme::Htss => rank
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "n/a".to_string()),
+    }
+}
+
+fn room_rank_text_for_editing(scheme: ThresholdScheme, rank: Option<u32>) -> String {
+    match scheme {
+        ThresholdScheme::Tss => "unused".to_string(),
+        ThresholdScheme::Htss => rank
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "0".to_string()),
+    }
 }
 
 fn render_participant_list(frame: &mut Frame, app: &App, area: Rect) {
@@ -529,9 +583,8 @@ mod tests {
         assert!(rendered.contains("signing nonce/share payloads are encrypted"));
         assert!(rendered.contains("Relay keygen is unavailable"));
         assert!(rendered.contains("CLI keygen"));
-        assert!(rendered.contains("TSS-only"));
-        assert!(rendered.contains("rank is n/a"));
-        assert!(rendered.contains("HTSS room config is wired"));
+        assert!(rendered.contains("Room joins include scheme"));
+        assert!(rendered.contains("HTSS"));
         assert!(!rendered.contains("Distributed DKG"));
     }
 

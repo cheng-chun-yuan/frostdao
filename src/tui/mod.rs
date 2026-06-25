@@ -2911,6 +2911,11 @@ fn handle_nostr_room_keys(app: &mut App, key: KeyEvent) {
 }
 
 fn handle_nostr_room_configure(app: &mut App, key: KeyEvent) {
+    let include_rank = matches!(
+        app.nostr_room_scheme,
+        frostdao::nostr::ThresholdScheme::Htss
+    );
+
     match key.code {
         KeyCode::Esc => {
             app.state = AppState::Home;
@@ -2922,20 +2927,10 @@ fn handle_nostr_room_configure(app: &mut App, key: KeyEvent) {
             copy_nostr_room_config(app);
         }
         KeyCode::Tab => {
-            app.nostr_room_focus = match app.nostr_room_focus {
-                NostrRoomField::RoomId => NostrRoomField::MyIndex,
-                NostrRoomField::MyIndex => NostrRoomField::Threshold,
-                NostrRoomField::Threshold => NostrRoomField::NParties,
-                NostrRoomField::NParties => NostrRoomField::RoomId,
-            };
+            app.nostr_room_focus = app.nostr_room_focus.next(include_rank);
         }
         KeyCode::BackTab => {
-            app.nostr_room_focus = match app.nostr_room_focus {
-                NostrRoomField::RoomId => NostrRoomField::NParties,
-                NostrRoomField::MyIndex => NostrRoomField::RoomId,
-                NostrRoomField::Threshold => NostrRoomField::MyIndex,
-                NostrRoomField::NParties => NostrRoomField::Threshold,
-            };
+            app.nostr_room_focus = app.nostr_room_focus.prev(include_rank);
         }
         KeyCode::Enter => {
             // Validate and join room
@@ -2997,6 +2992,27 @@ fn handle_nostr_room_configure(app: &mut App, key: KeyEvent) {
                     }
                 }
             }
+            NostrRoomField::Scheme if c.eq_ignore_ascii_case(&'s') => {
+                if app.nostr_room_scheme == frostdao::nostr::ThresholdScheme::Tss {
+                    app.nostr_room_scheme = frostdao::nostr::ThresholdScheme::Htss;
+                    if app.nostr_room_my_rank.is_none() {
+                        app.nostr_room_my_rank = Some(0);
+                    }
+                } else {
+                    app.nostr_room_scheme = frostdao::nostr::ThresholdScheme::Tss;
+                    app.nostr_room_my_rank = None;
+                }
+            }
+            NostrRoomField::MyRank if include_rank && c.is_ascii_digit() => {
+                let current = app.nostr_room_my_rank.unwrap_or(0);
+                let new_val = format!("{}{}", current, c);
+                if let Ok(n) = new_val.parse::<u32>() {
+                    if n <= 999 {
+                        app.nostr_room_my_rank = Some(n);
+                    }
+                }
+            }
+            NostrRoomField::Scheme | NostrRoomField::MyRank => {}
         },
         KeyCode::Backspace => match app.nostr_room_focus {
             NostrRoomField::RoomId => {
@@ -3026,6 +3042,20 @@ fn handle_nostr_room_configure(app: &mut App, key: KeyEvent) {
                     0
                 };
             }
+            NostrRoomField::Scheme => {}
+            NostrRoomField::MyRank if include_rank => {
+                if let Some(current) = app.nostr_room_my_rank {
+                    let s = current.to_string();
+                    app.nostr_room_my_rank = if s.len() > 1 {
+                        s[..s.len() - 1].parse().ok()
+                    } else {
+                        Some(0)
+                    };
+                } else {
+                    app.nostr_room_my_rank = Some(0);
+                }
+            }
+            NostrRoomField::MyRank => {}
         },
         _ => {}
     }
@@ -3881,7 +3911,7 @@ fn help_bar_text(app: &App) -> String {
         }
         AppState::NostrRoom => match app.nostr_room_phase {
             NostrRoomPhase::Configure => {
-                format!("Tab:Next | Enter:Join | p:Paste room config | c:Copy room config | Esc:Back")
+                "Tab:Next | S:Toggle scheme | Enter:Join | p:Paste room config | c:Copy room config | Esc:Back"
                     .to_string()
             }
             NostrRoomPhase::WaitingForParticipants => {
@@ -5732,6 +5762,77 @@ mod tests {
     }
 
     #[test]
+    fn nostr_room_configure_cycle_includes_scheme_and_rank() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::NostrRoom;
+        app.nostr_room_phase = NostrRoomPhase::Configure;
+        app.nostr_room_scheme = frostdao::nostr::ThresholdScheme::Htss;
+        app.nostr_room_id = "room".to_string();
+
+        app.nostr_room_focus = NostrRoomField::NParties;
+        handle_nostr_room_configure(&mut app, KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        assert_eq!(app.nostr_room_focus, NostrRoomField::Scheme);
+
+        handle_nostr_room_configure(&mut app, KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        assert_eq!(app.nostr_room_focus, NostrRoomField::MyRank);
+
+        handle_nostr_room_configure(&mut app, KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        assert_eq!(app.nostr_room_focus, NostrRoomField::RoomId);
+
+        handle_nostr_room_configure(
+            &mut app,
+            KeyEvent::new(KeyCode::BackTab, KeyModifiers::NONE),
+        );
+        assert_eq!(app.nostr_room_focus, NostrRoomField::MyRank);
+    }
+
+    #[test]
+    fn nostr_room_scheme_toggle_controls_rank_field() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::NostrRoom;
+        app.nostr_room_phase = NostrRoomPhase::Configure;
+        app.nostr_room_scheme = frostdao::nostr::ThresholdScheme::Tss;
+        app.nostr_room_id = "room-scheme-test".to_string();
+        app.nostr_my_index = 1;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 3;
+        app.nostr_room_my_rank = None;
+        app.nostr_room_focus = NostrRoomField::Scheme;
+
+        handle_nostr_room_configure(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE),
+        );
+        assert_eq!(
+            app.nostr_room_scheme,
+            frostdao::nostr::ThresholdScheme::Htss
+        );
+        assert_eq!(app.nostr_room_my_rank, Some(0));
+
+        app.nostr_room_focus = NostrRoomField::MyRank;
+        handle_nostr_room_configure(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('4'), KeyModifiers::NONE),
+        );
+        assert_eq!(app.nostr_room_my_rank, Some(4));
+
+        handle_nostr_room_configure(
+            &mut app,
+            KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE),
+        );
+        assert_eq!(app.nostr_room_my_rank, Some(0));
+
+        app.nostr_room_focus = NostrRoomField::Scheme;
+        handle_nostr_room_configure(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE),
+        );
+        assert_eq!(app.nostr_room_scheme, frostdao::nostr::ThresholdScheme::Tss);
+        assert_eq!(app.nostr_room_my_rank, None);
+        assert!(app.nostr_room_config_error().is_none());
+    }
+
+    #[test]
     fn nostr_room_waiting_help_uses_local_test_participant_wording() {
         let mut app = App::new().unwrap();
         app.state = AppState::NostrRoom;
@@ -5751,9 +5852,13 @@ mod tests {
         let mut app = App::new().unwrap();
         app.state = AppState::NostrRoom;
         app.nostr_room_id = "shared-room".to_string();
+        app.nostr_my_index = 1;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 3;
         app.nostr_room_phase = NostrRoomPhase::Configure;
         assert!(help_bar_text(&app).contains("c:Copy room config"));
         assert!(help_bar_text(&app).contains("p:Paste room config"));
+        assert!(help_bar_text(&app).contains("S:Toggle scheme"));
 
         app.nostr_room_phase = NostrRoomPhase::WaitingForParticipants;
         assert!(help_bar_text(&app).contains("c:Copy room config"));

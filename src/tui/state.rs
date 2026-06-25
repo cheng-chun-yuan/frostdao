@@ -514,13 +514,59 @@ pub enum NostrRoomPhase {
 }
 
 /// Nostr room form fields
-#[derive(Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub enum NostrRoomField {
     #[default]
     RoomId,
     MyIndex,
     Threshold,
     NParties,
+    Scheme,
+    MyRank,
+}
+
+impl NostrRoomField {
+    /// Move focus to the next room field.
+    pub fn next(self, include_rank: bool) -> Self {
+        match self {
+            Self::RoomId => Self::MyIndex,
+            Self::MyIndex => Self::Threshold,
+            Self::Threshold => Self::NParties,
+            Self::NParties => {
+                if include_rank {
+                    Self::Scheme
+                } else {
+                    Self::RoomId
+                }
+            }
+            Self::Scheme => {
+                if include_rank {
+                    Self::MyRank
+                } else {
+                    Self::RoomId
+                }
+            }
+            Self::MyRank => Self::RoomId,
+        }
+    }
+
+    /// Move focus to the previous room field.
+    pub fn prev(self, include_rank: bool) -> Self {
+        match self {
+            Self::RoomId => {
+                if include_rank {
+                    Self::MyRank
+                } else {
+                    Self::Scheme
+                }
+            }
+            Self::MyIndex => Self::RoomId,
+            Self::Threshold => Self::MyIndex,
+            Self::NParties => Self::Threshold,
+            Self::Scheme => Self::NParties,
+            Self::MyRank => Self::Scheme,
+        }
+    }
 }
 
 /// Nostr DKG keygen state

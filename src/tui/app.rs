@@ -230,6 +230,10 @@ pub struct App {
     pub nostr_threshold: u32,
     /// Total number of parties
     pub nostr_n_parties: u32,
+    /// Active room threshold scheme
+    pub nostr_room_scheme: frostdao::nostr::ThresholdScheme,
+    /// Active party rank (HTSS only)
+    pub nostr_room_my_rank: Option<u32>,
     /// Whether connected to relay
     pub nostr_connected: bool,
     /// Current focused field in room config
@@ -310,6 +314,8 @@ impl App {
             nostr_my_index: 1,
             nostr_threshold: 2,
             nostr_n_parties: 3,
+            nostr_room_scheme: frostdao::nostr::ThresholdScheme::Tss,
+            nostr_room_my_rank: None,
             nostr_connected: false,
             nostr_room_focus: NostrRoomField::RoomId,
             nostr_room_phase: NostrRoomPhase::Configure,
@@ -360,17 +366,42 @@ impl App {
         if self.nostr_threshold == 0 || self.nostr_threshold > self.nostr_n_parties {
             return Some("Threshold must be between 1 and Parties");
         }
+        if matches!(
+            self.nostr_room_scheme,
+            frostdao::nostr::ThresholdScheme::Htss
+        ) && self.nostr_room_my_rank.is_none()
+        {
+            return Some("My Rank is required for HTSS rooms");
+        }
         None
+    }
+
+    fn room_scheme_label(scheme: frostdao::nostr::ThresholdScheme) -> &'static str {
+        match scheme {
+            frostdao::nostr::ThresholdScheme::Tss => "TSS",
+            frostdao::nostr::ThresholdScheme::Htss => "HTSS",
+        }
+    }
+
+    fn room_rank_text(scheme: frostdao::nostr::ThresholdScheme, rank: Option<u32>) -> String {
+        match scheme {
+            frostdao::nostr::ThresholdScheme::Tss => "n/a".to_string(),
+            frostdao::nostr::ThresholdScheme::Htss => rank
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "n/a".to_string()),
+        }
     }
 
     pub(crate) fn nostr_room_config_share_text(&self) -> String {
         format!(
-            "Room ID: {}\nNetwork: {}\nMy Index: {}\nThreshold: {}\nParties: {}\nScheme: TSS\nRank: n/a\nTransport: {}",
+            "Room ID: {}\nNetwork: {}\nMy Index: {}\nThreshold: {}\nParties: {}\nScheme: {}\nRank: {}\nTransport: {}",
             self.nostr_room_id,
             self.network.display_name(),
             self.nostr_my_index,
             self.nostr_threshold,
             self.nostr_n_parties,
+            Self::room_scheme_label(self.nostr_room_scheme),
+            Self::room_rank_text(self.nostr_room_scheme, self.nostr_room_my_rank),
             self.nostr_transport_label()
         )
     }
@@ -381,6 +412,8 @@ impl App {
         let mut my_index = self.nostr_my_index;
         let mut threshold = self.nostr_threshold;
         let mut n_parties = self.nostr_n_parties;
+        let mut scheme = self.nostr_room_scheme;
+        let mut parsed_rank = self.nostr_room_my_rank;
         let mut has_room_id = false;
 
         for line in text.lines() {
@@ -422,6 +455,22 @@ impl App {
                         .parse::<u32>()
                         .map_err(|_| format!("Invalid Parties value '{}'", value))?;
                 }
+                "scheme" => {
+                    scheme = match value.to_ascii_lowercase().as_str() {
+                        "tss" => frostdao::nostr::ThresholdScheme::Tss,
+                        "htss" => frostdao::nostr::ThresholdScheme::Htss,
+                        "hierarchical" => frostdao::nostr::ThresholdScheme::Htss,
+                        "threshold" => frostdao::nostr::ThresholdScheme::Tss,
+                        other => {
+                            return Err(format!("Unsupported scheme '{other}'"));
+                        }
+                    };
+                }
+                "rank" => {
+                    parsed_rank = Some(value.parse::<u32>().map_err(|_| {
+                        format!("Invalid Rank value '{}', must be a number", value)
+                    })?);
+                }
                 _ => {}
             }
         }
@@ -443,12 +492,20 @@ impl App {
             return Err("Threshold must be between 1 and Parties".to_string());
         }
 
+        let parsed_rank = if matches!(scheme, frostdao::nostr::ThresholdScheme::Htss) {
+            Some(parsed_rank.ok_or_else(|| "My Rank is required for HTSS rooms".to_string())?)
+        } else {
+            None
+        };
+
         self.network = network;
         self.chain_selector_index = network.index();
         self.nostr_room_id = room_id;
         self.nostr_my_index = my_index;
         self.nostr_threshold = threshold;
         self.nostr_n_parties = n_parties;
+        self.nostr_room_scheme = scheme;
+        self.nostr_room_my_rank = parsed_rank;
 
         match self.nostr_room_config_error() {
             Some(error) => Err(error.to_string()),
@@ -918,6 +975,21 @@ impl App {
     /// Join the configured room with explicit relay URLs. Empty relays use local simulation mode.
     pub fn join_nostr_room_runtime_with_relays(&mut self, relay_urls: Vec<String>) -> Result<()> {
         let cache_path = self.nostr_replay_cache_path();
+        if matches!(
+            self.nostr_room_scheme,
+            frostdao::nostr::ThresholdScheme::Htss
+        ) && self.nostr_room_my_rank.is_none()
+        {
+            anyhow::bail!("My Rank is required for HTSS rooms");
+        }
+
+        let room_scheme = self.nostr_room_scheme;
+        let room_rank = if matches!(room_scheme, frostdao::nostr::ThresholdScheme::Htss) {
+            self.nostr_room_my_rank
+        } else {
+            None
+        };
+
         let mut runtime = if relay_urls.is_empty() {
             let transport = frostdao::nostr::InMemoryRoomTransport::new();
             TuiNostrRuntime::LocalSimulation(frostdao::nostr::NostrRoomRuntime::load(
@@ -951,8 +1023,8 @@ impl App {
             nostr_pubkey: runtime.room_join_pubkey(self.nostr_my_index),
             threshold: self.nostr_threshold,
             n_parties: self.nostr_n_parties,
-            scheme: frostdao::nostr::ThresholdScheme::Tss,
-            rank: None,
+            scheme: room_scheme,
+            rank: room_rank,
         };
         let message = frostdao::nostr::NostrProtocolMessage::new(
             self.nostr_room_id.clone(),
@@ -960,7 +1032,7 @@ impl App {
             self.nostr_my_index,
             &payload,
         )?
-        .with_tss();
+        .with_scheme(room_scheme);
 
         runtime.publish(message)?;
         self.clear_nostr_room_session_state();
@@ -1623,8 +1695,11 @@ impl App {
             nostr_pubkey: format!("npub-local-sim-{}", party_index),
             threshold: self.nostr_threshold,
             n_parties: self.nostr_n_parties,
-            scheme: frostdao::nostr::ThresholdScheme::Tss,
-            rank: None,
+            scheme: self.nostr_room_scheme,
+            rank: match self.nostr_room_scheme {
+                frostdao::nostr::ThresholdScheme::Tss => None,
+                frostdao::nostr::ThresholdScheme::Htss => Some(0),
+            },
         };
         let message = frostdao::nostr::NostrProtocolMessage::new(
             self.nostr_room_id.clone(),
@@ -1632,7 +1707,7 @@ impl App {
             party_index,
             &payload,
         )?
-        .with_tss();
+        .with_scheme(self.nostr_room_scheme);
 
         runtime.publish_local_simulation_message(message)?;
         self.poll_nostr_room_runtime()?;
@@ -2131,8 +2206,12 @@ impl App {
             && payload.party_index <= self.nostr_n_parties
             && payload.threshold == self.nostr_threshold
             && payload.n_parties == self.nostr_n_parties
-            && payload.scheme == frostdao::nostr::ThresholdScheme::Tss
-            && payload.rank.is_none()
+            && message.scheme == Some(payload.scheme)
+            && payload.scheme == self.nostr_room_scheme
+            && match payload.scheme {
+                frostdao::nostr::ThresholdScheme::Tss => payload.rank.is_none(),
+                frostdao::nostr::ThresholdScheme::Htss => payload.rank.is_some(),
+            }
     }
 
     fn accept_nostr_wallet_scheme(
@@ -3335,6 +3414,59 @@ mod tests {
 
         app.simulate_nostr_participant_join(2).unwrap();
         assert_eq!(app.nostr_participants.get(&2).unwrap(), "npub-local-sim-2");
+
+        let _ = std::fs::remove_file(&cache_path);
+    }
+
+    #[test]
+    fn tui_nostr_room_accepts_htss_join_payloads() {
+        let mut app = App::new().unwrap();
+        app.nostr_room_id = format!("tui-htss-join-test-{}", std::process::id());
+        app.nostr_room_scheme = frostdao::nostr::ThresholdScheme::Htss;
+        app.nostr_room_my_rank = Some(0);
+        app.nostr_my_index = 1;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 3;
+        let cache_path = app.nostr_replay_cache_path();
+        let _ = std::fs::remove_file(&cache_path);
+
+        app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
+        let now = super::unix_timestamp_secs();
+
+        let valid_htss = frostdao::nostr::RoomJoinPayload {
+            party_index: 2,
+            nostr_pubkey: "npub-htss-2".to_string(),
+            threshold: 2,
+            n_parties: 3,
+            scheme: frostdao::nostr::ThresholdScheme::Htss,
+            rank: Some(1),
+        };
+        let valid_message = frostdao::nostr::NostrProtocolMessage::new_at(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::RoomJoin,
+            2,
+            &valid_htss,
+            now + 1,
+        )
+        .unwrap()
+        .with_htss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_local_simulation_message(valid_message)
+            .unwrap();
+
+        app.poll_nostr_room_runtime().unwrap();
+
+        assert!(app.nostr_participants.contains_key(&2));
+        assert_eq!(
+            app.nostr_participants.get(&2).map(String::as_str),
+            Some("npub-htss-2")
+        );
+        assert_eq!(
+            app.nostr_participants.get(&1).map(String::as_str),
+            Some("tui-party-1")
+        );
 
         let _ = std::fs::remove_file(&cache_path);
     }
@@ -4887,6 +5019,20 @@ mod tests {
     }
 
     #[test]
+    fn nostr_room_config_share_text_includes_htss_rank() {
+        let mut app = App::new().unwrap();
+        app.nostr_room_scheme = frostdao::nostr::ThresholdScheme::Htss;
+        app.nostr_room_my_rank = Some(3);
+        app.nostr_room_id = "htss-room".to_string();
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 4;
+        let config = app.nostr_room_config_share_text();
+
+        assert!(config.contains("Scheme: HTSS"));
+        assert!(config.contains("Rank: 3"));
+    }
+
+    #[test]
     fn apply_nostr_room_config_text_parses_text_for_multi_device_join() {
         let mut app = App::new().unwrap();
         app.nostr_room_id = "old-room".to_string();
@@ -4910,6 +5056,49 @@ mod tests {
         assert_eq!(app.nostr_my_index, 2);
         assert_eq!(app.nostr_threshold, 2);
         assert_eq!(app.nostr_n_parties, 4);
+    }
+
+    #[test]
+    fn apply_nostr_room_config_text_parses_htss_scheme_and_rank() {
+        let mut app = App::new().unwrap();
+        let pasted = [
+            "Room ID: joined-room",
+            "Network: Signet",
+            "My Index: 2",
+            "Threshold: 2",
+            "Parties: 3",
+            "Scheme: HTSS",
+            "Rank: 7",
+        ]
+        .join("\n");
+
+        app.apply_nostr_room_config_text(&pasted).unwrap();
+
+        assert_eq!(
+            app.nostr_room_scheme,
+            frostdao::nostr::ThresholdScheme::Htss
+        );
+        assert_eq!(app.nostr_room_my_rank, Some(7));
+        assert_eq!(app.nostr_room_id, "joined-room");
+        assert_eq!(app.nostr_threshold, 2);
+        assert_eq!(app.nostr_n_parties, 3);
+    }
+
+    #[test]
+    fn apply_nostr_room_config_text_rejects_htss_without_rank() {
+        let mut app = App::new().unwrap();
+
+        let pasted = [
+            "Room ID: room-without-rank",
+            "My Index: 1",
+            "Threshold: 2",
+            "Parties: 3",
+            "Scheme: HTSS",
+        ]
+        .join("\n");
+
+        let err = app.apply_nostr_room_config_text(&pasted).unwrap_err();
+        assert_eq!(err, "My Rank is required for HTSS rooms");
     }
 
     #[test]
