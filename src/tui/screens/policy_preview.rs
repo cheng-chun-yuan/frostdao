@@ -10,6 +10,7 @@ use ratatui::{
 
 use crate::tui::app::App;
 use crate::tui::components::{TextArea, TextInput};
+use crate::tui::COPY_KEY_LABEL;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PolicyPreviewField {
@@ -221,7 +222,7 @@ pub fn render_policy_preview(
             Span::raw(" Template   "),
             Span::styled("Tab", Style::default().fg(Color::Yellow)),
             Span::raw(" Field   "),
-            Span::styled("c", Style::default().fg(Color::Yellow)),
+            Span::styled(COPY_KEY_LABEL, Style::default().fg(Color::Yellow)),
             Span::raw(" Copy   "),
             Span::styled("Esc", Style::default().fg(Color::Yellow)),
             Span::raw(" Back   "),

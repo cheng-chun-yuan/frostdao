@@ -10,6 +10,7 @@ use ratatui::{
 
 use crate::tui::app::App;
 use crate::tui::state::{NostrRoomField, NostrRoomPhase};
+use crate::tui::COPY_KEY_LABEL;
 use frostdao::nostr::ThresholdScheme;
 
 /// Render the Nostr room configuration screen
@@ -119,6 +120,7 @@ fn render_configure(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(status, chunks[8]);
 
     // Help
+    let copy = COPY_KEY_LABEL;
     let help_lines = vec![Line::from(vec![
         Span::styled("Tab", Style::default().fg(Color::Yellow)),
         Span::raw(": Next field  "),
@@ -132,9 +134,7 @@ fn render_configure(frame: &mut Frame, app: &App, area: Rect) {
         Span::raw("/"),
         Span::styled("p", Style::default().fg(Color::Yellow)),
         Span::raw(": Paste config  "),
-        Span::styled("C", Style::default().fg(Color::Yellow)),
-        Span::raw("/"),
-        Span::styled("c", Style::default().fg(Color::Yellow)),
+        Span::styled(copy, Style::default().fg(Color::Yellow)),
         Span::raw(": Copy config  "),
         Span::styled("Esc", Style::default().fg(Color::Yellow)),
         Span::raw(": Back"),
