@@ -247,6 +247,11 @@ After writing the words down, verify them with `frostdao dkg-verify-mnemonic --n
 | Address list | `c` / `C` copies selected address |
 | Miniscript agent payment draft | `c` / `C` copies initialized JSON draft |
 
+Send artifact boundaries:
+- Sighash is a public transaction digest to compare after review, not a nonce, signature share, or private key material.
+- Nonce JSON is session-bound and single-use; never reuse it for another wallet, transaction, or signing attempt.
+- Signature share JSON goes to the aggregator only and is not a complete signature.
+
 ## Miniscript Agent Payment Policy
 
 Requires:

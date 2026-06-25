@@ -2118,17 +2118,14 @@ fn render_show_sighash(frame: &mut Frame, sighash: &str, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3), // Instructions
+            Constraint::Length(4), // Instructions
             Constraint::Min(5),    // Sighash display
             Constraint::Length(2), // Help
         ])
         .split(inner);
 
-    let instructions = Paragraph::new(vec![
-        Line::from("This is the sighash (message) that all parties will sign."),
-        Line::from("Share this with all signing parties."),
-    ])
-    .style(Style::default().fg(Color::Yellow));
+    let instructions =
+        Paragraph::new(send_sighash_boundary_lines()).style(Style::default().fg(Color::Yellow));
     frame.render_widget(instructions, chunks[0]);
 
     let sighash_block = Block::default()
@@ -2159,13 +2156,14 @@ fn render_generate_nonce(frame: &mut Frame, nonce_output: &str, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(6), // Instructions
+            Constraint::Length(8), // Instructions
             Constraint::Min(5),    // Nonce display
             Constraint::Length(2), // Help
         ])
         .split(inner);
 
-    let instructions = Paragraph::new(vec![
+    let mut instruction_lines = send_nonce_boundary_lines();
+    instruction_lines.extend(vec![
         Line::from(vec![Span::styled(
             "📤 Share this nonce with other signers:",
             Style::default()
@@ -2186,6 +2184,7 @@ fn render_generate_nonce(frame: &mut Frame, nonce_output: &str, area: Rect) {
             Span::raw("Ask them to run the same flow and share their nonces back"),
         ]),
     ]);
+    let instructions = Paragraph::new(instruction_lines);
     frame.render_widget(instructions, chunks[0]);
 
     let nonce_block = Block::default()
@@ -2301,13 +2300,13 @@ fn render_generate_share(frame: &mut Frame, share_output: &str, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(2), // Instructions
+            Constraint::Length(4), // Instructions
             Constraint::Min(5),    // Share display
             Constraint::Length(2), // Help
         ])
         .split(inner);
 
-    let instructions = Paragraph::new("Share your signature share with the aggregator:")
+    let instructions = Paragraph::new(send_signature_share_boundary_lines())
         .style(Style::default().fg(Color::Yellow));
     frame.render_widget(instructions, chunks[0]);
 
@@ -2325,6 +2324,29 @@ fn render_generate_share(frame: &mut Frame, share_output: &str, area: Rect) {
     ))
     .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(help, chunks[2]);
+}
+
+fn send_sighash_boundary_lines() -> Vec<Line<'static>> {
+    vec![
+        Line::from("This is the public transaction digest every selected signer must match."),
+        Line::from("Share it with signing parties only after review fields match on every device."),
+        Line::from("It is not a nonce, signature share, or private key material."),
+    ]
+}
+
+fn send_nonce_boundary_lines() -> Vec<Line<'static>> {
+    vec![
+        Line::from("Boundary: nonce JSON is session-bound and single-use."),
+        Line::from("Never reuse it for another transaction, wallet, or signing attempt."),
+    ]
+}
+
+fn send_signature_share_boundary_lines() -> Vec<Line<'static>> {
+    vec![
+        Line::from("Share your signature share with the aggregator only."),
+        Line::from("It is signer share material for this session, not a complete signature."),
+        Line::from("Do not publish it beyond the selected signer set."),
+    ]
 }
 
 fn render_combine_shares(frame: &mut Frame, form: &SendFormData, area: Rect) {
@@ -2693,6 +2715,20 @@ mod tests {
         assert!(rendered.contains("local share material stays on this device"));
         assert!(rendered.contains("only the signed raw transaction or TXID leaves"));
         assert!(rendered.contains("attempts the selected network API"));
+    }
+
+    #[test]
+    fn send_artifact_boundaries_label_sighash_nonce_and_share_scope() {
+        let sighash = lines_to_string(send_sighash_boundary_lines());
+        let nonce = lines_to_string(send_nonce_boundary_lines());
+        let share = lines_to_string(send_signature_share_boundary_lines());
+
+        assert!(sighash.contains("public transaction digest"));
+        assert!(sighash.contains("not a nonce, signature share, or private key material"));
+        assert!(nonce.contains("session-bound and single-use"));
+        assert!(nonce.contains("Never reuse it"));
+        assert!(share.contains("aggregator only"));
+        assert!(share.contains("not a complete signature"));
     }
 
     #[test]

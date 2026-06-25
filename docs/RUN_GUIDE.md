@@ -150,12 +150,14 @@ frostdao dkg-build-tx \
 Use the returned `session_id` and `sighash` to generate nonces:
 
 Before signing, compare the returned `review` fields on every device: network, source path, source address, destination address, amount, fee, fee rate, and `sighash_fingerprint`.
+The sighash is a public transaction digest to compare after review; it is not a nonce, signature share, or private key material.
 
 ```bash
 frostdao dkg-nonce --name treasury --session <session_id>
 ```
 
 After collecting nonce JSON from the signing parties:
+Nonce JSON is session-bound and single-use; never reuse it for another wallet, transaction, or signing attempt.
 
 ```bash
 frostdao dkg-sign \
@@ -166,6 +168,7 @@ frostdao dkg-sign \
 ```
 
 After collecting enough signature shares:
+Signature share JSON goes to the aggregator only and is not a complete signature by itself.
 
 ```bash
 frostdao dkg-broadcast \
