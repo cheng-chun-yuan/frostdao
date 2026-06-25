@@ -3050,14 +3050,20 @@ fn handle_nostr_sign_keys(app: &mut App, key: KeyEvent) {
                 }
                 NostrSignState::ViewProposals { wallet_name } => {
                     let wallet_name = wallet_name.clone();
-                    let Some(proposal) = app
+                    let mut proposals = app
                         .nostr_pending_proposals
                         .values()
-                        .find(|proposal| {
+                        .filter(|proposal| {
                             proposal.wallet_name == wallet_name
                                 && proposal.proposer_index != app.nostr_my_index
                         })
-                        .cloned()
+                        .collect::<Vec<_>>();
+                    proposals.sort_by(|left, right| {
+                        left.timestamp
+                            .cmp(&right.timestamp)
+                            .then_with(|| left.session_id.cmp(&right.session_id))
+                    });
+                    let Some(proposal) = proposals.first().map(|proposal| (*proposal).clone())
                     else {
                         app.set_message("No pending proposals received");
                         return;
@@ -5108,6 +5114,38 @@ mod tests {
         assert!(message.contains("Review fingerprint abc12345"));
         assert!(message.contains("only after every signer matches review"));
         assert!(!message.contains("press y to consent"));
+    }
+
+    #[test]
+    fn nostr_view_proposals_opens_earliest_visible_proposal() {
+        let mut later = reviewable_proposal();
+        later.session_id = "session-later".to_string();
+        later.proposer_index = 2;
+        later.timestamp = 20;
+
+        let mut earlier = reviewable_proposal();
+        earlier.session_id = "session-earlier".to_string();
+        earlier.proposer_index = 3;
+        earlier.timestamp = 10;
+
+        let mut app = App::new().unwrap();
+        app.state = AppState::NostrSign;
+        app.nostr_my_index = 1;
+        app.nostr_pending_proposals
+            .insert(later.session_id.clone(), later);
+        app.nostr_pending_proposals
+            .insert(earlier.session_id.clone(), earlier);
+        app.nostr_sign_state = NostrSignState::ViewProposals {
+            wallet_name: "wallet-test".to_string(),
+        };
+
+        handle_nostr_sign_keys(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+        assert!(matches!(
+            app.nostr_sign_state,
+            NostrSignState::ReviewProposal { ref proposal, .. }
+                if proposal.session_id == "session-earlier"
+        ));
     }
 
     #[test]

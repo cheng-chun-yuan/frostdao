@@ -813,7 +813,11 @@ fn render_proposals_list(frame: &mut Frame, app: &App, area: Rect) {
             ) && proposal.proposer_index != app.nostr_my_index
         })
         .collect::<Vec<_>>();
-    proposals.sort_by_key(|proposal| proposal.timestamp);
+    proposals.sort_by(|left, right| {
+        left.timestamp
+            .cmp(&right.timestamp)
+            .then_with(|| left.session_id.cmp(&right.session_id))
+    });
 
     let items: Vec<ListItem> = if proposals.is_empty() {
         pending_proposals_empty_lines()
