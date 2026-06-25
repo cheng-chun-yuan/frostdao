@@ -960,6 +960,9 @@ impl App {
                     let Some(wallet_name) = nonempty_message_wallet(&message) else {
                         continue;
                     };
+                    if !self.accept_nostr_wallet_scheme(&message, &wallet_name) {
+                        continue;
+                    }
                     if !self.accept_nostr_tx_proposal(&message, &payload) {
                         continue;
                     }
@@ -1008,6 +1011,9 @@ impl App {
                         continue;
                     };
                     if session_id != payload.proposal_session {
+                        continue;
+                    }
+                    if !self.accept_nostr_wallet_scheme(&message, &message_wallet) {
                         continue;
                     }
                     let mut accepted_consent = None;
@@ -1075,6 +1081,9 @@ impl App {
                     let Some(message_wallet) = nonempty_message_wallet(&message) else {
                         continue;
                     };
+                    if !self.accept_nostr_wallet_scheme(&message, &message_wallet) {
+                        continue;
+                    }
                     if !self.accept_nostr_party_ciphertext(
                         &message,
                         payload.party_index,
@@ -1126,6 +1135,9 @@ impl App {
                     let Some(message_wallet) = nonempty_message_wallet(&message) else {
                         continue;
                     };
+                    if !self.accept_nostr_wallet_scheme(&message, &message_wallet) {
+                        continue;
+                    }
                     if !self.accept_nostr_party_ciphertext(
                         &message,
                         payload.party_index,
@@ -1193,6 +1205,9 @@ impl App {
                     let Some(message_wallet) = nonempty_message_wallet(&message) else {
                         continue;
                     };
+                    if !self.accept_nostr_wallet_scheme(&message, &message_wallet) {
+                        continue;
+                    }
                     if !self.accept_nostr_tx_broadcast(
                         &message,
                         &payload,
@@ -2025,6 +2040,14 @@ impl App {
             && payload.n_parties == self.nostr_n_parties
             && payload.scheme == frostdao::nostr::ThresholdScheme::Tss
             && payload.rank.is_none()
+    }
+
+    fn accept_nostr_wallet_scheme(
+        &self,
+        message: &frostdao::nostr::NostrProtocolMessage,
+        wallet_name: &str,
+    ) -> bool {
+        message.scheme == Some(self.nostr_threshold_scheme_for_wallet(wallet_name))
     }
 
     fn validate_nostr_direct_publish(
@@ -4021,6 +4044,24 @@ mod tests {
             .publish_local_simulation_message(invalid_unsigned_tx_message)
             .unwrap();
 
+        let mut wrong_scheme = valid_remote_proposal_event(2);
+        wrong_scheme.timestamp += 1;
+        let wrong_scheme_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::TxProposal,
+            2,
+            &wrong_scheme,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-wrong-scheme")
+        .with_htss();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_local_simulation_message(wrong_scheme_message)
+            .unwrap();
+
         let valid = valid_remote_proposal_event(2);
         let valid_message = frostdao::nostr::NostrProtocolMessage::new(
             app.nostr_room_id.clone(),
@@ -4057,6 +4098,9 @@ mod tests {
         assert!(!app
             .nostr_pending_proposals
             .contains_key("session-invalid-unsigned-tx"));
+        assert!(!app
+            .nostr_pending_proposals
+            .contains_key("session-wrong-scheme"));
         assert_eq!(
             app.nostr_pending_proposals
                 .get("session-valid")
@@ -4125,6 +4169,26 @@ mod tests {
             .as_mut()
             .unwrap()
             .publish_local_simulation_message(wrong_payload_recipient_message)
+            .unwrap();
+
+        let wrong_scheme_nonce =
+            frostdao::nostr::SigningNonceEvent::new(2, 1, "wrong-scheme-nonce".to_string());
+        let wrong_scheme_nonce_message = frostdao::nostr::NostrProtocolMessage::new(
+            app.nostr_room_id.clone(),
+            frostdao::nostr::NostrMessageKind::SigningNonceEncrypted,
+            2,
+            &wrong_scheme_nonce,
+        )
+        .unwrap()
+        .with_wallet("wallet-test")
+        .with_session("session-ciphertext")
+        .with_htss()
+        .to_party(1)
+        .unwrap();
+        app.nostr_runtime
+            .as_mut()
+            .unwrap()
+            .publish_local_simulation_message(wrong_scheme_nonce_message)
             .unwrap();
 
         let out_of_room_share =
