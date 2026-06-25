@@ -541,6 +541,9 @@ fn render_content(frame: &mut Frame, app: &App, area: Rect) {
         } => {
             render_shares_list(frame, app, received_shares, area);
         }
+        NostrSignState::WaitingForExecution { session_id, .. } => {
+            render_waiting_execution_progress(frame, app, session_id, area);
+        }
         _ => {
             // Empty or default content
             let placeholder = Paragraph::new("").block(
@@ -915,9 +918,65 @@ fn render_shares_list(
         NostrSignState::CollectingShares { session_id, .. } => session_id.as_str(),
         _ => "",
     };
-    let counts = signing_progress_counts(app, session_id, received_shares);
+    render_signing_progress_list(
+        frame,
+        app,
+        session_id,
+        Some(received_shares),
+        "Coordinator Progress",
+        area,
+    );
+}
 
-    let items: Vec<ListItem> = (1..=app.nostr_n_parties)
+fn render_waiting_execution_progress(frame: &mut Frame, app: &App, session_id: &str, area: Rect) {
+    render_signing_progress_list(frame, app, session_id, None, "Room Signing Progress", area);
+}
+
+fn render_signing_progress_list(
+    frame: &mut Frame,
+    app: &App,
+    session_id: &str,
+    received_shares: Option<&HashMap<u32, String>>,
+    title: &str,
+    area: Rect,
+) {
+    let received_shares = signing_session_shares(app, session_id, received_shares);
+    let counts = signing_progress_counts(app, session_id, &received_shares);
+    let items: Vec<ListItem> = signing_progress_party_lines(app, session_id, &received_shares)
+        .into_iter()
+        .map(ListItem::new)
+        .collect();
+
+    let list = List::new(items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(format!(
+                " {title} · nonces {}/{} · shares {}/{} ",
+                counts.nonce_count, counts.threshold, counts.share_count, counts.threshold
+            ))
+            .border_style(Style::default().fg(Color::DarkGray)),
+    );
+
+    frame.render_widget(list, area);
+}
+
+fn signing_session_shares(
+    app: &App,
+    session_id: &str,
+    received_shares: Option<&HashMap<u32, String>>,
+) -> HashMap<u32, String> {
+    received_shares
+        .cloned()
+        .or_else(|| app.nostr_received_shares.get(session_id).cloned())
+        .unwrap_or_default()
+}
+
+fn signing_progress_party_lines(
+    app: &App,
+    session_id: &str,
+    received_shares: &HashMap<u32, String>,
+) -> Vec<Line<'static>> {
+    (1..=app.nostr_n_parties)
         .map(|idx| {
             let is_me = idx == app.nostr_my_index;
             let has_nonce = app
@@ -951,27 +1010,15 @@ fn render_shares_list(
 
             let me_indicator = if is_me { " (me)" } else { "" };
 
-            ListItem::new(Line::from(vec![
+            Line::from(vec![
                 Span::styled(format!("Party {}{}", idx, me_indicator), name_style),
                 Span::raw("  "),
                 Span::styled(nonce.0, Style::default().fg(nonce.1)),
                 Span::raw("  "),
                 Span::styled(share.0, Style::default().fg(share.1)),
-            ]))
+            ])
         })
-        .collect();
-
-    let list = List::new(items).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .title(format!(
-                " Coordinator Progress · nonces {}/{} · shares {}/{} ",
-                counts.nonce_count, counts.threshold, counts.share_count, counts.threshold
-            ))
-            .border_style(Style::default().fg(Color::DarkGray)),
-    );
-
-    frame.render_widget(list, area);
+        .collect()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1384,6 +1431,40 @@ mod tests {
 
         let counts = signing_progress_counts(&app, "session-a", &received_shares);
 
+        assert_eq!(
+            counts,
+            SigningProgressCounts {
+                nonce_count: 2,
+                share_count: 1,
+                threshold: 2,
+                ready_to_combine: false,
+            }
+        );
+    }
+
+    #[test]
+    fn waiting_execution_progress_uses_room_session_inboxes() {
+        let mut app = app_with_room_context();
+        app.nostr_received_nonces.insert(
+            "session-a".to_string(),
+            HashMap::from([(1, "nonce-1".to_string()), (3, "nonce-3".to_string())]),
+        );
+        app.nostr_received_shares.insert(
+            "session-a".to_string(),
+            HashMap::from([(3, "share-3".to_string())]),
+        );
+
+        let received_shares = signing_session_shares(&app, "session-a", None);
+        let rendered = lines_to_string(signing_progress_party_lines(
+            &app,
+            "session-a",
+            &received_shares,
+        ));
+        let counts = signing_progress_counts(&app, "session-a", &received_shares);
+
+        assert!(rendered.contains("Party 1  nonce ok  share pending"));
+        assert!(rendered.contains("Party 2 (me)  local nonce  blocked"));
+        assert!(rendered.contains("Party 3  nonce ok  share ok"));
         assert_eq!(
             counts,
             SigningProgressCounts {

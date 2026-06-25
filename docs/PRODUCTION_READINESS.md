@@ -25,6 +25,7 @@ The relay smoke test publishes and receives a public room join, direct per-recip
 - Private shares, DKG round 2 shares, signing nonces, signing shares, reshare sub-shares, and recovery sub-shares are never published in plaintext.
 - Nonces are generated for one signing session and are never reused.
 - Nostr messages are accepted only for the active room and intended party.
+- Outbound direct Nostr signing messages are sent only to parties that have joined the active room.
 - Nostr messages include `message_id`, `created_at`, and optional `expires_at`; receivers keep a replay cache.
 - Every party verifies their written share mnemonic with `dkg-verify-mnemonic`.
 - TSS signer sets satisfy `t-of-n`.

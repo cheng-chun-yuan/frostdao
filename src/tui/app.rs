@@ -1764,6 +1764,9 @@ impl App {
         if to_index == self.nostr_my_index {
             anyhow::bail!("direct signing messages must target another party");
         }
+        if self.nostr_connected && !self.nostr_participants.contains_key(&to_index) {
+            anyhow::bail!("recipient party has not joined the active room");
+        }
         if ciphertext.trim().is_empty() {
             anyhow::bail!("encrypted payload is required");
         }
@@ -2859,6 +2862,7 @@ mod tests {
             Some(3)
         );
 
+        app.simulate_nostr_participant_join(2).unwrap();
         app.publish_nostr_signing_nonce(
             "wallet-test",
             "session-test",
@@ -2897,7 +2901,7 @@ mod tests {
                 .as_ref()
                 .unwrap()
                 .local_simulation_room_len(&app.nostr_room_id),
-            Some(6)
+            Some(7)
         );
 
         let _ = std::fs::remove_file(&cache_path);
@@ -2926,6 +2930,12 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("another party"));
+        assert!(app
+            .publish_nostr_signing_nonce("wallet-test", "session-test", 2, "cipher".to_string())
+            .unwrap_err()
+            .to_string()
+            .contains("recipient party has not joined"));
+        app.simulate_nostr_participant_join(2).unwrap();
         assert!(app
             .publish_nostr_signing_share("wallet-test", "", 2, "cipher".to_string())
             .unwrap_err()
@@ -2967,7 +2977,7 @@ mod tests {
                 .as_ref()
                 .unwrap()
                 .local_simulation_room_len(&app.nostr_room_id),
-            Some(1)
+            Some(2)
         );
 
         let _ = std::fs::remove_file(&cache_path);

@@ -386,6 +386,8 @@ def check_replay_cache_persistence():
         "nostr_sign_status_lines",
         "with_nostr_sign_context",
         "nostr_sign_status_keeps_room_context_across_states",
+        "render_waiting_execution_progress",
+        "signing_progress_party_lines",
         "proposals are public metadata",
         "signing nonce/share payloads are encrypted",
         "Transport: ",
@@ -408,6 +410,10 @@ def check_replay_cache_persistence():
         missing.append("RUN_GUIDE TUI Nostr room TSS-only boundary documentation")
     if "TUI Nostr room configure screen labels this as a multi-device signing room" not in run_guide:
         missing.append("RUN_GUIDE TUI Nostr room signing boundary documentation")
+    if "recipient party to have joined the active room" not in run_guide:
+        missing.append("RUN_GUIDE TUI direct signing recipient-joined guard documentation")
+    if "same session party-by-party nonce/share progress table used by the coordinator" not in run_guide:
+        missing.append("RUN_GUIDE TUI waiting signing progress documentation")
     if "Room joins are public metadata, while signing nonce/share payloads are encrypted" not in run_guide:
         missing.append("RUN_GUIDE TUI Nostr room public/encrypted boundary documentation")
     if "Nostr keygen status keeps room, party, threshold, scheme, rank, and transport visible" not in run_guide:
@@ -870,6 +876,7 @@ def check_nostr_transaction_review():
         ("src/tui/app.rs", app, "publish_nostr_signing_nonce"),
         ("src/tui/app.rs", app, "publish_nostr_signing_share"),
         ("src/tui/app.rs", app, "publish_nostr_tx_broadcast"),
+        ("src/tui/app.rs", app, "recipient party has not joined the active room"),
         ("src/tui/app.rs", app, "room_join_pubkey"),
         ("src/tui/app.rs", app, "client().my_pubkey()"),
         ("src/tui/app.rs", app, "nostr_pending_proposals"),
