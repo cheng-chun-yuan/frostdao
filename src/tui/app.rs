@@ -437,7 +437,7 @@ impl App {
                     has_room_id = true;
                 }
                 "network" => {
-                    network = crate::tui::state::NetworkSelection::from_display_name(&value)
+                    network = crate::tui::state::NetworkSelection::from_display_name(value)
                         .ok_or_else(|| format!("Unsupported network '{}'", value))?;
                 }
                 "my index" => {

@@ -272,12 +272,21 @@ pub fn list_wallets() -> Result<Vec<WalletSummary>> {
     }
 
     let mut wallets = Vec::new();
+    let entries = match std::fs::read_dir(base_dir) {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(err) => return Err(err.into()),
+    };
 
-    for entry in std::fs::read_dir(base_dir)? {
-        let entry = entry?;
+    for entry in entries.flatten() {
         let path = entry.path();
 
-        // Skip if not a directory
+        // Skip if entry disappears before inspection (best-effort listing).
+        if !path.exists() {
+            continue;
+        }
+
+        // Skip if not a directory.
         if !path.is_dir() {
             continue;
         }

@@ -3915,10 +3915,7 @@ fn help_bar_text(app: &App) -> String {
                     .to_string()
             }
             NostrRoomPhase::WaitingForParticipants => {
-                format!(
-                    "Space:Add local test participant | c:Copy room config | Esc:Leave"
-                )
-                .to_string()
+                "Space:Add local test participant | c:Copy room config | Esc:Leave".to_string()
             }
             NostrRoomPhase::Ready => {
                 if app.nostr_local_simulation_transport_active() {
