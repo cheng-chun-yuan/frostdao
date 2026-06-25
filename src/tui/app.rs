@@ -1296,6 +1296,12 @@ impl App {
         ciphertext: String,
     ) -> Result<()> {
         self.validate_nostr_direct_publish(wallet_name, session_id, to_index, &ciphertext)?;
+        let ciphertext = self.prepare_nostr_signing_nonce_ciphertext(
+            wallet_name,
+            session_id,
+            to_index,
+            ciphertext,
+        )?;
         let Some(runtime) = self.nostr_runtime.as_mut() else {
             anyhow::bail!("join a Nostr room before publishing signing nonce");
         };
@@ -1335,6 +1341,12 @@ impl App {
         ciphertext: String,
     ) -> Result<()> {
         self.validate_nostr_direct_publish(wallet_name, session_id, to_index, &ciphertext)?;
+        let ciphertext = self.prepare_nostr_signing_share_ciphertext(
+            wallet_name,
+            session_id,
+            to_index,
+            ciphertext,
+        )?;
         let Some(runtime) = self.nostr_runtime.as_mut() else {
             anyhow::bail!("join a Nostr room before publishing signing share");
         };
@@ -1730,13 +1742,36 @@ impl App {
         Ok(SigningNonceInput {
             wallet: wallet_name.to_string(),
             session: session_id.to_string(),
-            attempt_id: nostr_session_attempt_id(session_id),
+            attempt_id: self.nostr_signing_attempt_id_or_fallback(session_id),
             signer_set: self.nostr_signer_set(),
             party_index: payload.party_index,
-            sighash_fingerprint: nostr_active_sighash_fingerprint(&self.nostr_sign_state)
-                .unwrap_or_default(),
+            sighash_fingerprint: self.nostr_signing_sighash_fingerprint_or_fallback(session_id),
             public_nonce: payload.ciphertext.clone(),
         })
+    }
+
+    fn prepare_nostr_signing_nonce_ciphertext(
+        &self,
+        wallet_name: &str,
+        session_id: &str,
+        to_index: u32,
+        public_nonce: String,
+    ) -> Result<String> {
+        let Some(conversation_key) = self.nostr_conversation_key_for_party(to_index)? else {
+            return Ok(public_nonce);
+        };
+
+        let plaintext = frostdao::nostr::SigningNoncePlaintext {
+            wallet: wallet_name.to_string(),
+            session: session_id.to_string(),
+            attempt_id: self.nostr_signing_attempt_id(session_id)?,
+            signer_set: self.nostr_signer_set(),
+            party_index: self.nostr_my_index,
+            to_index,
+            sighash_fingerprint: self.nostr_signing_sighash_fingerprint(session_id)?,
+            public_nonce,
+        };
+        frostdao::nostr::encrypt_signing_nonce_plaintext(&plaintext, &conversation_key)
     }
 
     fn nostr_signing_share_input(
@@ -1761,13 +1796,36 @@ impl App {
         Ok(SigningShareInput {
             wallet: wallet_name.to_string(),
             session: session_id.to_string(),
-            attempt_id: nostr_session_attempt_id(session_id),
+            attempt_id: self.nostr_signing_attempt_id_or_fallback(session_id),
             signer_set: self.nostr_signer_set(),
             party_index: payload.party_index,
-            sighash_fingerprint: nostr_active_sighash_fingerprint(&self.nostr_sign_state)
-                .unwrap_or_default(),
+            sighash_fingerprint: self.nostr_signing_sighash_fingerprint_or_fallback(session_id),
             signature_share: payload.ciphertext.clone(),
         })
+    }
+
+    fn prepare_nostr_signing_share_ciphertext(
+        &self,
+        wallet_name: &str,
+        session_id: &str,
+        to_index: u32,
+        signature_share: String,
+    ) -> Result<String> {
+        let Some(conversation_key) = self.nostr_conversation_key_for_party(to_index)? else {
+            return Ok(signature_share);
+        };
+
+        let plaintext = frostdao::nostr::SigningSharePlaintext {
+            wallet: wallet_name.to_string(),
+            session: session_id.to_string(),
+            attempt_id: self.nostr_signing_attempt_id(session_id)?,
+            signer_set: self.nostr_signer_set(),
+            party_index: self.nostr_my_index,
+            to_index,
+            sighash_fingerprint: self.nostr_signing_sighash_fingerprint(session_id)?,
+            signature_share,
+        };
+        frostdao::nostr::encrypt_signing_share_plaintext(&plaintext, &conversation_key)
     }
 
     fn nostr_conversation_key_for_party(&self, party_index: u32) -> Result<Option<[u8; 32]>> {
@@ -1784,6 +1842,38 @@ impl App {
         (1..=self.nostr_n_parties).collect()
     }
 
+    fn nostr_signing_attempt_id(&self, session_id: &str) -> Result<String> {
+        self.nostr_signing_coordinators
+            .get(session_id)
+            .map(|coordinator| coordinator.config().attempt_id.clone())
+            .ok_or_else(|| anyhow::anyhow!("start signing attempt before encrypted relay publish"))
+    }
+
+    fn nostr_signing_attempt_id_or_fallback(&self, session_id: &str) -> String {
+        self.nostr_signing_coordinators
+            .get(session_id)
+            .map(|coordinator| coordinator.config().attempt_id.clone())
+            .unwrap_or_else(|| nostr_session_attempt_id(session_id))
+    }
+
+    fn nostr_signing_sighash_fingerprint(&self, session_id: &str) -> Result<String> {
+        if let Some(coordinator) = self.nostr_signing_coordinators.get(session_id) {
+            return Ok(coordinator.config().sighash_fingerprint.clone());
+        }
+
+        nostr_active_sighash_fingerprint(&self.nostr_sign_state)
+            .filter(|fingerprint| !fingerprint.trim().is_empty())
+            .ok_or_else(|| anyhow::anyhow!("active signing fingerprint is required"))
+    }
+
+    fn nostr_signing_sighash_fingerprint_or_fallback(&self, session_id: &str) -> String {
+        self.nostr_signing_coordinators
+            .get(session_id)
+            .map(|coordinator| coordinator.config().sighash_fingerprint.clone())
+            .or_else(|| nostr_active_sighash_fingerprint(&self.nostr_sign_state))
+            .unwrap_or_default()
+    }
+
     fn accept_nostr_signing_nonce_for_coordinator(
         &mut self,
         session_id: &str,
@@ -1791,13 +1881,6 @@ impl App {
     ) -> Result<()> {
         let Some(coordinator) = self.nostr_signing_coordinators.get_mut(session_id) else {
             return Ok(());
-        };
-        let config = coordinator.config().clone();
-        let input = SigningNonceInput {
-            attempt_id: config.attempt_id,
-            signer_set: config.signer_set,
-            sighash_fingerprint: config.sighash_fingerprint,
-            ..input
         };
         coordinator.accept_nonce(input)?;
         Ok(())
@@ -1810,13 +1893,6 @@ impl App {
     ) -> Result<bool> {
         let Some(coordinator) = self.nostr_signing_coordinators.get_mut(session_id) else {
             return Ok(false);
-        };
-        let config = coordinator.config().clone();
-        let input = SigningShareInput {
-            attempt_id: config.attempt_id,
-            signer_set: config.signer_set,
-            sighash_fingerprint: config.sighash_fingerprint,
-            ..input
         };
         let progress = coordinator.accept_share(input)?;
         Ok(progress.accepted_new)
@@ -3084,6 +3160,44 @@ mod tests {
                 .local_simulation_room_len(&app.nostr_room_id),
             Some(2)
         );
+
+        let _ = std::fs::remove_file(&cache_path);
+    }
+
+    #[test]
+    fn tui_local_simulation_keeps_direct_signing_payloads() {
+        let mut app = App::new().unwrap();
+        app.nostr_room_id = format!("tui-local-direct-payload-test-{}", std::process::id());
+        app.nostr_my_index = 1;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 2;
+        let cache_path = app.nostr_replay_cache_path();
+        let _ = std::fs::remove_file(&cache_path);
+
+        app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
+        app.simulate_nostr_participant_join(2).unwrap();
+        app.start_nostr_signing_attempt("wallet-test", "session-test", "fingerprint-test")
+            .unwrap();
+
+        let nonce = app
+            .prepare_nostr_signing_nonce_ciphertext(
+                "wallet-test",
+                "session-test",
+                2,
+                "public-nonce".to_string(),
+            )
+            .unwrap();
+        let share = app
+            .prepare_nostr_signing_share_ciphertext(
+                "wallet-test",
+                "session-test",
+                2,
+                "signature-share".to_string(),
+            )
+            .unwrap();
+
+        assert_eq!(nonce, "public-nonce");
+        assert_eq!(share, "signature-share");
 
         let _ = std::fs::remove_file(&cache_path);
     }

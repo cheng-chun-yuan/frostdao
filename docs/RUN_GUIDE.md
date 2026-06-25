@@ -306,7 +306,7 @@ The TUI room screen creates a `NostrRoomRuntime` when joining a room. The curren
 
 While a consenter waits after approval, the TUI shows the same session party-by-party nonce/share progress table used by the coordinator so multi-device progress is visible on every signer. Once a room is joined, outbound direct nonce/share publishing also requires the recipient party to have joined the active room, so relay mode has recipient key material before a direct signing envelope is sent.
 
-In relay mode, accepted signing nonce/share ciphertext is decrypted with the local relay session key and the sender's joined Nostr pubkey before it is counted as coordinator input. The decrypted typed plaintext must match the envelope wallet, session, sender, recipient, signer set, attempt, and sighash fingerprint. Local simulation keeps using direct test strings for rehearsal only.
+In relay mode, outbound signing nonces and shares are wrapped in the typed plaintext schema and NIP-44 encrypted with the local relay session key and the recipient's joined Nostr pubkey before publishing. Accepted signing nonce/share ciphertext is decrypted with the local relay session key and the sender's joined Nostr pubkey before it is counted as coordinator input. The decrypted typed plaintext must match the envelope wallet, session, sender, recipient, signer set, attempt, and sighash fingerprint. Local simulation keeps using direct test strings for rehearsal only.
 
 Reshare and recovery relay parser helpers reject versioned messages whose payload party fields do not match the envelope sender or direct recipient. This protects the copy/paste and future relay-backed ceremony paths from accepting sub-shares under the wrong party identity.
 
