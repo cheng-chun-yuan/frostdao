@@ -306,6 +306,8 @@ The TUI room screen creates a `NostrRoomRuntime` when joining a room. The curren
 
 While a consenter waits after approval, the TUI shows the same session party-by-party nonce/share progress table used by the coordinator so multi-device progress is visible on every signer. Once a room is joined, outbound direct nonce/share publishing also requires the recipient party to have joined the active room, so relay mode has recipient key material before a direct signing envelope is sent.
 
+In relay mode, accepted signing nonce/share ciphertext is decrypted with the local relay session key and the sender's joined Nostr pubkey before it is counted as coordinator input. The decrypted typed plaintext must match the envelope wallet, session, sender, recipient, signer set, attempt, and sighash fingerprint. Local simulation keeps using direct test strings for rehearsal only.
+
 Reshare and recovery relay parser helpers reject versioned messages whose payload party fields do not match the envelope sender or direct recipient. This protects the copy/paste and future relay-backed ceremony paths from accepting sub-shares under the wrong party identity.
 
 For relay-backed testnet experiments, the codebase exposes `RelayRoomTransport` and `NostrClient::connect_with_relays` so relay room wiring can reuse the same runtime checks with explicit relay URLs. In relay mode, TUI room joins advertise `NostrClient::my_pubkey()` instead of a local simulation label, which gives peers the recipient key material needed for encrypted nonce/share exchange. The TUI stays in local simulation transport by default. Set comma-separated relays to opt into relay transport on testnet/signet:

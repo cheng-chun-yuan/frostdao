@@ -114,6 +114,18 @@ impl TuiNostrRuntime {
         }
     }
 
+    fn conversation_key_with(&self, peer_pubkey: &str) -> Result<Option<[u8; 32]>> {
+        match self {
+            Self::LocalSimulation(_) => Ok(None),
+            Self::Relay(runtime) => Ok(Some(
+                runtime
+                    .transport()
+                    .client()
+                    .conversation_key_with(peer_pubkey)?,
+            )),
+        }
+    }
+
     #[cfg(test)]
     fn local_simulation_room_len(&self, room: &str) -> Option<usize> {
         match self {
@@ -1015,22 +1027,28 @@ impl App {
                         continue;
                     }
                     let audit_session_id = session_id.clone();
-                    let nonce_ciphertext = payload.ciphertext.clone();
+                    let Ok(nonce_input) = self.nostr_signing_nonce_input(
+                        &message_wallet,
+                        &session_id,
+                        &message,
+                        &payload,
+                    ) else {
+                        continue;
+                    };
                     if self
                         .accept_nostr_signing_nonce_for_coordinator(
-                            &message_wallet,
                             &session_id,
-                            payload.party_index,
-                            nonce_ciphertext,
+                            nonce_input.clone(),
                         )
                         .is_err()
                     {
                         continue;
                     }
+                    let party_index = nonce_input.party_index;
                     self.nostr_received_nonces
                         .entry(session_id.clone())
                         .or_default()
-                        .insert(payload.party_index, payload.ciphertext);
+                        .insert(party_index, nonce_input.public_nonce);
                     self.append_nostr_audit_event(
                         frostdao::audit::AuditEvent::new(
                             "nostr_signing_nonce_received",
@@ -1040,7 +1058,7 @@ impl App {
                         .with_field("room", self.nostr_room_id.clone())
                         .with_field("transport", self.nostr_transport_label())
                         .with_field("session_id", audit_session_id)
-                        .with_field("party_index", payload.party_index)
+                        .with_field("party_index", party_index)
                         .with_field("to_index", payload.to_index),
                     );
                 }
@@ -1066,13 +1084,18 @@ impl App {
                     {
                         continue;
                     }
-                    let Ok(accepted_by_coordinator) = self
-                        .accept_nostr_signing_share_for_coordinator(
-                            &message_wallet,
-                            &session_id,
-                            payload.party_index,
-                            payload.ciphertext.clone(),
-                        )
+                    let Ok(share_input) = self.nostr_signing_share_input(
+                        &message_wallet,
+                        &session_id,
+                        &message,
+                        &payload,
+                    ) else {
+                        continue;
+                    };
+                    let party_index = share_input.party_index;
+                    let signature_share = share_input.signature_share.clone();
+                    let Ok(accepted_by_coordinator) =
+                        self.accept_nostr_signing_share_for_coordinator(&session_id, share_input)
                     else {
                         continue;
                     };
@@ -1082,7 +1105,7 @@ impl App {
                     self.nostr_received_shares
                         .entry(session_id.clone())
                         .or_default()
-                        .insert(payload.party_index, payload.ciphertext.clone());
+                        .insert(party_index, signature_share.clone());
                     self.append_nostr_audit_event(
                         frostdao::audit::AuditEvent::new(
                             "nostr_signing_share_received",
@@ -1092,7 +1115,7 @@ impl App {
                         .with_field("room", self.nostr_room_id.clone())
                         .with_field("transport", self.nostr_transport_label())
                         .with_field("session_id", session_id.clone())
-                        .with_field("party_index", payload.party_index)
+                        .with_field("party_index", party_index)
                         .with_field("to_index", payload.to_index),
                     );
                     if let NostrSignState::CollectingShares {
@@ -1102,7 +1125,7 @@ impl App {
                     } = &mut self.nostr_sign_state
                     {
                         if *active_session == session_id {
-                            received_shares.insert(payload.party_index, payload.ciphertext);
+                            received_shares.insert(party_index, signature_share);
                         }
                     }
                 }
@@ -1685,49 +1708,117 @@ impl App {
         Ok(())
     }
 
-    fn accept_nostr_signing_nonce_for_coordinator(
-        &mut self,
+    fn nostr_signing_nonce_input(
+        &self,
         wallet_name: &str,
         session_id: &str,
-        party_index: u32,
-        public_nonce: String,
+        message: &frostdao::nostr::NostrProtocolMessage,
+        payload: &frostdao::nostr::SigningNonceEvent,
+    ) -> Result<SigningNonceInput> {
+        if let Some(conversation_key) =
+            self.nostr_conversation_key_for_party(payload.party_index)?
+        {
+            return Ok(frostdao::nostr::decrypt_signing_nonce_plaintext(
+                &payload.ciphertext,
+                &conversation_key,
+                message,
+                payload,
+            )?
+            .into());
+        }
+
+        Ok(SigningNonceInput {
+            wallet: wallet_name.to_string(),
+            session: session_id.to_string(),
+            attempt_id: nostr_session_attempt_id(session_id),
+            signer_set: self.nostr_signer_set(),
+            party_index: payload.party_index,
+            sighash_fingerprint: nostr_active_sighash_fingerprint(&self.nostr_sign_state)
+                .unwrap_or_default(),
+            public_nonce: payload.ciphertext.clone(),
+        })
+    }
+
+    fn nostr_signing_share_input(
+        &self,
+        wallet_name: &str,
+        session_id: &str,
+        message: &frostdao::nostr::NostrProtocolMessage,
+        payload: &frostdao::nostr::SigningShareEvent,
+    ) -> Result<SigningShareInput> {
+        if let Some(conversation_key) =
+            self.nostr_conversation_key_for_party(payload.party_index)?
+        {
+            return Ok(frostdao::nostr::decrypt_signing_share_plaintext(
+                &payload.ciphertext,
+                &conversation_key,
+                message,
+                payload,
+            )?
+            .into());
+        }
+
+        Ok(SigningShareInput {
+            wallet: wallet_name.to_string(),
+            session: session_id.to_string(),
+            attempt_id: nostr_session_attempt_id(session_id),
+            signer_set: self.nostr_signer_set(),
+            party_index: payload.party_index,
+            sighash_fingerprint: nostr_active_sighash_fingerprint(&self.nostr_sign_state)
+                .unwrap_or_default(),
+            signature_share: payload.ciphertext.clone(),
+        })
+    }
+
+    fn nostr_conversation_key_for_party(&self, party_index: u32) -> Result<Option<[u8; 32]>> {
+        let Some(peer_pubkey) = self.nostr_participants.get(&party_index) else {
+            return Ok(None);
+        };
+        let Some(runtime) = &self.nostr_runtime else {
+            return Ok(None);
+        };
+        runtime.conversation_key_with(peer_pubkey)
+    }
+
+    fn nostr_signer_set(&self) -> Vec<u32> {
+        (1..=self.nostr_n_parties).collect()
+    }
+
+    fn accept_nostr_signing_nonce_for_coordinator(
+        &mut self,
+        session_id: &str,
+        input: SigningNonceInput,
     ) -> Result<()> {
         let Some(coordinator) = self.nostr_signing_coordinators.get_mut(session_id) else {
             return Ok(());
         };
         let config = coordinator.config().clone();
-        coordinator.accept_nonce(SigningNonceInput {
-            wallet: wallet_name.to_string(),
-            session: session_id.to_string(),
+        let input = SigningNonceInput {
             attempt_id: config.attempt_id,
             signer_set: config.signer_set,
-            party_index,
             sighash_fingerprint: config.sighash_fingerprint,
-            public_nonce,
-        })?;
+            ..input
+        };
+        coordinator.accept_nonce(input)?;
         Ok(())
     }
 
     fn accept_nostr_signing_share_for_coordinator(
         &mut self,
-        wallet_name: &str,
         session_id: &str,
-        party_index: u32,
-        signature_share: String,
+        input: SigningShareInput,
     ) -> Result<bool> {
         let Some(coordinator) = self.nostr_signing_coordinators.get_mut(session_id) else {
             return Ok(false);
         };
         let config = coordinator.config().clone();
-        let progress = coordinator.accept_share(SigningShareInput {
-            wallet: wallet_name.to_string(),
-            session: session_id.to_string(),
+        let input = SigningShareInput {
             attempt_id: config.attempt_id,
             signer_set: config.signer_set,
-            party_index,
             sighash_fingerprint: config.sighash_fingerprint,
-            signature_share,
-        })?;
+            ..input
+        };
+        let progress = coordinator.accept_share(input)?;
         Ok(progress.accepted_new)
     }
 
@@ -1955,6 +2046,20 @@ fn nonempty_message_wallet(message: &frostdao::nostr::NostrProtocolMessage) -> O
         .map(str::trim)
         .filter(|wallet| !wallet.is_empty())
         .map(str::to_string)
+}
+
+fn nostr_session_attempt_id(session_id: &str) -> String {
+    format!("nostr-session-{session_id}")
+}
+
+fn nostr_active_sighash_fingerprint(state: &NostrSignState) -> Option<String> {
+    match state {
+        NostrSignState::WaitingForConsent { proposal, .. }
+        | NostrSignState::ReviewProposal { proposal, .. } => {
+            Some(proposal.review.sighash_fingerprint.clone())
+        }
+        _ => None,
+    }
 }
 
 fn nostr_relay_urls_from_env() -> Vec<String> {

@@ -62,6 +62,17 @@ impl NostrClient {
         self.keys.public_key().to_string()
     }
 
+    /// Derive the NIP-44 conversation key for a peer public key.
+    pub fn conversation_key_with(&self, peer_pubkey: &str) -> Result<[u8; 32]> {
+        let peer_pubkey = PublicKey::parse(peer_pubkey)?;
+        let secret = self.keys.secret_key().secret_bytes();
+        let shared_secret =
+            crate::crypto::nip44::ecdh_shared_secret(&secret, &peer_pubkey.to_bytes())?;
+        Ok(crate::crypto::nip44::derive_conversation_key(
+            &shared_secret,
+        ))
+    }
+
     /// Publish event to room
     pub async fn publish(&self, content: &str) -> Result<EventId> {
         let event = EventBuilder::text_note(content)
@@ -177,6 +188,7 @@ pub async fn create_room_client_with_relays(
 #[cfg(test)]
 mod tests {
     use super::NostrClient;
+    use nostr_sdk::prelude::*;
 
     #[test]
     fn explicit_relay_client_rejects_empty_relay_list() {
@@ -188,5 +200,28 @@ mod tests {
         ));
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn clients_derive_matching_conversation_keys() {
+        let alice_keys = Keys::generate();
+        let bob_keys = Keys::generate();
+        let alice = NostrClient {
+            client: Client::new(alice_keys.clone()),
+            room_id: "room-a".to_string(),
+            my_index: 1,
+            keys: alice_keys,
+        };
+        let bob = NostrClient {
+            client: Client::new(bob_keys.clone()),
+            room_id: "room-a".to_string(),
+            my_index: 2,
+            keys: bob_keys,
+        };
+
+        let alice_key = alice.conversation_key_with(&bob.my_pubkey()).unwrap();
+        let bob_key = bob.conversation_key_with(&alice.my_pubkey()).unwrap();
+
+        assert_eq!(alice_key, bob_key);
     }
 }

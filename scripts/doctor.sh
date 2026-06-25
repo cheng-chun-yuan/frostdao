@@ -398,6 +398,8 @@ def check_replay_cache_persistence():
             missing.append(f"NOSTR_PROTOCOL {marker} documentation")
     if "NostrClient::my_pubkey()" not in docs or "recipient key material" not in docs:
         missing.append("NOSTR_PROTOCOL relay room join public-key documentation")
+    if "decrypts typed nonce/share plaintext" not in docs or "validated plaintext into coordinator input" not in docs:
+        missing.append("NOSTR_PROTOCOL TUI relay signing plaintext decryption documentation")
     if "TUI room screen creates a `NostrRoomRuntime`" not in run_guide:
         missing.append("RUN_GUIDE TUI NostrRoomRuntime documentation")
     if "TUI room joins advertise `NostrClient::my_pubkey()`" not in run_guide:
@@ -414,6 +416,8 @@ def check_replay_cache_persistence():
         missing.append("RUN_GUIDE TUI direct signing recipient-joined guard documentation")
     if "same session party-by-party nonce/share progress table used by the coordinator" not in run_guide:
         missing.append("RUN_GUIDE TUI waiting signing progress documentation")
+    if "decrypted with the local relay session key" not in run_guide:
+        missing.append("RUN_GUIDE TUI relay signing plaintext decryption documentation")
     if "Room joins are public metadata, while signing nonce/share payloads are encrypted" not in run_guide:
         missing.append("RUN_GUIDE TUI Nostr room public/encrypted boundary documentation")
     if "Nostr keygen status keeps room, party, threshold, scheme, rank, and transport visible" not in run_guide:
@@ -833,6 +837,7 @@ def check_recovery_boundary_docs():
 
 def check_nostr_transaction_review():
     events = read(Path("src/nostr/events.rs"))
+    client = read(Path("src/nostr/client.rs"))
     app = read(Path("src/tui/app.rs"))
     tui = read(Path("src/tui/mod.rs"))
     tui_state = read(Path("src/tui/state.rs"))
@@ -877,6 +882,10 @@ def check_nostr_transaction_review():
         ("src/tui/app.rs", app, "publish_nostr_signing_share"),
         ("src/tui/app.rs", app, "publish_nostr_tx_broadcast"),
         ("src/tui/app.rs", app, "recipient party has not joined the active room"),
+        ("src/tui/app.rs", app, "nostr_signing_nonce_input"),
+        ("src/tui/app.rs", app, "decrypt_signing_nonce_plaintext"),
+        ("src/tui/app.rs", app, "decrypt_signing_share_plaintext"),
+        ("src/nostr/client.rs", client, "conversation_key_with"),
         ("src/tui/app.rs", app, "room_join_pubkey"),
         ("src/tui/app.rs", app, "client().my_pubkey()"),
         ("src/tui/app.rs", app, "nostr_pending_proposals"),
