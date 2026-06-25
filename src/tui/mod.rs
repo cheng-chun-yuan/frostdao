@@ -522,6 +522,12 @@ fn handle_chain_select_keys(app: &mut App, code: KeyCode) {
     }
 }
 
+fn normalize_wallet_action_index(state: &mut WalletDetailsState, action_count: usize) {
+    if action_count == 0 || state.selected_action >= action_count {
+        state.selected_action = 0;
+    }
+}
+
 fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
     let state = if let AppState::WalletDetails(s) = &app.state {
         s.clone()
@@ -590,6 +596,14 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
 
     let actions = WalletAction::all();
     let action_count = actions.len();
+    if let AppState::WalletDetails(ref mut s) = app.state {
+        normalize_wallet_action_index(s, action_count);
+    }
+    let state = if let AppState::WalletDetails(s) = &app.state {
+        s.clone()
+    } else {
+        return;
+    };
 
     match code {
         KeyCode::Esc => {
@@ -597,7 +611,9 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
         }
         code if code == KeyCode::Up || is_shortcut_key(&code, 'k') => {
             if let AppState::WalletDetails(ref mut s) = app.state {
-                if s.selected_action > 0 {
+                if action_count == 0 {
+                    s.selected_action = 0;
+                } else if s.selected_action > 0 {
                     s.selected_action -= 1;
                 } else {
                     s.selected_action = action_count - 1;
@@ -606,11 +622,17 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
         }
         code if code == KeyCode::Down || is_shortcut_key(&code, 'j') => {
             if let AppState::WalletDetails(ref mut s) = app.state {
-                s.selected_action = (s.selected_action + 1) % action_count;
+                if action_count == 0 {
+                    s.selected_action = 0;
+                } else {
+                    s.selected_action = (s.selected_action + 1) % action_count;
+                }
             }
         }
         KeyCode::Enter => {
-            let selected_action = actions[state.selected_action];
+            let Some(selected_action) = actions.get(state.selected_action).copied() else {
+                return;
+            };
             let wallet_name = state.wallet_name.clone();
 
             match selected_action {
@@ -4494,6 +4516,56 @@ mod tests {
         assert!(help.contains("Enter:Delete"));
         assert!(help.contains("Backspace:Edit"));
         assert!(help.contains("Esc:Cancel"));
+    }
+
+    #[test]
+    fn wallet_details_navigation_clamps_stale_action_index() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::WalletDetails(WalletDetailsState {
+            wallet_name: "treasury".to_string(),
+            selected_action: 99,
+            confirm_delete: false,
+            delete_confirmation_input: String::new(),
+            show_qr: false,
+        });
+
+        handle_wallet_details_keys(&mut app, KeyCode::Down);
+
+        let AppState::WalletDetails(state) = &app.state else {
+            panic!("expected wallet details");
+        };
+        assert_eq!(state.selected_action, 1);
+    }
+
+    #[test]
+    #[serial]
+    fn wallet_details_enter_clamps_stale_action_index() {
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
+
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Regtest;
+        app.wallets = vec![wallet_summary_no_address("treasury")];
+        app.state = AppState::WalletDetails(WalletDetailsState {
+            wallet_name: "treasury".to_string(),
+            selected_action: 99,
+            confirm_delete: false,
+            delete_confirmation_input: String::new(),
+            show_qr: false,
+        });
+
+        handle_wallet_details_keys(&mut app, KeyCode::Enter);
+
+        let AppState::WalletDetails(state) = &app.state else {
+            panic!("expected wallet details");
+        };
+        assert_eq!(state.selected_action, 0);
+        assert!(app
+            .message
+            .as_deref()
+            .unwrap_or("")
+            .contains("Cannot fetch UTXOs on Regtest"));
+
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
     }
 
     #[test]
