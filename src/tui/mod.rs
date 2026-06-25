@@ -918,8 +918,21 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
                     }
                 } else {
                     // TSS: Use threshold and n_parties inputs
-                    let n: u32 = app.keygen_form.n_parties.value().parse().unwrap_or(0);
-                    let t: u32 = app.keygen_form.threshold.value().parse().unwrap_or(0);
+                    let n = match parse_keygen_u32(app.keygen_form.n_parties.value(), "Number of parties")
+                    {
+                        Ok(value) => value,
+                        Err(e) => {
+                            app.keygen_form.error_message = Some(e);
+                            return;
+                        }
+                    };
+                    let t = match parse_keygen_u32(app.keygen_form.threshold.value(), "Threshold") {
+                        Ok(value) => value,
+                        Err(e) => {
+                            app.keygen_form.error_message = Some(e);
+                            return;
+                        }
+                    };
 
                     if n < 2 {
                         app.keygen_form.error_message = Some("Need at least 2 parties".to_string());
@@ -1140,6 +1153,56 @@ fn selected_reshare_source_wallet_name(app: &mut App) -> Option<String> {
         .map(|wallet| wallet.name.clone())
 }
 
+fn parse_reshare_u32(
+    value: &str,
+    field_name: &'static str,
+    allow_zero: bool,
+) -> Result<u32, String> {
+    let trimmed = value.trim();
+    let parsed = trimmed
+        .parse::<u32>()
+        .map_err(|_| format!("{} must be a number", field_name))?;
+
+    if !allow_zero && parsed == 0 {
+        return Err(format!("{} must be greater than 0", field_name));
+    }
+
+    Ok(parsed)
+}
+
+fn parse_reshare_optional_u32(
+    value: &str,
+    field_name: &'static str,
+    allow_zero: bool,
+) -> Result<Option<u32>, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    parse_reshare_u32(trimmed, field_name, allow_zero).map(Some)
+}
+
+fn parse_keygen_u32(value: &str, field_name: &'static str) -> Result<u32, String> {
+    let trimmed = value.trim();
+    trimmed
+        .parse::<u32>()
+        .map_err(|_| format!("{field_name} must be a number"))
+}
+
+fn parse_send_amount(value: &str) -> Result<u64, String> {
+    let amount = value
+        .trim()
+        .parse::<u64>()
+        .map_err(|_| "Amount must be a positive integer in sats".to_string())?;
+
+    if amount == 0 {
+        return Err(send_invalid_amount_message());
+    }
+
+    Ok(amount)
+}
+
 fn move_send_wallet(app: &mut App, forward: bool) {
     let wallet_count = app.wallets.len();
     if wallet_count == 0 {
@@ -1308,18 +1371,22 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
                 // Parse optional threshold/n_parties
                 let new_threshold: Option<u32> = {
                     let val = app.reshare_form.local_new_threshold.value();
-                    if val.is_empty() {
-                        None
-                    } else {
-                        val.parse().ok()
+                    match parse_reshare_optional_u32(val, "New threshold", false) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            app.reshare_form.error_message = Some(e);
+                            return;
+                        }
                     }
                 };
                 let new_n_parties: Option<u32> = {
                     let val = app.reshare_form.local_new_n_parties.value();
-                    if val.is_empty() {
-                        None
-                    } else {
-                        val.parse().ok()
+                    match parse_reshare_optional_u32(val, "New total parties", false) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            app.reshare_form.error_message = Some(e);
+                            return;
+                        }
                     }
                 };
 
@@ -1391,12 +1458,30 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
                     app.reshare_form.error_message = Some("No wallets available".to_string());
                     return;
                 };
-                let new_threshold: u32 =
-                    app.reshare_form.new_threshold.value().parse().unwrap_or(0);
-                let new_n_parties: u32 =
-                    app.reshare_form.new_n_parties.value().parse().unwrap_or(0);
+                let new_threshold = match parse_reshare_u32(
+                    app.reshare_form.new_threshold.value(),
+                    "Threshold",
+                    false,
+                ) {
+                    Ok(value) => value,
+                    Err(e) => {
+                        app.reshare_form.error_message = Some(e);
+                        return;
+                    }
+                };
+                let new_n_parties = match parse_reshare_u32(
+                    app.reshare_form.new_n_parties.value(),
+                    "Total parties",
+                    false,
+                ) {
+                    Ok(value) => value,
+                    Err(e) => {
+                        app.reshare_form.error_message = Some(e);
+                        return;
+                    }
+                };
 
-                if new_threshold == 0 || new_threshold > new_n_parties {
+                if new_threshold > new_n_parties {
                     app.reshare_form.error_message = Some("Invalid threshold".to_string());
                     return;
                 }
@@ -1544,11 +1629,34 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
             }
             KeyCode::Enter => {
                 // Run reshare finalize
-                let source_wallet =
-                    selected_reshare_source_wallet_name(app).unwrap_or_else(String::new);
+                let source_wallet = match selected_reshare_source_wallet_name(app) {
+                    Some(wallet) => wallet,
+                    None => {
+                        app.reshare_form.error_message =
+                            Some("No source wallet selected for finalize".to_string());
+                        return;
+                    }
+                };
                 let target_name = app.reshare_form.target_name.value().to_string();
-                let my_new_index: u32 = app.reshare_form.my_new_index.value().parse().unwrap_or(0);
-                let my_rank: u32 = app.reshare_form.my_rank.value().parse().unwrap_or(0);
+                let my_new_index = match parse_reshare_u32(
+                    app.reshare_form.my_new_index.value(),
+                    "My new index",
+                    false,
+                ) {
+                    Ok(value) => value,
+                    Err(e) => {
+                        app.reshare_form.error_message = Some(e);
+                        return;
+                    }
+                };
+                let my_rank = match parse_reshare_u32(app.reshare_form.my_rank.value(), "My rank", true)
+                {
+                    Ok(value) => value,
+                    Err(e) => {
+                        app.reshare_form.error_message = Some(e);
+                        return;
+                    }
+                };
                 let hierarchical = app.reshare_form.hierarchical;
                 let data = app.reshare_form.finalize_input.content();
 
@@ -2029,7 +2137,15 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 }
 
                 let to_addr = app.send_form.to_address.value().to_string();
-                let amount: u64 = app.send_form.amount.value().parse().unwrap_or(0);
+                let amount = match parse_send_amount(app.send_form.amount.value()) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        app.send_form.error_message = Some(format!(
+                            "Review is stale: {error}. Go back to edit and review again"
+                        ));
+                        return;
+                    }
+                };
                 let selected_parties = app.send_form.get_selected_indices();
                 let network = app.network.to_bitcoin_network();
                 let derivation_path = app.send_form.get_derivation_path();
@@ -2533,16 +2649,18 @@ fn send_preflight_error(
     source_address: Option<&str>,
 ) -> Option<String> {
     let to_addr = form.to_address.value().to_string();
-    let amount: u64 = form.amount.value().parse().unwrap_or(0);
+    let amount = match parse_send_amount(form.amount.value()) {
+        Ok(amount) => amount,
+        Err(error) => {
+            return Some(error);
+        }
+    };
 
     if let Some(error) = send_source_network_error(source_address, network) {
         return Some(error);
     }
     if let Some(error) = send_recipient_network_error(&to_addr, network) {
         return Some(error);
-    }
-    if amount == 0 {
-        return Some(send_invalid_amount_message());
     }
     if let Some(fetch_error) = form.utxo_fetch_error.clone() {
         return Some(format!("Cannot prepare transaction: {}", fetch_error));
@@ -4666,6 +4784,46 @@ mod tests {
     }
 
     #[test]
+    fn keygen_tss_enter_reports_invalid_threshold_value() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::Keygen(KeygenState::ParamsSetup);
+        app.keygen_form.name.set_value("wallet-tss");
+        app.keygen_form.n_parties.set_value("3");
+        app.keygen_form.threshold.set_value("abc");
+
+        handle_keygen_keys(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+        assert!(matches!(
+            app.state,
+            AppState::Keygen(KeygenState::ParamsSetup)
+        ));
+        assert_eq!(
+            app.keygen_form.error_message.as_deref(),
+            Some("Threshold must be a number")
+        );
+    }
+
+    #[test]
+    fn keygen_tss_enter_reports_invalid_party_count() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::Keygen(KeygenState::ParamsSetup);
+        app.keygen_form.name.set_value("wallet-tss");
+        app.keygen_form.n_parties.set_value("abc");
+        app.keygen_form.threshold.set_value("1");
+
+        handle_keygen_keys(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+        assert!(matches!(
+            app.state,
+            AppState::Keygen(KeygenState::ParamsSetup)
+        ));
+        assert_eq!(
+            app.keygen_form.error_message.as_deref(),
+            Some("Number of parties must be a number")
+        );
+    }
+
+    #[test]
     fn keygen_help_bar_uses_htss_parameters_language() {
         let mut app = App::new().unwrap();
         app.keygen_form.hierarchical = true;
@@ -4776,6 +4934,86 @@ mod tests {
             app.reshare_form.focused_field,
             state::ReshareFormField::SourceWallet
         ));
+    }
+
+    #[test]
+    fn reshare_round1_setup_rejects_non_numeric_threshold() {
+        let mut app = App::new().unwrap();
+        app.wallets = vec![wallet_summary_no_address("wallet-a")];
+        app.state = AppState::Reshare(ReshareState::Round1Setup);
+        app.reshare_form.new_threshold.set_value("abc");
+
+        handle_reshare_keys(&mut app, enter_key());
+
+        assert!(matches!(
+            app.state,
+            AppState::Reshare(ReshareState::Round1Setup)
+        ));
+        assert_eq!(
+            app.reshare_form.error_message.as_deref(),
+            Some("Threshold must be a number")
+        );
+    }
+
+    #[test]
+    fn reshare_round1_setup_rejects_threshold_greater_than_parties() {
+        let mut app = App::new().unwrap();
+        app.wallets = vec![wallet_summary_no_address("wallet-a")];
+        app.state = AppState::Reshare(ReshareState::Round1Setup);
+        app.reshare_form.new_threshold.set_value("5");
+        app.reshare_form.new_n_parties.set_value("3");
+
+        handle_reshare_keys(&mut app, enter_key());
+
+        assert!(matches!(
+            app.state,
+            AppState::Reshare(ReshareState::Round1Setup)
+        ));
+        assert_eq!(
+            app.reshare_form.error_message.as_deref(),
+            Some("Invalid threshold")
+        );
+    }
+
+    #[test]
+    fn reshare_finalize_rejects_non_numeric_new_index() {
+        let mut app = App::new().unwrap();
+        app.wallets = vec![wallet_summary_no_address("wallet-a")];
+        app.state = AppState::Reshare(ReshareState::FinalizeInput);
+        app.reshare_form.target_name.set_value("wallet-b");
+        app.reshare_form.my_new_index.set_value("abc");
+        app.reshare_form.finalize_input.set_content("{\"round1\":\"payload\"}");
+
+        handle_reshare_keys(&mut app, enter_key());
+
+        assert!(matches!(
+            app.state,
+            AppState::Reshare(ReshareState::FinalizeInput)
+        ));
+        assert_eq!(
+            app.reshare_form.error_message.as_deref(),
+            Some("My new index must be a number")
+        );
+    }
+
+    #[test]
+    fn reshare_finalize_rejects_without_source_wallet() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::Reshare(ReshareState::FinalizeInput);
+        app.reshare_form.target_name.set_value("wallet-b");
+        app.reshare_form.my_new_index.set_value("1");
+        app.reshare_form.finalize_input.set_content("{\"round1\":\"payload\"}");
+
+        handle_reshare_keys(&mut app, enter_key());
+
+        assert!(matches!(
+            app.state,
+            AppState::Reshare(ReshareState::FinalizeInput)
+        ));
+        assert_eq!(
+            app.reshare_form.error_message.as_deref(),
+            Some("No source wallet selected for finalize")
+        );
     }
 
     #[test]
@@ -5851,6 +6089,21 @@ mod tests {
     }
 
     #[test]
+    fn send_enter_details_rejects_non_numeric_amount_before_review() {
+        let mut app = app_ready_to_prepare_send();
+        app.send_form.amount.set_value("abc");
+
+        handle_send_keys(&mut app, enter_key());
+
+        assert!(matches!(
+            app.state,
+            AppState::Send(SendState::EnterDetails { .. })
+        ));
+        let message = app.send_form.error_message.as_deref().unwrap_or("");
+        assert!(message.contains("Amount must be a positive integer in sats"));
+    }
+
+    #[test]
     fn send_enter_details_requires_exact_signer_set_before_review() {
         let mut app = app_ready_to_prepare_send();
         app.send_form.threshold = 2;
@@ -6012,6 +6265,35 @@ mod tests {
         let message = app.send_form.error_message.as_deref().unwrap_or("");
         assert!(message.contains("Review is stale"));
         assert!(message.contains("Missing Testnet4 source address"));
+        assert!(message.contains("Go back to edit and review again"));
+    }
+
+    #[test]
+    fn send_review_revalidates_stale_non_numeric_amount() {
+        let mut app = app_ready_to_prepare_send();
+        app.send_form.utxos = vec![screens::UtxoDisplay {
+            txid: "00".repeat(32),
+            vout: 0,
+            value: 2_000,
+            confirmed: true,
+        }];
+        app.send_form.amount.set_value("abc");
+        app.state = AppState::Send(SendState::ReviewTransaction {
+            wallet_name: "wallet-test".to_string(),
+        });
+
+        handle_send_keys(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE),
+        );
+
+        assert!(matches!(
+            app.state,
+            AppState::Send(SendState::ReviewTransaction { .. })
+        ));
+        let message = app.send_form.error_message.as_deref().unwrap_or("");
+        assert!(message.contains("Review is stale"));
+        assert!(message.contains("Amount must be a positive integer in sats"));
         assert!(message.contains("Go back to edit and review again"));
     }
 
