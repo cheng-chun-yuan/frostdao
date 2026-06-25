@@ -280,7 +280,7 @@ fn render_shortcuts(frame: &mut Frame, has_wallet: bool, area: Rect) {
             Span::raw(" Copy addr"),
         ]));
         shortcuts.push(Line::from(Span::styled(
-            "Press b/r/F5 to fetch balances",
+            format!("Press {REFRESH_KEY_LABEL} to fetch balances"),
             Style::default().fg(Color::Gray),
         )));
     }

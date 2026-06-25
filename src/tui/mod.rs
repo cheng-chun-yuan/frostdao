@@ -42,7 +42,7 @@ use frostdao::protocol::{keygen, reshare, signing};
 use frostdao::storage::{FileStorage, Storage};
 
 pub(crate) const COPY_KEY_LABEL: &str = "c/C";
-pub(crate) const REFRESH_KEY_LABEL: &str = "b/r/F5";
+pub(crate) const REFRESH_KEY_LABEL: &str = "b/B/r/R/F5";
 const HELP_KEY_LABEL: &str = "F1/?";
 
 /// Run the terminal UI
@@ -4105,7 +4105,7 @@ mod tests {
         let help = help_bar_text(&app);
 
         assert!(help.contains("j/k/↑/↓"));
-        assert!(help.contains("b/r/F5 (Refresh):Balance"));
+        assert!(help.contains(&format!("{REFRESH_KEY_LABEL} (Refresh):Balance")));
         assert!(help.contains("Enter:Select"));
         assert!(help.contains("c/C:Copy"));
         assert!(help.contains("F1/?"));
@@ -4137,7 +4137,7 @@ mod tests {
 
         let help = help_bar_text(&app);
 
-        assert!(help.contains("b/r/F5 (Refresh):Balance"));
+        assert!(help.contains(&format!("{REFRESH_KEY_LABEL} (Refresh):Balance")));
         assert!(help.contains("v:QR"));
         assert!(!help.contains("r:Balance"));
     }
@@ -4505,7 +4505,7 @@ mod tests {
 
         let help = help_bar_text(&app);
 
-        assert!(help.contains("b/r/F5 (Refresh):Refresh"));
+        assert!(help.contains(&format!("{REFRESH_KEY_LABEL} (Refresh):Refresh")));
         assert!(help.contains("a:Add"));
         assert!(help.contains("x:Remove"));
         assert!(!help.contains("r:Balance"));
