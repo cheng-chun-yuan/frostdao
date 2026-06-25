@@ -295,9 +295,11 @@ In local simulation, `k` starts a local keygen rehearsal. In relay transport,
 keygen is intentionally unavailable in the TUI; create keys with CLI keygen,
 then use the room for distributed signing.
 When the Nostr signing coordinator reaches threshold, the TUI shows a CLI
-handoff: export the collected signing shares, run `frostdao combine`, broadcast
-with CLI, and wait for a matching `tx_broadcast` announcement in the room. A
-matching `tx_broadcast` is a room announcement, not an on-chain confirmation.
+handoff: press `c` to copy `frostdao dkg-broadcast` with the wallet, session,
+unsigned transaction, and network filled in; replace `<shares-json>` with the
+collected threshold shares. The room then waits for a matching `tx_broadcast`
+announcement. A matching `tx_broadcast` is a room announcement, not an
+on-chain confirmation.
 
 ## Nostr Keygen
 

@@ -76,6 +76,20 @@ fn copied_preview_message(text: &str) -> String {
     format!("Copied: {}", preview)
 }
 
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+fn nostr_network_cli_name(network: NetworkSelection) -> &'static str {
+    match network {
+        NetworkSelection::Testnet4 => "testnet4",
+        NetworkSelection::Testnet3 => "testnet",
+        NetworkSelection::Signet => "signet",
+        NetworkSelection::Regtest => "regtest",
+        NetworkSelection::Mainnet => "mainnet",
+    }
+}
+
 pub enum TuiNostrRuntime {
     LocalSimulation(frostdao::nostr::NostrRoomRuntime<frostdao::nostr::InMemoryRoomTransport>),
     Relay(frostdao::nostr::NostrRoomRuntime<frostdao::nostr::RelayRoomTransport>),
@@ -215,6 +229,8 @@ pub struct App {
     pub nostr_participants: HashMap<u32, String>,
     /// Pending transaction proposals received through the room runtime
     pub nostr_pending_proposals: HashMap<String, TxProposal>,
+    /// Accepted transaction proposals kept for signing and broadcast handoff
+    pub nostr_session_proposals: HashMap<String, TxProposal>,
     /// Encrypted signing nonces received through the room runtime, keyed by session and party
     pub nostr_received_nonces: HashMap<String, HashMap<u32, String>>,
     /// Encrypted signing shares received through the room runtime, keyed by session and party
@@ -286,6 +302,7 @@ impl App {
             nostr_room_phase: NostrRoomPhase::Configure,
             nostr_participants: HashMap::new(),
             nostr_pending_proposals: HashMap::new(),
+            nostr_session_proposals: HashMap::new(),
             nostr_received_nonces: HashMap::new(),
             nostr_received_shares: HashMap::new(),
             nostr_broadcasts: HashMap::new(),
@@ -375,6 +392,17 @@ impl App {
             serde_json::from_str(&build.result)?;
 
         Ok(self.nostr_tx_proposal_from_build_output(wallet_name, timestamp, build_output))
+    }
+
+    pub fn nostr_broadcast_handoff_command(&self, session_id: &str) -> Option<String> {
+        let proposal = self.nostr_session_proposals.get(session_id)?;
+        Some(format!(
+            "frostdao dkg-broadcast --name {} --session {} --unsigned-tx {} --data '<shares-json>' --network {}",
+            shell_quote(&proposal.wallet_name),
+            shell_quote(&proposal.session_id),
+            shell_quote(&proposal.unsigned_tx),
+            nostr_network_cli_name(self.network)
+        ))
     }
 
     pub(crate) fn ensure_nostr_proposal_network_available(&self) -> Result<()> {
@@ -926,22 +954,22 @@ impl App {
                             payload.review.sighash_fingerprint.clone(),
                         ),
                     );
-                    self.nostr_pending_proposals.insert(
-                        session_id.clone(),
-                        TxProposal {
-                            session_id,
-                            wallet_name,
-                            proposer_index: payload.proposer_index,
-                            to_address: payload.to_address,
-                            amount_sats: payload.amount_sats,
-                            fee_rate: payload.fee_rate,
-                            sighash: payload.sighash,
-                            unsigned_tx: payload.unsigned_tx,
-                            review: payload.review,
-                            description: payload.description,
-                            timestamp: payload.timestamp,
-                        },
-                    );
+                    let proposal = TxProposal {
+                        session_id: session_id.clone(),
+                        wallet_name,
+                        proposer_index: payload.proposer_index,
+                        to_address: payload.to_address,
+                        amount_sats: payload.amount_sats,
+                        fee_rate: payload.fee_rate,
+                        sighash: payload.sighash,
+                        unsigned_tx: payload.unsigned_tx,
+                        review: payload.review,
+                        description: payload.description,
+                        timestamp: payload.timestamp,
+                    };
+                    self.nostr_pending_proposals
+                        .insert(session_id.clone(), proposal.clone());
+                    self.nostr_session_proposals.insert(session_id, proposal);
                 }
                 frostdao::nostr::NostrMessageKind::TxConsent => {
                     let payload: frostdao::nostr::TxConsentEvent = message.payload_as()?;
@@ -1218,6 +1246,8 @@ impl App {
         .with_tss();
 
         runtime.publish(message)?;
+        self.nostr_session_proposals
+            .insert(proposal.session_id.clone(), proposal.clone());
         self.append_nostr_audit_event(
             frostdao::audit::AuditEvent::new("nostr_tx_proposal", wallet_name, "published")
                 .with_field("room", self.nostr_room_id.clone())
@@ -1677,6 +1707,7 @@ impl App {
     fn clear_nostr_room_session_state(&mut self) {
         self.nostr_participants.clear();
         self.nostr_pending_proposals.clear();
+        self.nostr_session_proposals.clear();
         self.nostr_received_nonces.clear();
         self.nostr_received_shares.clear();
         self.nostr_broadcasts.clear();
@@ -2699,6 +2730,49 @@ mod tests {
             proposal.review.sighash_fingerprint,
             "001122334455...aabbccddeeff"
         );
+    }
+
+    #[test]
+    fn nostr_broadcast_handoff_command_uses_cached_proposal() {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Signet;
+        let proposal = TxProposal {
+            session_id: "session-remote".to_string(),
+            wallet_name: "wallet-test".to_string(),
+            proposer_index: 2,
+            to_address: test_address(Network::Signet),
+            amount_sats: 50_000,
+            fee_rate: 10,
+            sighash: "00".repeat(32),
+            unsigned_tx: "02000000000100".to_string(),
+            review: frostdao::nostr::TxReviewPayload {
+                network: "Signet".to_string(),
+                source_path: "root key-path".to_string(),
+                from_address: test_address(Network::Signet),
+                to_address: test_address(Network::Signet),
+                amount_sats: 50_000,
+                fee_rate_sats_vb: 10,
+                sighash_fingerprint: "abc12345".to_string(),
+            },
+            description: "remote proposal".to_string(),
+            timestamp: 1_700_000_010,
+        };
+        app.nostr_session_proposals
+            .insert(proposal.session_id.clone(), proposal);
+
+        let command = app
+            .nostr_broadcast_handoff_command("session-remote")
+            .unwrap();
+
+        assert!(command.contains("frostdao dkg-broadcast"));
+        assert!(command.contains("--name 'wallet-test'"));
+        assert!(command.contains("--session 'session-remote'"));
+        assert!(command.contains("--unsigned-tx '02000000000100'"));
+        assert!(command.contains("--data '<shares-json>'"));
+        assert!(command.contains("--network signet"));
+        assert!(app
+            .nostr_broadcast_handoff_command("missing-session")
+            .is_none());
     }
 
     #[test]

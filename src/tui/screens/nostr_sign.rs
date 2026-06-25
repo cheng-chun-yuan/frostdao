@@ -378,11 +378,11 @@ fn nostr_sign_status_lines<'a>(app: &'a App) -> Vec<Line<'a>> {
                     Style::default().fg(Color::Yellow),
                 )),
                 Line::from(Span::styled(
-                    "Combine handoff: export collected signing shares, run `frostdao combine`, then broadcast with CLI.",
+                    "Combine handoff: press c to copy `frostdao dkg-broadcast` with this wallet, session, unsigned tx, and network.",
                     Style::default().fg(Color::Gray),
                 )),
                 Line::from(Span::styled(
-                    "This is a room announcement, not an on-chain confirmation.",
+                    "Replace <shares-json> with threshold shares; matching tx_broadcast is a room announcement, not an on-chain confirmation.",
                     Style::default().fg(Color::DarkGray),
                 )),
             ]
@@ -1086,7 +1086,7 @@ pub(crate) fn nostr_sign_help_text(state: &NostrSignState) -> String {
             "Enter: Poll room | keep room open for encrypted nonce/share exchange | Esc: Back",
         ),
         NostrSignState::Combining { .. } => {
-            String::from("CLI handoff: combine + broadcast | Esc: Back")
+            format!("{COPY_KEY_LABEL}: Copy dkg-broadcast command | Enter: Poll | Esc: Back")
         }
         NostrSignState::Complete { .. } => {
             format!("Enter: Done | {COPY_KEY_LABEL}: Copy TXID")
@@ -1274,11 +1274,11 @@ mod tests {
         let help = nostr_sign_help_text(&app.nostr_sign_state);
 
         assert!(rendered.contains("Combine handoff"));
-        assert!(rendered.contains("frostdao combine"));
+        assert!(rendered.contains("frostdao dkg-broadcast"));
         assert!(rendered.contains("matching tx_broadcast"));
         assert!(rendered.contains("not an on-chain confirmation"));
-        assert!(help.contains("CLI handoff"));
-        assert!(help.contains("combine + broadcast"));
+        assert!(help.contains("Copy dkg-broadcast command"));
+        assert!(help.contains("Enter: Poll"));
     }
 
     #[test]

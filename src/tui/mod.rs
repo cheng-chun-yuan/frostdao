@@ -2946,9 +2946,7 @@ fn handle_nostr_sign_keys(app: &mut App, key: KeyEvent) {
                             wallet_name: wallet_name.clone(),
                             session_id: session_id.clone(),
                         };
-                        app.set_message(
-                            "Threshold reached; waiting for real transaction broadcast...",
-                        );
+                        app.set_message("Threshold reached; copy the broadcast handoff command or wait for tx_broadcast...");
                     } else if received_shares.len() >= app.nostr_threshold as usize {
                         app.set_message("Waiting for nonce-checked coordinator threshold...");
                     } else {
@@ -2957,7 +2955,7 @@ fn handle_nostr_sign_keys(app: &mut App, key: KeyEvent) {
                 }
                 NostrSignState::Combining { .. } => {
                     app.set_message(
-                        "Waiting for real tx_broadcast; use CLI broadcast until TUI signing is wired",
+                        "Waiting for tx_broadcast; press c to copy the CLI broadcast handoff",
                     );
                 }
                 NostrSignState::Complete { .. } => {
@@ -2998,6 +2996,16 @@ fn handle_nostr_sign_keys(app: &mut App, key: KeyEvent) {
                     // Copy TXID to clipboard
                     let txid = txid.clone();
                     app.copy_to_clipboard(&txid);
+                }
+                NostrSignState::Combining { session_id, .. } => {
+                    let Some(command) = app.nostr_broadcast_handoff_command(session_id) else {
+                        app.set_message("No transaction proposal cached for this signing session");
+                        return;
+                    };
+                    app.copy_to_clipboard_with_message(
+                        &command,
+                        "Copied dkg-broadcast handoff command".to_string(),
+                    );
                 }
                 _ => {}
             }
@@ -4643,6 +4651,30 @@ mod tests {
             Some(nostr_waiting_for_execution_message())
         );
         assert!(app.nostr_signing_coordinators.is_empty());
+    }
+
+    #[test]
+    fn nostr_combining_copy_requires_cached_proposal() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::NostrSign;
+        app.nostr_sign_state = NostrSignState::Combining {
+            wallet_name: "wallet-test".to_string(),
+            session_id: "session-missing".to_string(),
+        };
+
+        handle_nostr_sign_keys(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE),
+        );
+
+        assert!(matches!(
+            app.nostr_sign_state,
+            NostrSignState::Combining { .. }
+        ));
+        assert_eq!(
+            app.message.as_deref(),
+            Some("No transaction proposal cached for this signing session")
+        );
     }
 
     #[test]
