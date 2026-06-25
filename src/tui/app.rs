@@ -148,6 +148,17 @@ impl TuiNostrRuntime {
         }
     }
 
+    #[cfg(test)]
+    fn local_simulation_room_messages(
+        &self,
+        room: &str,
+    ) -> Option<Vec<frostdao::nostr::NostrProtocolMessage>> {
+        match self {
+            Self::LocalSimulation(runtime) => Some(runtime.transport().room_messages(room)),
+            Self::Relay(_) => None,
+        }
+    }
+
     fn publish_local_simulation_message(
         &mut self,
         message: frostdao::nostr::NostrProtocolMessage,
@@ -442,6 +453,19 @@ impl App {
 
     pub(crate) fn nostr_source_derivation_path(&self) -> Option<(u32, u32)> {
         self.send_form.get_derivation_path()
+    }
+
+    fn nostr_threshold_scheme_for_wallet(
+        &self,
+        wallet_name: &str,
+    ) -> frostdao::nostr::ThresholdScheme {
+        let hierarchical = self
+            .wallets
+            .iter()
+            .find(|wallet| wallet.name == wallet_name)
+            .and_then(|wallet| wallet.hierarchical)
+            .unwrap_or(false);
+        frostdao::nostr::ThresholdScheme::from_hierarchical(hierarchical)
     }
 
     fn nostr_tx_proposal_from_build_output(
@@ -1225,6 +1249,7 @@ impl App {
         proposal: &TxProposal,
     ) -> Result<()> {
         self.validate_nostr_tx_proposal_publish(wallet_name, proposal)?;
+        let scheme = self.nostr_threshold_scheme_for_wallet(wallet_name);
 
         let Some(runtime) = self.nostr_runtime.as_mut() else {
             anyhow::bail!("join a Nostr room before publishing a transaction proposal");
@@ -1249,7 +1274,7 @@ impl App {
         )?
         .with_wallet(wallet_name)
         .with_session(proposal.session_id.clone())
-        .with_tss();
+        .with_scheme(scheme);
 
         runtime.publish(message)?;
         self.nostr_session_proposals
@@ -1282,6 +1307,7 @@ impl App {
         consent: bool,
         reason: Option<String>,
     ) -> Result<()> {
+        let scheme = self.nostr_threshold_scheme_for_wallet(wallet_name);
         let Some(runtime) = self.nostr_runtime.as_mut() else {
             anyhow::bail!("join a Nostr room before publishing transaction consent");
         };
@@ -1300,7 +1326,7 @@ impl App {
         )?
         .with_wallet(wallet_name)
         .with_session(proposal.session_id.clone())
-        .with_tss();
+        .with_scheme(scheme);
 
         runtime.publish(message)?;
         self.append_nostr_audit_event(
@@ -1338,6 +1364,7 @@ impl App {
             to_index,
             ciphertext,
         )?;
+        let scheme = self.nostr_threshold_scheme_for_wallet(wallet_name);
         let Some(runtime) = self.nostr_runtime.as_mut() else {
             anyhow::bail!("join a Nostr room before publishing signing nonce");
         };
@@ -1352,7 +1379,7 @@ impl App {
         )?
         .with_wallet(wallet_name)
         .with_session(session_id)
-        .with_tss()
+        .with_scheme(scheme)
         .to_party(to_index)?;
 
         runtime.publish(message)?;
@@ -1383,6 +1410,7 @@ impl App {
             to_index,
             ciphertext,
         )?;
+        let scheme = self.nostr_threshold_scheme_for_wallet(wallet_name);
         let Some(runtime) = self.nostr_runtime.as_mut() else {
             anyhow::bail!("join a Nostr room before publishing signing share");
         };
@@ -1397,7 +1425,7 @@ impl App {
         )?
         .with_wallet(wallet_name)
         .with_session(session_id)
-        .with_tss()
+        .with_scheme(scheme)
         .to_party(to_index)?;
 
         runtime.publish(message)?;
@@ -1423,6 +1451,7 @@ impl App {
         network: String,
     ) -> Result<()> {
         self.validate_nostr_broadcast_publish(wallet_name, session_id, &txid, &raw_tx, &network)?;
+        let scheme = self.nostr_threshold_scheme_for_wallet(wallet_name);
         let Some(runtime) = self.nostr_runtime.as_mut() else {
             anyhow::bail!("join a Nostr room before publishing transaction broadcast");
         };
@@ -1440,7 +1469,7 @@ impl App {
         )?
         .with_wallet(wallet_name)
         .with_session(session_id)
-        .with_tss();
+        .with_scheme(scheme);
 
         runtime.publish(message)?;
         self.append_nostr_audit_event(
@@ -3453,6 +3482,95 @@ mod tests {
         assert!(err.contains("HTSS metadata incomplete"));
         assert!(err.contains("party 3"));
         assert!(!app.nostr_signing_coordinators.contains_key("session-htss"));
+    }
+
+    #[test]
+    fn tui_nostr_htss_wallet_tags_outbound_messages_as_htss() {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Testnet3;
+        app.nostr_room_id = format!("tui-htss-scheme-test-{}", std::process::id());
+        app.nostr_my_index = 1;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 2;
+        app.wallets = vec![htss_wallet_summary(
+            "wallet-htss",
+            Some(test_address(Network::Testnet)),
+            BTreeMap::from([(1, 0), (2, 1)]),
+        )];
+        let cache_path = app.nostr_replay_cache_path();
+        let _ = std::fs::remove_file(&cache_path);
+
+        app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
+        app.simulate_nostr_participant_join(2).unwrap();
+
+        let sighash = "htss-sighash".to_string();
+        let proposal = crate::tui::state::TxProposal {
+            session_id: "session-htss".to_string(),
+            wallet_name: "wallet-htss".to_string(),
+            proposer_index: 1,
+            to_address: test_address(Network::Testnet),
+            amount_sats: 50_000,
+            fee_rate: 10,
+            sighash: sighash.clone(),
+            unsigned_tx: valid_transaction_hex(2_000),
+            review: frostdao::nostr::TxReviewPayload {
+                network: "Testnet3".to_string(),
+                source_path: "m/86'/1'/0'/0/0".to_string(),
+                from_address: test_address(Network::Testnet),
+                to_address: test_address(Network::Testnet),
+                amount_sats: 50_000,
+                fee_rate_sats_vb: 10,
+                sighash_fingerprint: frostdao::protocol::dkg_tx::sighash_fingerprint(&sighash),
+            },
+            description: "htss proposal".to_string(),
+            timestamp: 1_700_000_000,
+        };
+
+        app.publish_nostr_tx_proposal("wallet-htss", &proposal)
+            .unwrap();
+        app.publish_nostr_tx_consent("wallet-htss", &proposal, true, None)
+            .unwrap();
+        app.publish_nostr_signing_nonce(
+            "wallet-htss",
+            "session-htss",
+            2,
+            "encrypted-nonce".to_string(),
+        )
+        .unwrap();
+        app.publish_nostr_signing_share(
+            "wallet-htss",
+            "session-htss",
+            2,
+            "encrypted-share".to_string(),
+        )
+        .unwrap();
+        let broadcast = valid_broadcast_event_with_value(2_000);
+        app.publish_nostr_tx_broadcast(
+            "wallet-htss",
+            "session-htss",
+            broadcast.txid,
+            broadcast.raw_tx,
+            broadcast.network,
+        )
+        .unwrap();
+
+        let messages = app
+            .nostr_runtime
+            .as_ref()
+            .unwrap()
+            .local_simulation_room_messages(&app.nostr_room_id)
+            .unwrap();
+        let wallet_scoped = messages
+            .iter()
+            .filter(|message| message.wallet.as_deref() == Some("wallet-htss"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(wallet_scoped.len(), 5);
+        for message in wallet_scoped {
+            assert_eq!(message.scheme, Some(frostdao::nostr::ThresholdScheme::Htss));
+        }
+
+        let _ = std::fs::remove_file(&cache_path);
     }
 
     #[test]

@@ -37,6 +37,10 @@ impl InMemoryRoomTransport {
     pub fn room_len(&self, room: &str) -> usize {
         self.rooms.get(room).map_or(0, Vec::len)
     }
+
+    pub fn room_messages(&self, room: &str) -> Vec<NostrProtocolMessage> {
+        self.rooms.get(room).cloned().unwrap_or_default()
+    }
 }
 
 impl RoomMessageTransport for InMemoryRoomTransport {
