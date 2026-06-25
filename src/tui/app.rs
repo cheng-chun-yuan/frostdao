@@ -107,6 +107,13 @@ impl TuiNostrRuntime {
         matches!(self, Self::LocalSimulation(_))
     }
 
+    fn room_join_pubkey(&self, party_index: u32) -> String {
+        match self {
+            Self::LocalSimulation(_) => format!("tui-party-{}", party_index),
+            Self::Relay(runtime) => runtime.transport().client().my_pubkey(),
+        }
+    }
+
     #[cfg(test)]
     fn local_simulation_room_len(&self, room: &str) -> Option<usize> {
         match self {
@@ -780,7 +787,7 @@ impl App {
 
         let payload = frostdao::nostr::RoomJoinPayload {
             party_index: self.nostr_my_index,
-            nostr_pubkey: format!("tui-party-{}", self.nostr_my_index),
+            nostr_pubkey: runtime.room_join_pubkey(self.nostr_my_index),
             threshold: self.nostr_threshold,
             n_parties: self.nostr_n_parties,
             scheme: frostdao::nostr::ThresholdScheme::Tss,

@@ -11,7 +11,7 @@ Sensitive material must be encrypted before publishing. DKG shares, signing nonc
 - Room filter: custom single-letter `r` tag containing the room ID.
 - Nostr keys: ephemeral session keys are acceptable because FrostDAO payload identity is party-index based.
 
-`NostrClient::connect_with_relays` accepts explicit relay URLs for testnet and production-like deployments. `RelayRoomTransport` adapts the async Nostr client to `NostrRoomRuntime`, so relay messages pass through the same room, recipient, timestamp, expiry, and replay-cache checks as deterministic in-memory tests.
+`NostrClient::connect_with_relays` accepts explicit relay URLs for testnet and production-like deployments. `RelayRoomTransport` adapts the async Nostr client to `NostrRoomRuntime`, so relay messages pass through the same room, recipient, timestamp, expiry, and replay-cache checks as deterministic in-memory tests. In relay mode, TUI room joins publish the relay client public key from `NostrClient::my_pubkey()` so peers have real recipient key material for encrypted nonce/share exchange.
 
 ## Envelope
 

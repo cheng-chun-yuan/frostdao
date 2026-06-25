@@ -394,8 +394,12 @@ def check_replay_cache_persistence():
     for marker in ["NostrRoomRuntime", "FileReplayCache", "RelayRoomTransport"]:
         if marker not in docs:
             missing.append(f"NOSTR_PROTOCOL {marker} documentation")
+    if "NostrClient::my_pubkey()" not in docs or "recipient key material" not in docs:
+        missing.append("NOSTR_PROTOCOL relay room join public-key documentation")
     if "TUI room screen creates a `NostrRoomRuntime`" not in run_guide:
         missing.append("RUN_GUIDE TUI NostrRoomRuntime documentation")
+    if "TUI room joins advertise `NostrClient::my_pubkey()`" not in run_guide:
+        missing.append("RUN_GUIDE TUI relay room join public-key documentation")
     if "room configure status line shows `Blocked` until the room ID, party index, threshold, and party count form a valid room" not in run_guide:
         missing.append("RUN_GUIDE TUI Nostr room configure validation documentation")
     if "current TUI room joins are guarded as `Scheme: TSS` with `Rank: n/a`" not in run_guide:
@@ -866,6 +870,8 @@ def check_nostr_transaction_review():
         ("src/tui/app.rs", app, "publish_nostr_signing_nonce"),
         ("src/tui/app.rs", app, "publish_nostr_signing_share"),
         ("src/tui/app.rs", app, "publish_nostr_tx_broadcast"),
+        ("src/tui/app.rs", app, "room_join_pubkey"),
+        ("src/tui/app.rs", app, "client().my_pubkey()"),
         ("src/tui/app.rs", app, "nostr_pending_proposals"),
         ("src/tui/app.rs", app, "nostr_received_nonces"),
         ("src/tui/app.rs", app, "nostr_received_shares"),

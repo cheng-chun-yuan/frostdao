@@ -306,7 +306,7 @@ The TUI room screen creates a `NostrRoomRuntime` when joining a room. The curren
 
 Reshare and recovery relay parser helpers reject versioned messages whose payload party fields do not match the envelope sender or direct recipient. This protects the copy/paste and future relay-backed ceremony paths from accepting sub-shares under the wrong party identity.
 
-For relay-backed testnet experiments, the codebase exposes `RelayRoomTransport` and `NostrClient::connect_with_relays` so relay room wiring can reuse the same runtime checks with explicit relay URLs. The TUI stays in local simulation transport by default. Set comma-separated relays to opt into relay transport on testnet/signet:
+For relay-backed testnet experiments, the codebase exposes `RelayRoomTransport` and `NostrClient::connect_with_relays` so relay room wiring can reuse the same runtime checks with explicit relay URLs. In relay mode, TUI room joins advertise `NostrClient::my_pubkey()` instead of a local simulation label, which gives peers the recipient key material needed for encrypted nonce/share exchange. The TUI stays in local simulation transport by default. Set comma-separated relays to opt into relay transport on testnet/signet:
 
 ```bash
 FROSTDAO_TUI_NOSTR_RELAYS=wss://relay.damus.io cargo run
