@@ -323,4 +323,6 @@ The configure and review screens show the source path and source address. Send r
 Regtest Nostr proposals require `FROSTDAO_REGTEST_MEMPOOL_API`; without it, the configure screen blocks publishing and shows the missing setting.
 Every Nostr signing phase keeps room ID, party index, threshold, scheme, rank,
 and transport visible. Proposal metadata is public; signing nonce/share payloads
-are encrypted and session-bound.
+are encrypted and session-bound. The pending proposal list only shows proposals
+for the selected wallet and active room; if it is empty, confirm room polling and
+that every signer joined the same room.

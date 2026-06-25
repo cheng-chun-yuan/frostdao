@@ -717,18 +717,11 @@ fn render_proposals_list(frame: &mut Frame, app: &App, area: Rect) {
         .collect::<Vec<_>>();
     proposals.sort_by_key(|proposal| proposal.timestamp);
 
-    let items = if proposals.is_empty() {
-        vec![
-            ListItem::new(Line::from(Span::styled(
-                "No pending proposals",
-                Style::default().fg(Color::DarkGray),
-            ))),
-            ListItem::new(Line::from("")),
-            ListItem::new(Line::from(Span::styled(
-                "Proposals appear here after runtime relay polling accepts them.",
-                Style::default().fg(Color::DarkGray),
-            ))),
-        ]
+    let items: Vec<ListItem> = if proposals.is_empty() {
+        pending_proposals_empty_lines()
+            .into_iter()
+            .map(ListItem::new)
+            .collect()
     } else {
         proposals
             .into_iter()
@@ -744,6 +737,24 @@ fn render_proposals_list(frame: &mut Frame, app: &App, area: Rect) {
     );
 
     frame.render_widget(list, area);
+}
+
+fn pending_proposals_empty_lines() -> Vec<Line<'static>> {
+    vec![
+        Line::from(Span::styled(
+            "No pending proposals",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Only proposals for this wallet and active room appear here.",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(Span::styled(
+            "Wait for room polling, or confirm every signer joined the same room.",
+            Style::default().fg(Color::DarkGray),
+        )),
+    ]
 }
 
 fn pending_proposal_lines(proposal: &crate::tui::state::TxProposal) -> Vec<Line<'static>> {
@@ -1253,6 +1264,17 @@ mod tests {
         ] {
             assert!(rendered.contains(expected), "missing {expected}");
         }
+    }
+
+    #[test]
+    fn pending_proposals_empty_state_explains_room_and_wallet_filters() {
+        let rendered = lines_to_string(pending_proposals_empty_lines());
+
+        assert!(rendered.contains("No pending proposals"));
+        assert!(rendered.contains("this wallet and active room"));
+        assert!(rendered.contains("room polling"));
+        assert!(rendered.contains("same room"));
+        assert!(!rendered.contains("relay polling"));
     }
 
     #[test]

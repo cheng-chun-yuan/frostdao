@@ -890,7 +890,7 @@ def check_nostr_transaction_review():
         ("docs/RUN_GUIDE.md", run_guide, "proposal carries a real unsigned transaction hex"),
         ("docs/RUN_GUIDE.md", run_guide, "unsigned transaction fingerprint"),
         ("docs/RUN_GUIDE.md", run_guide, "Runtime polling also ingests incoming `tx_proposal` messages"),
-        ("docs/RUN_GUIDE.md", run_guide, "the pending proposal list shows wallet, network, session"),
+        ("docs/RUN_GUIDE.md", run_guide, "the pending proposal list shows only proposals for the selected wallet and active room"),
         ("docs/RUN_GUIDE.md", run_guide, "Session-scoped signing messages without an explicit envelope `session` are ignored"),
         ("docs/RUN_GUIDE.md", run_guide, "pending proposals are filtered by their envelope `wallet` before display"),
         ("docs/RUN_GUIDE.md", run_guide, "Encrypted `signing_nonce_encrypted` and `signing_share_encrypted` messages"),
