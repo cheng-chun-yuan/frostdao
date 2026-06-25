@@ -13,21 +13,19 @@ use crate::tui::state::MnemonicState;
 /// Render the mnemonic backup screen
 pub fn render_mnemonic(frame: &mut Frame, state: &MnemonicState, area: Rect) {
     let title = if state.party_selected {
-        let party_idx = state
-            .available_parties
-            .get(state.selected_party)
-            .copied()
-            .unwrap_or(1);
-        if party_idx == 0 {
-            format!("Share Backup - {}", state.wallet_name)
-        } else if state.hierarchical {
-            let rank = state.party_ranks.get(&party_idx).copied().unwrap_or(0);
-            format!(
-                "Share Backup - {} (Party {} r{})",
-                state.wallet_name, party_idx, rank
-            )
-        } else {
-            format!("Share Backup - {} (Party {})", state.wallet_name, party_idx)
+        match state.available_parties.get(state.selected_party).copied() {
+            Some(0) => format!("Share Backup - {}", state.wallet_name),
+            Some(party_idx) if state.hierarchical => {
+                let rank = state.party_ranks.get(&party_idx).copied().unwrap_or(0);
+                format!(
+                    "Share Backup - {} (Party {} r{})",
+                    state.wallet_name, party_idx, rank
+                )
+            }
+            Some(party_idx) => {
+                format!("Share Backup - {} (Party {})", state.wallet_name, party_idx)
+            }
+            None => format!("Share Backup - {} - No Party Selected", state.wallet_name),
         }
     } else {
         format!("Share Backup - {} - Select Party", state.wallet_name)

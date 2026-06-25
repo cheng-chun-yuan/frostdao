@@ -2546,17 +2546,22 @@ fn handle_mnemonic_keys(app: &mut App, code: KeyCode) {
         KeyCode::Enter => {
             if let AppState::MnemonicBackup(ref mut state) = app.state {
                 if !state.party_selected {
+                    if state.available_parties.is_empty() {
+                        state.error = Some("No party shares available to back up".to_string());
+                        return;
+                    }
                     // Party selected, show security warning
                     state.party_selected = true;
                 } else if !state.revealed {
                     // Generate mnemonic from selected party's share
                     let wallet_name = state.wallet_name.clone();
                     let state_dir = keygen::get_state_dir(&wallet_name);
-                    let party_idx = state
-                        .available_parties
-                        .get(state.selected_party)
-                        .copied()
-                        .unwrap_or(1);
+                    let Some(party_idx) =
+                        state.available_parties.get(state.selected_party).copied()
+                    else {
+                        state.error = Some("No party shares available to back up".to_string());
+                        return;
+                    };
 
                     // Party 0 = legacy (share in wallet root), otherwise in party subfolder
                     let share_dir = if party_idx == 0 {
@@ -4793,6 +4798,60 @@ mod tests {
         };
         assert_eq!(state.selected_party, 1);
         assert!(state.party_selected);
+    }
+
+    #[test]
+    fn mnemonic_enter_blocks_empty_party_list() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::MnemonicBackup(MnemonicState {
+            wallet_name: "treasury".to_string(),
+            available_parties: Vec::new(),
+            selected_party: 0,
+            words: Vec::new(),
+            error: None,
+            party_selected: false,
+            revealed: false,
+            hierarchical: false,
+            party_ranks: BTreeMap::new(),
+        });
+
+        handle_mnemonic_keys(&mut app, KeyCode::Enter);
+
+        let AppState::MnemonicBackup(state) = &app.state else {
+            panic!("expected mnemonic backup");
+        };
+        assert!(!state.party_selected);
+        assert_eq!(
+            state.error.as_deref(),
+            Some("No party shares available to back up")
+        );
+    }
+
+    #[test]
+    fn mnemonic_reveal_blocks_empty_party_list() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::MnemonicBackup(MnemonicState {
+            wallet_name: "treasury".to_string(),
+            available_parties: Vec::new(),
+            selected_party: 0,
+            words: Vec::new(),
+            error: None,
+            party_selected: true,
+            revealed: false,
+            hierarchical: false,
+            party_ranks: BTreeMap::new(),
+        });
+
+        handle_mnemonic_keys(&mut app, KeyCode::Enter);
+
+        let AppState::MnemonicBackup(state) = &app.state else {
+            panic!("expected mnemonic backup");
+        };
+        assert!(!state.revealed);
+        assert_eq!(
+            state.error.as_deref(),
+            Some("No party shares available to back up")
+        );
     }
 
     #[test]
