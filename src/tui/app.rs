@@ -1750,13 +1750,14 @@ impl App {
         sighash_fingerprint: &str,
     ) -> Result<()> {
         let signer_set: Vec<u32> = (1..=self.nostr_n_parties).collect();
+        let scheme = self.nostr_signing_scheme_policy(wallet_name)?;
         let config = frostdao::protocol::SigningAttemptConfig::new(
             wallet_name,
             session_id,
             signer_set,
             self.nostr_threshold,
             sighash_fingerprint,
-            SigningSchemePolicy::Tss,
+            scheme,
         )?;
         let mut coordinator = SigningCoordinator::new(config)?;
         if let Some(nonces) = self.nostr_received_nonces.get(session_id) {
@@ -1776,6 +1777,33 @@ impl App {
         self.nostr_signing_coordinators
             .insert(session_id.to_string(), coordinator);
         Ok(())
+    }
+
+    fn nostr_signing_scheme_policy(&self, wallet_name: &str) -> Result<SigningSchemePolicy> {
+        let Some(wallet) = self
+            .wallets
+            .iter()
+            .find(|wallet| wallet.name == wallet_name)
+        else {
+            return Ok(SigningSchemePolicy::Tss);
+        };
+
+        if !wallet.hierarchical.unwrap_or(false) {
+            return Ok(SigningSchemePolicy::Tss);
+        }
+
+        let party_ranks = wallet.party_ranks.clone().unwrap_or_default();
+        if party_ranks.is_empty() {
+            anyhow::bail!("HTSS metadata incomplete: missing party rank map");
+        }
+
+        for party_index in 1..=self.nostr_n_parties {
+            if !party_ranks.contains_key(&party_index) {
+                anyhow::bail!("HTSS metadata incomplete: missing rank for party {party_index}");
+            }
+        }
+
+        Ok(SigningSchemePolicy::Htss { party_ranks })
     }
 
     fn nostr_signing_nonce_input(
@@ -2305,7 +2333,7 @@ mod tests {
         Address, Amount, Network, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
         XOnlyPublicKey,
     };
-    use frostdao::protocol::keygen::WalletSummary;
+    use frostdao::protocol::{keygen::WalletSummary, SigningSchemePolicy};
     use serial_test::serial;
     use std::collections::BTreeMap;
     use std::collections::HashMap;
@@ -2325,6 +2353,18 @@ mod tests {
             signing_requirement: None,
             party_ranks: None::<BTreeMap<u32, u32>>,
         }
+    }
+
+    fn htss_wallet_summary(
+        name: &str,
+        address: Option<String>,
+        party_ranks: BTreeMap<u32, u32>,
+    ) -> WalletSummary {
+        let mut wallet = wallet_summary(name, address);
+        wallet.hierarchical = Some(true);
+        wallet.signing_requirement = Some(vec![1, 1]);
+        wallet.party_ranks = Some(party_ranks);
+        wallet
     }
 
     fn test_address(network: Network) -> String {
@@ -3370,6 +3410,49 @@ mod tests {
         );
 
         let _ = std::fs::remove_file(&cache_path);
+    }
+
+    #[test]
+    fn tui_nostr_signing_attempt_uses_htss_wallet_ranks() {
+        let mut app = App::new().unwrap();
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 3;
+        let ranks = BTreeMap::from([(1, 0), (2, 1), (3, 1)]);
+        app.wallets = vec![htss_wallet_summary(
+            "wallet-htss",
+            Some(test_address(Network::Testnet)),
+            ranks.clone(),
+        )];
+
+        app.start_nostr_signing_attempt("wallet-htss", "session-htss", "fingerprint-htss")
+            .unwrap();
+
+        let coordinator = app.nostr_signing_coordinators.get("session-htss").unwrap();
+        assert_eq!(
+            coordinator.config().scheme,
+            SigningSchemePolicy::Htss { party_ranks: ranks }
+        );
+    }
+
+    #[test]
+    fn tui_nostr_signing_attempt_blocks_incomplete_htss_ranks() {
+        let mut app = App::new().unwrap();
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 3;
+        app.wallets = vec![htss_wallet_summary(
+            "wallet-htss",
+            Some(test_address(Network::Testnet)),
+            BTreeMap::from([(1, 0), (2, 1)]),
+        )];
+
+        let err = app
+            .start_nostr_signing_attempt("wallet-htss", "session-htss", "fingerprint-htss")
+            .unwrap_err()
+            .to_string();
+
+        assert!(err.contains("HTSS metadata incomplete"));
+        assert!(err.contains("party 3"));
+        assert!(!app.nostr_signing_coordinators.contains_key("session-htss"));
     }
 
     #[test]
