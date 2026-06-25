@@ -2715,7 +2715,7 @@ fn handle_nostr_room_configure(app: &mut App, key: KeyEvent) {
                 app.nostr_my_index = if s.len() > 1 {
                     s[..s.len() - 1].parse().unwrap_or(1)
                 } else {
-                    1
+                    0
                 };
             }
             NostrRoomField::Threshold => {
@@ -2723,7 +2723,7 @@ fn handle_nostr_room_configure(app: &mut App, key: KeyEvent) {
                 app.nostr_threshold = if s.len() > 1 {
                     s[..s.len() - 1].parse().unwrap_or(2)
                 } else {
-                    2
+                    0
                 };
             }
             NostrRoomField::NParties => {
@@ -2731,7 +2731,7 @@ fn handle_nostr_room_configure(app: &mut App, key: KeyEvent) {
                 app.nostr_n_parties = if s.len() > 1 {
                     s[..s.len() - 1].parse().unwrap_or(3)
                 } else {
-                    3
+                    0
                 };
             }
         },
@@ -4935,6 +4935,60 @@ mod tests {
         }
         assert_eq!(app.nostr_amount_input.value(), "50000");
         assert_eq!(app.nostr_amount_sats().unwrap(), 50_000);
+    }
+
+    #[test]
+    fn nostr_room_numeric_backspace_clears_field_for_reentry() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::NostrRoom;
+        app.nostr_room_phase = NostrRoomPhase::Configure;
+        app.nostr_room_id = "room-numeric-test".to_string();
+        app.nostr_room_focus = NostrRoomField::MyIndex;
+        app.nostr_my_index = 1;
+
+        handle_nostr_room_configure(
+            &mut app,
+            KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE),
+        );
+        assert_eq!(app.nostr_my_index, 0);
+        assert_eq!(
+            app.nostr_room_config_error(),
+            Some("My Index must be between 1 and Parties")
+        );
+
+        handle_nostr_room_configure(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE),
+        );
+        assert_eq!(app.nostr_my_index, 2);
+    }
+
+    #[test]
+    fn nostr_room_numeric_backspace_clears_threshold_and_party_count() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::NostrRoom;
+        app.nostr_room_phase = NostrRoomPhase::Configure;
+        app.nostr_room_id = "room-numeric-test".to_string();
+
+        app.nostr_room_focus = NostrRoomField::Threshold;
+        app.nostr_threshold = 2;
+        handle_nostr_room_configure(
+            &mut app,
+            KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE),
+        );
+        assert_eq!(app.nostr_threshold, 0);
+
+        app.nostr_room_focus = NostrRoomField::NParties;
+        app.nostr_n_parties = 3;
+        handle_nostr_room_configure(
+            &mut app,
+            KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE),
+        );
+        assert_eq!(app.nostr_n_parties, 0);
+        assert_eq!(
+            app.nostr_room_config_error(),
+            Some("Parties must be at least 2")
+        );
     }
 
     #[test]
