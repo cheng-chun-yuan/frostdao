@@ -79,7 +79,7 @@ fn is_copy_key(code: &KeyCode) -> bool {
 }
 
 fn is_refresh_key(code: &KeyCode) -> bool {
-    (matches!(code, KeyCode::Char(c) if c == &'b' || c == &'r')) || matches!(code, KeyCode::F(5))
+    is_shortcut_key(code, 'b') || is_shortcut_key(code, 'r') || matches!(code, KeyCode::F(5))
 }
 
 fn is_help_key(code: &KeyCode) -> bool {
@@ -151,8 +151,8 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
                 app.set_message("No wallet selected");
             }
         }
-        code if is_refresh_key(&code) => app.refresh_balance(),
         KeyCode::Char('R') => app.reload_wallets(),
+        code if is_refresh_key(&code) => app.refresh_balance(),
         code if is_shortcut_key(&code, 'n') => {
             app.chain_selector_index = app.network.index();
             app.state = AppState::ChainSelect;
@@ -4204,10 +4204,10 @@ mod tests {
         assert!(is_copy_key(&KeyCode::Char('C')));
 
         assert!(is_refresh_key(&KeyCode::Char('b')));
+        assert!(is_refresh_key(&KeyCode::Char('B')));
         assert!(is_refresh_key(&KeyCode::Char('r')));
         assert!(is_refresh_key(&KeyCode::F(5)));
-        assert!(!is_refresh_key(&KeyCode::Char('B')));
-        assert!(!is_refresh_key(&KeyCode::Char('R')));
+        assert!(is_refresh_key(&KeyCode::Char('R')));
 
         let mut app = App::new().unwrap();
         app.network = NetworkSelection::Signet;

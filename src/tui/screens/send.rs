@@ -17,8 +17,15 @@ use crate::tui::components::{TextArea, TextInput};
 use crate::tui::state::{NetworkSelection, SendFormField, SendState};
 use crate::tui::COPY_KEY_LABEL;
 
-fn parse_u32_or_zero(value: &str) -> u32 {
-    value.trim().parse::<u32>().unwrap_or_default()
+fn parse_u32(value: &str) -> Result<u32, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(0);
+    }
+
+    trimmed
+        .parse::<u32>()
+        .map_err(|_| format!("{} is not a valid number", value))
 }
 
 /// Script type for Taproot spending conditions
@@ -168,13 +175,13 @@ impl ScriptConfig {
     }
 
     /// Get effective block count based on mode
-    pub fn get_effective_blocks(&self) -> u32 {
+    pub fn get_effective_blocks(&self) -> Result<u32, String> {
         match self.timelock_mode {
-            TimelockMode::Blocks => parse_u32_or_zero(self.timelock_blocks.value()),
+            TimelockMode::Blocks => parse_u32(self.timelock_blocks.value()),
             TimelockMode::Time => {
-                let hours = parse_u32_or_zero(self.timelock_hours.value());
-                let days = parse_u32_or_zero(self.timelock_days.value());
-                Self::hours_to_blocks(hours) + Self::days_to_blocks(days)
+                let hours = parse_u32(self.timelock_hours.value())?;
+                let days = parse_u32(self.timelock_days.value())?;
+                Ok(Self::hours_to_blocks(hours) + Self::days_to_blocks(days))
             }
         }
     }
@@ -1484,19 +1491,28 @@ fn render_configure_script(frame: &mut Frame, form: &SendFormData, area: Rect) {
                         ),
                     ]));
                     // Show calculated blocks
-                    let total_blocks = form.script_config.get_effective_blocks();
                     lines.push(Line::from(""));
-                    lines.push(Line::from(vec![
-                        Span::styled("   = ", Style::default().fg(Color::Gray)),
-                        Span::styled(
-                            format!("{} blocks", total_blocks),
-                            Style::default().fg(Color::Green),
-                        ),
-                        Span::styled(
-                            format!(" (≈{:.1} hours)", total_blocks as f64 / 6.0),
-                            Style::default().fg(Color::DarkGray),
-                        ),
-                    ]));
+                    match form.script_config.get_effective_blocks() {
+                        Ok(total_blocks) => {
+                            lines.push(Line::from(vec![
+                                Span::styled("   = ", Style::default().fg(Color::Gray)),
+                                Span::styled(
+                                    format!("{} blocks", total_blocks),
+                                    Style::default().fg(Color::Green),
+                                ),
+                                Span::styled(
+                                    format!(" (≈{:.1} hours)", total_blocks as f64 / 6.0),
+                                    Style::default().fg(Color::DarkGray),
+                                ),
+                            ]));
+                        }
+                        Err(error) => {
+                            lines.push(Line::from(vec![Span::styled(
+                                format!("   {}", error),
+                                Style::default().fg(Color::Red),
+                            )]));
+                        }
+                    }
                 }
             }
 
@@ -2960,5 +2976,29 @@ mod tests {
 
         assert_eq!(form.estimated_fee, 0);
         assert_eq!(form.utxos_needed, 0);
+    }
+
+    #[test]
+    fn script_config_get_effective_blocks_allows_numeric_timelock_values() {
+        let mut config = ScriptConfig::new();
+        config.timelock_mode = TimelockMode::Blocks;
+        config.timelock_blocks.set_value("144");
+
+        assert_eq!(config.get_effective_blocks().unwrap(), 144);
+
+        config.timelock_mode = TimelockMode::Time;
+        config.timelock_days.set_value("1");
+        config.timelock_hours.set_value("2");
+
+        assert_eq!(config.get_effective_blocks().unwrap(), 156);
+    }
+
+    #[test]
+    fn script_config_get_effective_blocks_rejects_invalid_timelock_values() {
+        let mut config = ScriptConfig::new();
+        config.timelock_mode = TimelockMode::Blocks;
+        config.timelock_blocks.set_value("bad");
+
+        assert!(config.get_effective_blocks().is_err());
     }
 }
