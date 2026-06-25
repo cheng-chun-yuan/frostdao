@@ -43,6 +43,7 @@ use frostdao::storage::{FileStorage, Storage};
 
 pub(crate) const COPY_KEY_LABEL: &str = "c/C";
 pub(crate) const REFRESH_KEY_LABEL: &str = "b/r/F5";
+const HELP_KEY_LABEL: &str = "F1/?";
 
 /// Run the terminal UI
 pub fn run_tui() -> Result<()> {
@@ -78,8 +79,11 @@ fn is_copy_key(code: &KeyCode) -> bool {
 }
 
 fn is_refresh_key(code: &KeyCode) -> bool {
-    (matches!(code, KeyCode::Char(c) if c.eq_ignore_ascii_case(&'b') || c.eq_ignore_ascii_case(&'r')))
-        || matches!(code, KeyCode::F(5))
+    (matches!(code, KeyCode::Char(c) if c == &'b' || c == &'r')) || matches!(code, KeyCode::F(5))
+}
+
+fn is_help_key(code: &KeyCode) -> bool {
+    matches!(code, KeyCode::F(1)) || is_shortcut_key(code, '?')
 }
 
 fn is_shortcut_key(code: &KeyCode, target: char) -> bool {
@@ -92,13 +96,13 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut A
 
         if let Event::Key(key) = event::read()? {
             if key.kind == KeyEventKind::Press {
-                if key.code == KeyCode::F(1) {
+                if is_help_key(&key.code) {
                     app.show_global_help = true;
                     continue;
                 }
 
                 if app.show_global_help {
-                    if matches!(key.code, KeyCode::Esc | KeyCode::F(1)) {
+                    if matches!(key.code, KeyCode::Esc) || is_help_key(&key.code) {
                         app.show_global_help = false;
                     }
                     continue;
@@ -148,7 +152,7 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
             }
         }
         code if is_refresh_key(&code) => app.refresh_balance(),
-        code if is_shortcut_key(&code, 'r') => app.reload_wallets(),
+        KeyCode::Char('R') => app.reload_wallets(),
         code if is_shortcut_key(&code, 'n') => {
             app.chain_selector_index = app.network.index();
             app.state = AppState::ChainSelect;
@@ -349,27 +353,35 @@ fn initialize_agent_payment_policy(app: &mut App) {
     let agent_label = app.policy_preview_form.agent_label.value().trim();
     let agent_xonly_pubkey = app.policy_preview_form.agent_pubkey.value().trim();
     let recipient = app.policy_preview_form.recipient.value().trim();
-    let amount_sats = app
-        .policy_preview_form
-        .amount_sats
-        .value()
-        .trim()
-        .parse::<u64>()
-        .unwrap_or(0);
-    let daily_limit_sats = app
-        .policy_preview_form
-        .daily_limit_sats
-        .value()
-        .trim()
-        .parse::<u64>()
-        .unwrap_or(0);
-    let agent_index = app
-        .policy_preview_form
-        .agent_index
-        .value()
-        .trim()
-        .parse::<u32>()
-        .unwrap_or(0);
+    let amount_sats =
+        match parse_policy_u64(app.policy_preview_form.amount_sats.value(), "Amount sats") {
+            Ok(amount) => amount,
+            Err(err) => {
+                app.policy_preview_form.output.clear();
+                app.policy_preview_form.error = Some(err);
+                return;
+            }
+        };
+    let daily_limit_sats = match parse_policy_u64(
+        app.policy_preview_form.daily_limit_sats.value(),
+        "Daily limit sats",
+    ) {
+        Ok(amount) => amount,
+        Err(err) => {
+            app.policy_preview_form.output.clear();
+            app.policy_preview_form.error = Some(err);
+            return;
+        }
+    };
+    let agent_index =
+        match parse_policy_u32(app.policy_preview_form.agent_index.value(), "Agent index") {
+            Ok(agent_index) => agent_index,
+            Err(err) => {
+                app.policy_preview_form.output.clear();
+                app.policy_preview_form.error = Some(err);
+                return;
+            }
+        };
 
     if agent_label.is_empty() {
         app.policy_preview_form.output.clear();
@@ -918,8 +930,10 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
                     }
                 } else {
                     // TSS: Use threshold and n_parties inputs
-                    let n = match parse_keygen_u32(app.keygen_form.n_parties.value(), "Number of parties")
-                    {
+                    let n = match parse_keygen_u32(
+                        app.keygen_form.n_parties.value(),
+                        "Number of parties",
+                    ) {
                         Ok(value) => value,
                         Err(e) => {
                             app.keygen_form.error_message = Some(e);
@@ -1188,6 +1202,22 @@ fn parse_keygen_u32(value: &str, field_name: &'static str) -> Result<u32, String
     trimmed
         .parse::<u32>()
         .map_err(|_| format!("{field_name} must be a number"))
+}
+
+#[cfg(feature = "miniscript-policy")]
+fn parse_policy_u64(value: &str, field_name: &'static str) -> Result<u64, String> {
+    value
+        .trim()
+        .parse::<u64>()
+        .map_err(|_| format!("{field_name} must be a valid integer"))
+}
+
+#[cfg(feature = "miniscript-policy")]
+fn parse_policy_u32(value: &str, field_name: &'static str) -> Result<u32, String> {
+    value
+        .trim()
+        .parse::<u32>()
+        .map_err(|_| format!("{field_name} must be a valid integer"))
 }
 
 fn parse_send_amount(value: &str) -> Result<u64, String> {
@@ -1534,9 +1564,21 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
 
                                         // Extract party index from scalar (big-endian, last 4 bytes)
                                         let index_bytes = paired_share.index().to_bytes();
-                                        let my_old_index = u32::from_be_bytes(
-                                            index_bytes[28..32].try_into().unwrap(),
-                                        );
+                                        let my_old_index = match index_bytes.get(28..32) {
+                                            Some(index_bytes) => u32::from_be_bytes([
+                                                index_bytes[0],
+                                                index_bytes[1],
+                                                index_bytes[2],
+                                                index_bytes[3],
+                                            ]),
+                                            None => {
+                                                app.reshare_form.error_message = Some(
+                                                    "Invalid paired secret share index size"
+                                                        .to_string(),
+                                                );
+                                                return;
+                                            }
+                                        };
 
                                         match reshare::reshare_round1_core(
                                             &wallet_name,
@@ -1649,14 +1691,14 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
                         return;
                     }
                 };
-                let my_rank = match parse_reshare_u32(app.reshare_form.my_rank.value(), "My rank", true)
-                {
-                    Ok(value) => value,
-                    Err(e) => {
-                        app.reshare_form.error_message = Some(e);
-                        return;
-                    }
-                };
+                let my_rank =
+                    match parse_reshare_u32(app.reshare_form.my_rank.value(), "My rank", true) {
+                        Ok(value) => value,
+                        Err(e) => {
+                            app.reshare_form.error_message = Some(e);
+                            return;
+                        }
+                    };
                 let hierarchical = app.reshare_form.hierarchical;
                 let data = app.reshare_form.finalize_input.content();
 
@@ -3608,7 +3650,7 @@ fn render_global_help_overlay(frame: &mut Frame, app: &App) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title("FrostDAO Help (F1, Esc)"),
+                .title(format!("FrostDAO Help ({HELP_KEY_LABEL}, Esc)")),
         )
         .wrap(ratatui::widgets::Wrap { trim: true });
 
@@ -3663,13 +3705,13 @@ fn global_help_lines(app: &App) -> Vec<Line<'static>> {
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         )),
-        Line::from("F1:Show help | Esc:Close | q:Quit (Home only)"),
+        Line::from(format!("{HELP_KEY_LABEL}:Show help | Esc:Close | q:Quit (Home only)")),
         Line::from(""),
         Line::from("Home"),
         Line::from(format!(
             "j/k/↑/↓:Navigate | Enter:Select | g:New wallet | n:Network | h:Reshare | s:Send{home_policy_line}"
         )),
-        format!("o:Nostr (or N) | a:Address list | m:Mnemonic backup | {copy}:Copy address").into(),
+        format!("o:Nostr | a:Address list | m:Mnemonic backup | {copy}:Copy address").into(),
         format!("{refresh} (Refresh):Refresh balances | R:Reload wallets").into(),
         Line::from(""),
         Line::from("Wallet Details"),
@@ -3903,18 +3945,20 @@ fn home_help_bar_text() -> String {
     #[cfg(feature = "miniscript-policy")]
     {
         format!(
-            "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | {0} (Refresh):Balance | {1}:Copy | q:Quit | F1:Help",
+            "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | p:Policy | {0} (Refresh):Balance | {1}:Copy | q:Quit | {2}:Help",
             REFRESH_KEY_LABEL,
-            COPY_KEY_LABEL
+            COPY_KEY_LABEL,
+            HELP_KEY_LABEL
         )
         .to_string()
     }
     #[cfg(not(feature = "miniscript-policy"))]
     {
         format!(
-            "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr (or N) | {0} (Refresh):Balance | {1}:Copy | q:Quit | F1:Help",
+            "j/k/↑/↓:Navigate | Enter:Select | g:New | n:Network | o:Nostr | {0} (Refresh):Balance | {1}:Copy | q:Quit | {2}:Help",
             REFRESH_KEY_LABEL,
-            COPY_KEY_LABEL
+            COPY_KEY_LABEL,
+            HELP_KEY_LABEL
         )
         .to_string()
     }
@@ -3930,6 +3974,30 @@ mod tests {
     use frostdao::protocol::keygen::WalletSummary;
     use serial_test::serial;
     use std::collections::BTreeMap;
+    use std::path::PathBuf;
+
+    struct CwdTestGuard {
+        original_dir: PathBuf,
+        cleanup_dir: PathBuf,
+    }
+
+    impl CwdTestGuard {
+        fn with_temp_dir(temp_dir: &std::path::Path) -> Self {
+            let original_dir = std::env::current_dir().unwrap();
+            std::env::set_current_dir(temp_dir).unwrap();
+            Self {
+                original_dir,
+                cleanup_dir: temp_dir.to_path_buf(),
+            }
+        }
+    }
+
+    impl Drop for CwdTestGuard {
+        fn drop(&mut self) {
+            let _ = std::env::set_current_dir(&self.original_dir);
+            let _ = std::fs::remove_dir_all(self.cleanup_dir.join(".frost_state"));
+        }
+    }
 
     fn line_to_string(line: &Line<'_>) -> String {
         line.spans
@@ -4040,6 +4108,7 @@ mod tests {
         assert!(help.contains("b/r/F5 (Refresh):Balance"));
         assert!(help.contains("Enter:Select"));
         assert!(help.contains("c/C:Copy"));
+        assert!(help.contains("F1/?"));
         assert!(!help.contains("r:Balance"));
     }
 
@@ -4135,10 +4204,10 @@ mod tests {
         assert!(is_copy_key(&KeyCode::Char('C')));
 
         assert!(is_refresh_key(&KeyCode::Char('b')));
-        assert!(is_refresh_key(&KeyCode::Char('B')));
         assert!(is_refresh_key(&KeyCode::Char('r')));
-        assert!(is_refresh_key(&KeyCode::Char('R')));
         assert!(is_refresh_key(&KeyCode::F(5)));
+        assert!(!is_refresh_key(&KeyCode::Char('B')));
+        assert!(!is_refresh_key(&KeyCode::Char('R')));
 
         let mut app = App::new().unwrap();
         app.network = NetworkSelection::Signet;
@@ -4147,6 +4216,14 @@ mod tests {
         handle_home_keys(&mut app, KeyCode::Char('N'));
         assert!(matches!(app.state, AppState::ChainSelect));
         assert_eq!(app.chain_selector_index, NetworkSelection::Signet.index());
+
+        app.state = AppState::Home;
+        handle_home_keys(&mut app, KeyCode::Char('o'));
+        assert!(matches!(app.state, AppState::NostrRoom));
+
+        app.state = AppState::Home;
+        handle_home_keys(&mut app, KeyCode::Char('O'));
+        assert!(matches!(app.state, AppState::NostrRoom));
 
         app.network = NetworkSelection::Mainnet;
         app.state = AppState::WalletDetails(WalletDetailsState {
@@ -4174,6 +4251,30 @@ mod tests {
         assert!(is_shortcut_key(&KeyCode::Char('Y'), 'y'));
         assert!(is_shortcut_key(&KeyCode::Char('y'), 'Y'));
         assert!(!is_shortcut_key(&KeyCode::Char('2'), 'y'));
+
+        assert!(is_help_key(&KeyCode::F(1)));
+        assert!(is_help_key(&KeyCode::Char('?')));
+        assert!(!is_help_key(&KeyCode::Char('/')));
+    }
+
+    #[test]
+    #[serial]
+    fn home_reload_key_is_case_sensitive_and_independent() {
+        let mut app = App::new().unwrap();
+        app.wallets = vec![wallet_summary_testnet_only("treasury")];
+        app.wallet_list_state.select(Some(0));
+        app.state = AppState::Home;
+        app.network = NetworkSelection::Testnet3;
+
+        handle_home_keys(&mut app, KeyCode::Char('R'));
+        assert_eq!(app.message.as_deref(), Some("Wallet list refreshed"));
+
+        app.wallets = vec![wallet_summary_testnet_only("treasury")];
+        app.wallet_list_state.select(Some(0));
+        app.message = None;
+        handle_home_keys(&mut app, KeyCode::Char('r'));
+        assert!(app.message.as_deref().is_some());
+        assert_ne!(app.message.as_deref(), Some("Wallet list refreshed"));
     }
 
     #[test]
@@ -4320,12 +4421,11 @@ mod tests {
     #[test]
     #[serial]
     fn address_list_uppercase_add_remove_triggers_same_paths() {
-        let original_dir = std::env::current_dir().unwrap();
         let temp_dir =
             std::env::temp_dir().join(format!("frostdao-test-address-list-{}", std::process::id()));
 
         std::fs::create_dir_all(&temp_dir).unwrap();
-        std::env::set_current_dir(&temp_dir).unwrap();
+        let _cwd_guard = CwdTestGuard::with_temp_dir(&temp_dir);
 
         let mut app = App::new().unwrap();
         app.state = AppState::AddressList(AddressListState {
@@ -4351,9 +4451,6 @@ mod tests {
             .as_deref()
             .unwrap_or("")
             .starts_with("Error removing address"));
-
-        std::env::set_current_dir(original_dir).unwrap();
-        let _ = std::fs::remove_dir_all(temp_dir.join(".frost_state"));
     }
 
     #[test]
@@ -4531,7 +4628,7 @@ mod tests {
     fn global_help_overlay_lists_network_and_core_actions() {
         let app = App::new().unwrap();
         let rendered = lines_to_string(&global_help_lines(&app));
-        assert!(rendered.contains("Networks supported"));
+        assert!(rendered.contains("F1/?"));
         assert!(rendered.contains("Networks supported"));
         assert!(rendered.contains("Testnet4/Testnet3/Signet"));
         assert!(rendered.contains("FROSTDAO_REGTEST_MEMPOOL_API"));
@@ -4982,7 +5079,9 @@ mod tests {
         app.state = AppState::Reshare(ReshareState::FinalizeInput);
         app.reshare_form.target_name.set_value("wallet-b");
         app.reshare_form.my_new_index.set_value("abc");
-        app.reshare_form.finalize_input.set_content("{\"round1\":\"payload\"}");
+        app.reshare_form
+            .finalize_input
+            .set_content("{\"round1\":\"payload\"}");
 
         handle_reshare_keys(&mut app, enter_key());
 
@@ -4999,10 +5098,13 @@ mod tests {
     #[test]
     fn reshare_finalize_rejects_without_source_wallet() {
         let mut app = App::new().unwrap();
+        app.wallets = Vec::new();
         app.state = AppState::Reshare(ReshareState::FinalizeInput);
         app.reshare_form.target_name.set_value("wallet-b");
         app.reshare_form.my_new_index.set_value("1");
-        app.reshare_form.finalize_input.set_content("{\"round1\":\"payload\"}");
+        app.reshare_form
+            .finalize_input
+            .set_content("{\"round1\":\"payload\"}");
 
         handle_reshare_keys(&mut app, enter_key());
 
@@ -6346,5 +6448,20 @@ mod tests {
             .contains("Cannot fetch UTXOs on Regtest"));
 
         std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
+    }
+
+    #[test]
+    fn parse_send_amount_rejects_non_numeric_or_zero_values() {
+        assert!(parse_send_amount("0").is_err());
+        assert!(parse_send_amount("abc").is_err());
+        assert_eq!(parse_send_amount("12000").unwrap(), 12_000);
+    }
+
+    #[cfg(feature = "miniscript-policy")]
+    #[test]
+    fn parse_policy_helpers_reject_invalid_numeric_values() {
+        assert!(parse_policy_u64("", "Amount sats").is_err());
+        assert!(parse_policy_u64("abc", "Amount sats").is_err());
+        assert_eq!(parse_policy_u32("7", "Agent index").unwrap(), 7);
     }
 }

@@ -7,6 +7,7 @@ This is the maintained keyboard convention for FrostDAO TUI.
 | Key | Meaning |
 |-----|---------|
 | `F1` | Open/close global help |
+| `?` | Open/close global help (alias for `F1`) |
 | `Esc` | Back, cancel, close popup, or leave current flow |
 | `Enter` | Primary action, continue, confirm, compile, generate, or complete |
 | `↑/↓` | Move selection |
@@ -19,6 +20,7 @@ This is the maintained keyboard convention for FrostDAO TUI.
 
 Prefer lowercase shortcuts in help text.
 Core command shortcuts are case-insensitive (for example, `c` and `C` are treated the same).
+`R` (wallet reload) is intentionally case-sensitive to keep it distinct from refresh (`r`).
 
 ## Home
 
@@ -38,8 +40,6 @@ Core command shortcuts are case-insensitive (for example, `c` and `C` are treate
 | `b` / `r` / `F5` | Refresh selected wallet balance |
 | `R` | Reload wallet list |
 | `q` | Quit |
-
-`N` still opens the Nostr room as a legacy alias, but visible help uses `o`.
 
 ## Wallet Details
 
@@ -326,7 +326,7 @@ Every Nostr keygen phase keeps room ID, party index, threshold, scheme, rank, an
 | `r` | Publish a proposal rejection or retry where shown |
 | `Esc` | Back/cancel |
 
-The configure and review screens show the source path and source address. Send review also shows the child x-only pubkey fingerprint for HD sources. If the proposer selected an HD-derived source, the Nostr proposal uses that same derived path; consent only after every signer sees the same source path, source address, destination, amount, and fingerprint. The review help bar repeats that `y` means consent only after every signer matches the review. Global F1 help uses the same consent-after-review-match wording.
+The configure and review screens show the source path and source address. Send review also shows the child x-only pubkey fingerprint for HD sources. If the proposer selected an HD-derived source, the Nostr proposal uses that same derived path; consent only after every signer sees the same source path, source address, destination, amount, and fingerprint. The review help bar repeats that `y` means consent only after every signer matches the review. Global F1/? help uses the same consent-after-review-match wording.
 After consent, the waiting state tells the signer to keep the room open until threshold consent lets parties exchange encrypted nonces and signature shares. Pressing `Enter` there only polls the room; it does not start signing before threshold consent.
 Regtest Nostr proposals require `FROSTDAO_REGTEST_MEMPOOL_API`; without it, the configure screen blocks publishing and shows the missing setting.
 Every Nostr signing phase keeps room ID, party index, threshold, scheme, rank,

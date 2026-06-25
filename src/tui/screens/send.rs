@@ -17,6 +17,10 @@ use crate::tui::components::{TextArea, TextInput};
 use crate::tui::state::{NetworkSelection, SendFormField, SendState};
 use crate::tui::COPY_KEY_LABEL;
 
+fn parse_u32_or_zero(value: &str) -> u32 {
+    value.trim().parse::<u32>().unwrap_or_default()
+}
+
 /// Script type for Taproot spending conditions
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum ScriptType {
@@ -166,10 +170,10 @@ impl ScriptConfig {
     /// Get effective block count based on mode
     pub fn get_effective_blocks(&self) -> u32 {
         match self.timelock_mode {
-            TimelockMode::Blocks => self.timelock_blocks.value().parse().unwrap_or(0),
+            TimelockMode::Blocks => parse_u32_or_zero(self.timelock_blocks.value()),
             TimelockMode::Time => {
-                let hours: u32 = self.timelock_hours.value().parse().unwrap_or(0);
-                let days: u32 = self.timelock_days.value().parse().unwrap_or(0);
+                let hours = parse_u32_or_zero(self.timelock_hours.value());
+                let days = parse_u32_or_zero(self.timelock_days.value());
                 Self::hours_to_blocks(hours) + Self::days_to_blocks(days)
             }
         }
@@ -288,7 +292,14 @@ impl SendFormData {
 
     /// Estimate fee for the current amount using coin selection
     pub fn estimate_fee(&mut self) {
-        let amount: u64 = self.amount.value().parse().unwrap_or(0);
+        let amount = match crate::tui::parse_send_amount(self.amount.value()) {
+            Ok(value) => value,
+            Err(_) => {
+                self.estimated_fee = 0;
+                self.utxos_needed = 0;
+                return;
+            }
+        };
         if amount == 0 {
             self.estimated_fee = 0;
             self.utxos_needed = 0;
@@ -326,10 +337,10 @@ impl SendFormData {
     #[allow(dead_code)]
     pub fn generate_session_id() -> String {
         use std::time::{SystemTime, UNIX_EPOCH};
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis();
+        let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
+            Ok(duration) => duration.as_millis(),
+            Err(_) => 0,
+        };
         format!("local_{}", timestamp)
     }
 
@@ -1696,7 +1707,10 @@ fn render_enter_details(frame: &mut Frame, app: &App, form: &SendFormData, area:
         .map(|u| u.value)
         .sum();
 
-    let amount: u64 = form.amount.value().parse().unwrap_or(0);
+    let (amount, amount_error) = match crate::tui::parse_send_amount(form.amount.value()) {
+        Ok(amount) => (amount, None),
+        Err(error) => (0, Some(error)),
+    };
     let total_needed = amount + form.estimated_fee;
 
     let mut balance_lines = vec![Line::from(vec![
@@ -1710,6 +1724,12 @@ fn render_enter_details(frame: &mut Frame, app: &App, form: &SendFormData, area:
             Style::default().fg(Color::DarkGray),
         ),
     ])];
+    if let Some(error) = amount_error {
+        balance_lines.push(Line::from(vec![
+            Span::styled("Amount input: ", Style::default().fg(Color::Gray)),
+            Span::styled(error, Style::default().fg(Color::Yellow)),
+        ]));
+    }
 
     if form.estimated_fee > 0 {
         balance_lines.push(Line::from(vec![
@@ -1812,7 +1832,10 @@ fn render_review_transaction(
         ])
         .split(inner);
 
-    let amount: u64 = form.amount.value().parse().unwrap_or(0);
+    let (amount, amount_error) = match crate::tui::parse_send_amount(form.amount.value()) {
+        Ok(amount) => (amount, None),
+        Err(error) => (0, Some(error)),
+    };
     let confirmed_balance: u64 = form
         .utxos
         .iter()
@@ -1877,6 +1900,13 @@ fn render_review_transaction(
             Span::styled(control_statement, Style::default().fg(Color::Green)),
         ]),
     ];
+
+    if let Some(error) = amount_error {
+        lines.push(Line::from(vec![
+            Span::styled("Amount input: ", Style::default().fg(Color::Gray)),
+            Span::styled(error, Style::default().fg(Color::Red)),
+        ]));
+    }
 
     if let Some(proof) = control_proof {
         lines.push(Line::from(vec![
@@ -2898,5 +2928,37 @@ mod tests {
 
         assert!(rendered.contains("No HD-derived addresses on Signet"));
         assert!(rendered.contains("use root source or add an address first"));
+    }
+
+    #[test]
+    fn send_estimate_fee_rejects_invalid_amount_input() {
+        let mut form = SendFormData::new();
+        form.amount.set_value("abc");
+        form.utxos.push(UtxoDisplay {
+            txid: "txid".to_string(),
+            vout: 0,
+            value: 10_000,
+            confirmed: true,
+        });
+        form.estimate_fee();
+
+        assert_eq!(form.estimated_fee, 0);
+        assert_eq!(form.utxos_needed, 0);
+    }
+
+    #[test]
+    fn send_estimate_fee_rejects_zero_amount() {
+        let mut form = SendFormData::new();
+        form.amount.set_value("0");
+        form.utxos.push(UtxoDisplay {
+            txid: "txid".to_string(),
+            vout: 0,
+            value: 10_000,
+            confirmed: true,
+        });
+        form.estimate_fee();
+
+        assert_eq!(form.estimated_fee, 0);
+        assert_eq!(form.utxos_needed, 0);
     }
 }

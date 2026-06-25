@@ -199,7 +199,7 @@ pub struct App {
     /// Status message
     pub message: Option<String>,
 
-    /// Show global help overlay (F1).
+    /// Show global help overlay (F1/?).
     pub show_global_help: bool,
 
     /// Loading state
