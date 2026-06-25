@@ -29,7 +29,6 @@ use ratatui::{
     Frame, Terminal,
 };
 use std::io;
-#[cfg(feature = "miniscript-policy")]
 use std::str::FromStr;
 
 use app::App;
@@ -1943,9 +1942,8 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 let to_addr = app.send_form.to_address.value().to_string();
                 let amount: u64 = app.send_form.amount.value().parse().unwrap_or(0);
 
-                if to_addr.is_empty() {
-                    app.send_form.error_message =
-                        Some(send_missing_destination_message(app.network));
+                if let Some(error) = send_recipient_network_error(&to_addr, app.network) {
+                    app.send_form.error_message = Some(error);
                     return;
                 }
                 if amount == 0 {
@@ -2505,6 +2503,30 @@ fn send_missing_destination_message(network: state::NetworkSelection) -> String 
 
 fn send_invalid_amount_message() -> String {
     "Enter an amount in sats greater than 0 before preparing review".to_string()
+}
+
+fn send_recipient_network_error(
+    recipient: &str,
+    network: state::NetworkSelection,
+) -> Option<String> {
+    let trimmed = recipient.trim();
+    if trimmed.is_empty() {
+        return Some(send_missing_destination_message(network));
+    }
+
+    match bitcoin::Address::from_str(trimmed) {
+        Ok(address) => address
+            .require_network(network.to_bitcoin_network())
+            .map(|_| None)
+            .unwrap_or_else(|err| {
+                Some(format!(
+                    "Recipient address is invalid for {}: {}",
+                    network.display_name(),
+                    err
+                ))
+            }),
+        Err(err) => Some(format!("Invalid recipient address: {}", err)),
+    }
 }
 
 fn normalize_mnemonic_party_selection(state: &mut MnemonicState) {
@@ -3685,6 +3707,8 @@ fn home_help_bar_text() -> String {
 mod tests {
     use super::*;
     use crate::tui::state::{NetworkSelection, TxProposal};
+    use bitcoin::secp256k1::{Keypair, Secp256k1, SecretKey};
+    use bitcoin::{Address, Network, XOnlyPublicKey};
     use crossterm::event::KeyModifiers;
     use frostdao::protocol::keygen::WalletSummary;
     use serial_test::serial;
@@ -3750,6 +3774,14 @@ mod tests {
             }],
         };
         bitcoin::consensus::encode::serialize_hex(&tx)
+    }
+
+    fn valid_recipient_address(network: Network) -> String {
+        let secp = Secp256k1::new();
+        let secret_key = SecretKey::from_slice(&[1u8; 32]).unwrap();
+        let keypair = Keypair::from_secret_key(&secp, &secret_key);
+        let (xonly_pubkey, _) = XOnlyPublicKey::from_keypair(&keypair);
+        Address::p2tr(&secp, xonly_pubkey, None, network).to_string()
     }
 
     fn wallet_summary_no_address(name: &str) -> WalletSummary {
@@ -5348,7 +5380,9 @@ mod tests {
         app.state = AppState::Send(SendState::EnterDetails {
             wallet_name: "wallet-test".to_string(),
         });
-        app.send_form.to_address.set_value("tb1qrecipient");
+        app.send_form
+            .to_address
+            .set_value(&valid_recipient_address(app.network.to_bitcoin_network()));
         app.send_form.amount.set_value("1000");
         app.send_form.threshold = 1;
         app.send_form.total_parties = 1;
@@ -5391,6 +5425,39 @@ mod tests {
         let message = app.send_form.error_message.as_deref().unwrap_or("");
         assert!(message.contains("recipient address valid for Signet"));
         assert!(message.contains("before preparing review"));
+    }
+
+    #[test]
+    fn send_enter_details_rejects_wrong_network_recipient_before_review() {
+        let mut app = app_ready_to_prepare_send();
+        app.network = NetworkSelection::Signet;
+        app.send_form
+            .to_address
+            .set_value(&valid_recipient_address(Network::Bitcoin));
+
+        handle_send_keys(&mut app, enter_key());
+
+        assert!(matches!(
+            app.state,
+            AppState::Send(SendState::EnterDetails { .. })
+        ));
+        let message = app.send_form.error_message.as_deref().unwrap_or("");
+        assert!(message.contains("Recipient address is invalid for Signet"));
+    }
+
+    #[test]
+    fn send_enter_details_rejects_malformed_recipient_before_review() {
+        let mut app = app_ready_to_prepare_send();
+        app.send_form.to_address.set_value("tb1qrecipient");
+
+        handle_send_keys(&mut app, enter_key());
+
+        assert!(matches!(
+            app.state,
+            AppState::Send(SendState::EnterDetails { .. })
+        ));
+        let message = app.send_form.error_message.as_deref().unwrap_or("");
+        assert!(message.contains("Invalid recipient address"));
     }
 
     #[test]
