@@ -249,6 +249,7 @@ After writing the words down, verify them with `frostdao dkg-verify-mnemonic --n
 | Send signature share | `c` / `C` copies JSON |
 | Send complete | `c` / `C` copies TXID |
 | Address list | `c` / `C` copies selected address |
+| Nostr room configure/waiting/ready | `c` / `C` copies room config |
 | Miniscript agent payment draft | `c` / `C` copies initialized JSON draft |
 
 Send artifact boundaries:
@@ -281,11 +282,14 @@ The policy input remains editable. Use the templates as starting points, then ty
 |-------|-----|--------|
 | Configure | `Tab` | Next field |
 | Configure | `Enter` | Join room |
+| Configure | `c` / `C` | Copy room config |
 | Configure | `Esc` | Back |
 | Waiting | `Space` | Add a local test participant in local simulation mode |
+| Waiting | `c` / `C` | Copy room config |
 | Waiting | `Esc` | Leave room |
 | Ready | `k` | Start local keygen rehearsal; unavailable for relay transport |
 | Ready | `s` | Start distributed signing |
+| Ready | `c` / `C` | Copy room config |
 | Ready | `Esc` | Leave room |
 
 The configure screen labels this as a multi-device signing room. The room info line shows room ID, party index, threshold, scheme, rank, and transport. Current TUI room joins are guarded as `Scheme: TSS` with `Rank: n/a`; the configure screen also labels the current room join shape as TSS-only, so HTSS operators know rank-aware room setup is not exposed in the TUI yet. Room join metadata is public, while signing nonce/share payloads are encrypted. The configure status line shows `Blocked` until the room ID, party index, threshold, and party count form a valid room.

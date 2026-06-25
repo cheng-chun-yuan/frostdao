@@ -363,6 +363,18 @@ impl App {
         None
     }
 
+    pub(crate) fn nostr_room_config_share_text(&self) -> String {
+        format!(
+            "Room ID: {}\nNetwork: {}\nMy Index: {}\nThreshold: {}\nParties: {}\nScheme: TSS\nRank: n/a\nTransport: {}",
+            self.nostr_room_id,
+            self.network.display_name(),
+            self.nostr_my_index,
+            self.nostr_threshold,
+            self.nostr_n_parties,
+            self.nostr_transport_label()
+        )
+    }
+
     /// Build a locally proposed TUI Nostr transaction after validating the draft fields.
     pub fn build_nostr_tx_proposal(&self, wallet_name: &str, timestamp: u64) -> Result<TxProposal> {
         let amount_sats = self.nostr_amount_sats()?;
@@ -4771,5 +4783,25 @@ mod tests {
 
         app.nostr_threshold = 2;
         assert_eq!(app.nostr_room_config_error(), None);
+    }
+
+    #[test]
+    fn nostr_room_config_share_text_includes_required_fields() {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Signet;
+        app.nostr_room_id = "demo-room".to_string();
+        app.nostr_my_index = 2;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 3;
+        let config = app.nostr_room_config_share_text();
+
+        assert!(config.contains("Room ID: demo-room"));
+        assert!(config.contains("Network: Signet"));
+        assert!(config.contains("My Index: 2"));
+        assert!(config.contains("Threshold: 2"));
+        assert!(config.contains("Parties: 3"));
+        assert!(config.contains("Transport: local simulation"));
+        assert!(config.contains("Scheme: TSS"));
+        assert!(config.contains("Rank: n/a"));
     }
 }

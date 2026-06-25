@@ -2915,6 +2915,9 @@ fn handle_nostr_room_configure(app: &mut App, key: KeyEvent) {
         KeyCode::Esc => {
             app.state = AppState::Home;
         }
+        code if is_copy_key(&code) => {
+            copy_nostr_room_config(app);
+        }
         KeyCode::Tab => {
             app.nostr_room_focus = match app.nostr_room_focus {
                 NostrRoomField::RoomId => NostrRoomField::MyIndex,
@@ -3027,6 +3030,9 @@ fn handle_nostr_room_configure(app: &mut App, key: KeyEvent) {
 
 fn handle_nostr_room_waiting(app: &mut App, key: KeyEvent) {
     match key.code {
+        code if is_copy_key(&code) => {
+            copy_nostr_room_config(app);
+        }
         KeyCode::Esc => {
             // Leave room, go back to configure
             app.nostr_room_phase = NostrRoomPhase::Configure;
@@ -3048,6 +3054,9 @@ fn handle_nostr_room_waiting(app: &mut App, key: KeyEvent) {
 
 fn handle_nostr_room_ready(app: &mut App, key: KeyEvent) {
     match key.code {
+        code if is_copy_key(&code) => {
+            copy_nostr_room_config(app);
+        }
         KeyCode::Esc => {
             // Leave room
             app.nostr_room_phase = NostrRoomPhase::Configure;
@@ -3070,6 +3079,20 @@ fn handle_nostr_room_ready(app: &mut App, key: KeyEvent) {
         }
         _ => {}
     }
+}
+
+fn copy_nostr_room_config(app: &mut App) {
+    if app.nostr_room_id.trim().is_empty() {
+        app.set_message("Enter a room ID first");
+        return;
+    }
+
+    let summary = app.nostr_room_config_share_text();
+
+    app.copy_to_clipboard_with_message(
+        &summary,
+        format!("Copied room config for '{}'", app.nostr_room_id),
+    );
 }
 
 fn nostr_relay_keygen_blocked_message() -> &'static str {
@@ -3830,15 +3853,22 @@ fn help_bar_text(app: &App) -> String {
             }
         }
         AppState::NostrRoom => match app.nostr_room_phase {
-            NostrRoomPhase::Configure => "Tab:Next | Enter:Join | Esc:Back".to_string(),
+            NostrRoomPhase::Configure => {
+                format!("Tab:Next | Enter:Join | c:Copy room config | Esc:Back")
+                    .to_string()
+            }
             NostrRoomPhase::WaitingForParticipants => {
-                "Space:Add local test participant | Esc:Leave".to_string()
+                format!(
+                    "Space:Add local test participant | c:Copy room config | Esc:Leave"
+                )
+                .to_string()
             }
             NostrRoomPhase::Ready => {
                 if app.nostr_local_simulation_transport_active() {
-                    "k:Local keygen | s:Sign | Esc:Leave".to_string()
+                    "k:Local keygen | s:Sign | c:Copy room config | Esc:Leave".to_string()
                 } else {
-                    "k:Relay keygen unavailable | s:Sign | Esc:Leave".to_string()
+                    "k:Relay keygen unavailable | s:Sign | c:Copy room config | Esc:Leave"
+                        .to_string()
                 }
             }
         },
@@ -5684,8 +5714,24 @@ mod tests {
 
         assert!(help.contains("Space:Add local test participant"));
         assert!(help.contains("Esc:Leave"));
+        assert!(help.contains("c:Copy room config"));
         assert!(!help.contains("Simulate join"));
         assert!(!help.contains("demo"));
+    }
+
+    #[test]
+    fn nostr_room_help_bar_includes_copy_room_config_in_all_phases() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::NostrRoom;
+        app.nostr_room_id = "shared-room".to_string();
+        app.nostr_room_phase = NostrRoomPhase::Configure;
+        assert!(help_bar_text(&app).contains("c:Copy room config"));
+
+        app.nostr_room_phase = NostrRoomPhase::WaitingForParticipants;
+        assert!(help_bar_text(&app).contains("c:Copy room config"));
+
+        app.nostr_room_phase = NostrRoomPhase::Ready;
+        assert!(help_bar_text(&app).contains("c:Copy room config"));
     }
 
     #[test]
@@ -5735,7 +5781,7 @@ mod tests {
 
         assert_eq!(
             help_bar_text(&app),
-            "k:Relay keygen unavailable | s:Sign | Esc:Leave"
+            "k:Relay keygen unavailable | s:Sign | c:Copy room config | Esc:Leave"
         );
 
         handle_nostr_room_ready(
