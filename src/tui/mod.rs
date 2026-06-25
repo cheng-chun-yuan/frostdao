@@ -3909,23 +3909,26 @@ fn help_bar_text(app: &App) -> String {
                 "Enter:Reveal | Esc:Cancel".to_string()
             }
         }
-        AppState::NostrRoom => match app.nostr_room_phase {
-            NostrRoomPhase::Configure => {
-                "Tab:Next | S:Toggle scheme | Enter:Join | p:Paste room config | c:Copy room config | Esc:Back"
-                    .to_string()
-            }
-            NostrRoomPhase::WaitingForParticipants => {
-                "Space:Add local test participant | c:Copy room config | Esc:Leave".to_string()
-            }
-            NostrRoomPhase::Ready => {
-                if app.nostr_local_simulation_transport_active() {
-                    "k:Local keygen | s:Sign | c:Copy room config | Esc:Leave".to_string()
-                } else {
-                    "k:Relay keygen unavailable | s:Sign | c:Copy room config | Esc:Leave"
-                        .to_string()
+        AppState::NostrRoom => {
+            let copy = COPY_KEY_LABEL;
+            match app.nostr_room_phase {
+                NostrRoomPhase::Configure => format!(
+                    "Tab:Next | S:Toggle scheme | Enter:Join | p:Paste room config | {copy}:Copy room config | Esc:Back"
+                ),
+                NostrRoomPhase::WaitingForParticipants => {
+                    format!("Space:Add local test participant | {copy}:Copy room config | Esc:Leave")
+                }
+                NostrRoomPhase::Ready => {
+                    if app.nostr_local_simulation_transport_active() {
+                        format!("k:Local keygen | s:Sign | {copy}:Copy room config | Esc:Leave")
+                    } else {
+                        format!(
+                            "k:Relay keygen unavailable | s:Sign | {copy}:Copy room config | Esc:Leave"
+                        )
+                    }
                 }
             }
-        },
+        }
         AppState::NostrKeygen => "Enter:Continue | r:Retry | Esc:Cancel".to_string(),
         AppState::NostrSign => screens::nostr_sign_help_text(&app.nostr_sign_state),
         #[cfg(feature = "miniscript-policy")]
@@ -5862,7 +5865,7 @@ mod tests {
 
         assert!(help.contains("Space:Add local test participant"));
         assert!(help.contains("Esc:Leave"));
-        assert!(help.contains("c:Copy room config"));
+        assert!(help.contains("c/C:Copy room config"));
         assert!(!help.contains("Simulate join"));
         assert!(!help.contains("demo"));
     }
@@ -5876,15 +5879,15 @@ mod tests {
         app.nostr_threshold = 2;
         app.nostr_n_parties = 3;
         app.nostr_room_phase = NostrRoomPhase::Configure;
-        assert!(help_bar_text(&app).contains("c:Copy room config"));
+        assert!(help_bar_text(&app).contains("c/C:Copy room config"));
         assert!(help_bar_text(&app).contains("p:Paste room config"));
         assert!(help_bar_text(&app).contains("S:Toggle scheme"));
 
         app.nostr_room_phase = NostrRoomPhase::WaitingForParticipants;
-        assert!(help_bar_text(&app).contains("c:Copy room config"));
+        assert!(help_bar_text(&app).contains("c/C:Copy room config"));
 
         app.nostr_room_phase = NostrRoomPhase::Ready;
-        assert!(help_bar_text(&app).contains("c:Copy room config"));
+        assert!(help_bar_text(&app).contains("c/C:Copy room config"));
     }
 
     #[test]
@@ -5934,7 +5937,7 @@ mod tests {
 
         assert_eq!(
             help_bar_text(&app),
-            "k:Relay keygen unavailable | s:Sign | c:Copy room config | Esc:Leave"
+            "k:Relay keygen unavailable | s:Sign | c/C:Copy room config | Esc:Leave"
         );
 
         handle_nostr_room_ready(
