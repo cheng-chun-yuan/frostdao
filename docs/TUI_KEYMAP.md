@@ -321,6 +321,7 @@ Every Nostr keygen phase keeps room ID, party index, threshold, scheme, rank, an
 | `Esc` | Back/cancel |
 
 The configure and review screens show the source path and source address. Send review also shows the child x-only pubkey fingerprint for HD sources. If the proposer selected an HD-derived source, the Nostr proposal uses that same derived path; consent only after every signer sees the same source path, source address, destination, amount, and fingerprint. The review help bar repeats that `y` means consent only after every signer matches the review. Global F1 help uses the same consent-after-review-match wording.
+After consent, the waiting state tells the signer to keep the room open until threshold consent lets parties exchange encrypted nonces and signature shares.
 Regtest Nostr proposals require `FROSTDAO_REGTEST_MEMPOOL_API`; without it, the configure screen blocks publishing and shows the missing setting.
 Every Nostr signing phase keeps room ID, party index, threshold, scheme, rank,
 and transport visible. Proposal metadata is public; signing nonce/share payloads

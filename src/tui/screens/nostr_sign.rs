@@ -406,13 +406,38 @@ fn nostr_sign_status_lines<'a>(app: &'a App) -> Vec<Line<'a>> {
                 ]),
             ]
         }
-        NostrSignState::ViewProposals { wallet_name }
-        | NostrSignState::WaitingForExecution { wallet_name, .. } => {
+        NostrSignState::ViewProposals { wallet_name } => {
             vec![
                 Line::from(vec![
                     Span::styled("Wallet: ", Style::default().fg(Color::Gray)),
                     Span::styled(wallet_name, Style::default().fg(Color::White)),
                 ]),
+                Line::from(Span::styled(
+                    "Boundary: proposals are public metadata; signing nonce/share payloads are encrypted.",
+                    Style::default().fg(Color::DarkGray),
+                )),
+            ]
+        }
+        NostrSignState::WaitingForExecution {
+            wallet_name,
+            session_id,
+        } => {
+            vec![
+                Line::from(vec![
+                    Span::styled("Wallet: ", Style::default().fg(Color::Gray)),
+                    Span::styled(wallet_name, Style::default().fg(Color::White)),
+                    Span::raw("  "),
+                    Span::styled("Session: ", Style::default().fg(Color::Gray)),
+                    Span::styled(&session_id[..8], Style::default().fg(Color::Cyan)),
+                ]),
+                Line::from(Span::styled(
+                    "Consent sent; keep this room open for proposer execution.",
+                    Style::default().fg(Color::Yellow),
+                )),
+                Line::from(Span::styled(
+                    "Next: after threshold consent, parties exchange encrypted nonces and signature shares.",
+                    Style::default().fg(Color::DarkGray),
+                )),
                 Line::from(Span::styled(
                     "Boundary: proposals are public metadata; signing nonce/share payloads are encrypted.",
                     Style::default().fg(Color::DarkGray),
@@ -1010,6 +1035,9 @@ pub(crate) fn nostr_sign_help_text(state: &NostrSignState) -> String {
         NostrSignState::ReviewProposal { .. } => String::from(
             "y: Consent only after every signer matches review | r: Reject | Esc: Back",
         ),
+        NostrSignState::WaitingForExecution { .. } => String::from(
+            "Consent sent: keep room open for encrypted nonce/share exchange | Esc: Back",
+        ),
         NostrSignState::Combining { .. } => {
             String::from("CLI handoff: combine + broadcast | Esc: Back")
         }
@@ -1163,6 +1191,27 @@ mod tests {
 
         assert!(rendered.contains("proposals are public metadata"));
         assert!(rendered.contains("signing nonce/share payloads are encrypted"));
+    }
+
+    #[test]
+    fn waiting_for_execution_tells_consenter_to_keep_room_open() {
+        let mut app = app_with_room_context();
+        app.nostr_sign_state = NostrSignState::WaitingForExecution {
+            wallet_name: "treasury".to_string(),
+            session_id: "session-a".to_string(),
+        };
+
+        let rendered = lines_to_string(nostr_sign_status_lines(&app));
+        let help = nostr_sign_help_text(&app.nostr_sign_state);
+
+        assert!(rendered.contains("Consent sent"));
+        assert!(rendered.contains("keep this room open"));
+        assert!(rendered.contains("after threshold consent"));
+        assert!(rendered.contains("encrypted nonces and signature shares"));
+        assert!(rendered.contains("Session: session-"));
+        assert!(help.contains("keep room open"));
+        assert!(help.contains("encrypted nonce/share exchange"));
+        assert!(!help.contains("Continue"));
     }
 
     #[test]
