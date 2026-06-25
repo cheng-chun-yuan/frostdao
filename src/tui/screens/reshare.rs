@@ -670,7 +670,10 @@ fn reshare_address_verification_lines(
             Line::from(vec![
                 Span::styled("Address check: ", Style::default().fg(Color::Gray)),
                 Span::styled(
-                    "MISMATCH - stop and inspect wallets",
+                    format!(
+                        "MISMATCH on {} - stop and inspect wallets",
+                        app.network.display_name()
+                    ),
                     Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
                 ),
             ]),
@@ -804,7 +807,7 @@ mod tests {
 
         let rendered = lines_to_string(&reshare_address_verification_lines(&app, &form, "target"));
 
-        assert!(rendered.contains("MISMATCH"));
+        assert!(rendered.contains("MISMATCH on Testnet4"));
         assert!(rendered.contains("tb1psource"));
         assert!(rendered.contains("tb1ptarget"));
     }

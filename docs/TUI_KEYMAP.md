@@ -140,6 +140,7 @@ Reshare boundaries:
 - Local reshare does not leave secret share material on copy; only new local share files are written.
 - Distributed round1 output is party-bound sub-shares; do not mix outputs or paste them into unrelated ceremonies.
 - Reshare should keep wallet key/address continuity; compare source pubkey and root address on all parties before use.
+- The TUI address check reports match, mismatch, or missing-address results on the selected network.
 
 ## Share Recovery
 
