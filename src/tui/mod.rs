@@ -1142,6 +1142,46 @@ fn selected_send_wallet(app: &mut App) -> Option<keygen::WalletSummary> {
     app.wallets.get(app.send_form.wallet_index).cloned()
 }
 
+fn send_signer_params_error(threshold: u32, total_parties: u32) -> Option<String> {
+    if total_parties == 0 {
+        return Some("Wallet signer metadata is invalid: total parties must be at least 1".into());
+    }
+
+    if threshold == 0 || threshold > total_parties {
+        return Some(format!(
+            "Wallet signer metadata is invalid: threshold must be between 1 and {}",
+            total_parties
+        ));
+    }
+
+    None
+}
+
+fn move_send_party_selector(app: &mut App, forward: bool) {
+    let party_count = app.send_form.total_parties as usize;
+    if party_count == 0 || app.send_form.selected_parties.is_empty() {
+        app.send_form.party_selector_index = 0;
+        app.send_form.error_message =
+            Some("Wallet signer metadata is invalid: no parties available".to_string());
+        return;
+    }
+
+    let party_count = party_count.min(app.send_form.selected_parties.len());
+    if app.send_form.party_selector_index >= party_count {
+        app.send_form.party_selector_index = 0;
+    }
+
+    if forward {
+        app.send_form.party_selector_index = (app.send_form.party_selector_index + 1) % party_count;
+    } else if app.send_form.party_selector_index == 0 {
+        app.send_form.party_selector_index = party_count - 1;
+    } else {
+        app.send_form.party_selector_index -= 1;
+    }
+
+    app.send_form.error_message = None;
+}
+
 fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
     use screens::ReshareFormData;
     use state::{ReshareFinalizeField, ReshareFormField, ReshareLocalField, ReshareMode};
@@ -1555,6 +1595,10 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 // Load wallet info for party selection
                 let threshold = wallet.threshold.unwrap_or(2);
                 let total_parties = wallet.total_parties.unwrap_or(3);
+                if let Some(error) = send_signer_params_error(threshold, total_parties) {
+                    app.send_form.error_message = Some(error);
+                    return;
+                }
 
                 // Load my party index from htss_metadata
                 let state_dir = keygen::get_state_dir(&wallet_name);
@@ -1598,15 +1642,10 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 app.state = AppState::Send(SendState::SelectWallet);
             }
             code if code == KeyCode::Up || is_shortcut_key(&code, 'k') => {
-                if app.send_form.party_selector_index > 0 {
-                    app.send_form.party_selector_index -= 1;
-                } else {
-                    app.send_form.party_selector_index = app.send_form.total_parties as usize - 1;
-                }
+                move_send_party_selector(app, false);
             }
             code if code == KeyCode::Down || is_shortcut_key(&code, 'j') => {
-                app.send_form.party_selector_index =
-                    (app.send_form.party_selector_index + 1) % app.send_form.total_parties as usize;
+                move_send_party_selector(app, true);
             }
             KeyCode::Char(' ') => {
                 // Toggle party selection
@@ -4174,6 +4213,47 @@ mod tests {
             app.state,
             AppState::Send(SendState::SelectSigners { ref wallet_name }) if wallet_name == "wallet-a"
         ));
+    }
+
+    #[test]
+    fn send_select_wallet_blocks_invalid_signer_metadata() {
+        let mut wallet = wallet_summary_no_address("wallet-a");
+        wallet.threshold = Some(1);
+        wallet.total_parties = Some(0);
+
+        let mut app = App::new().unwrap();
+        app.wallets = vec![wallet];
+        app.state = AppState::Send(SendState::SelectWallet);
+
+        handle_send_keys(&mut app, enter_key());
+
+        assert!(matches!(app.state, AppState::Send(SendState::SelectWallet)));
+        assert_eq!(
+            app.send_form.error_message.as_deref(),
+            Some("Wallet signer metadata is invalid: total parties must be at least 1")
+        );
+    }
+
+    #[test]
+    fn send_signer_navigation_reports_empty_party_list() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::Send(SendState::SelectSigners {
+            wallet_name: "wallet-a".to_string(),
+        });
+        app.send_form.total_parties = 0;
+        app.send_form.selected_parties.clear();
+        app.send_form.party_selector_index = 4;
+
+        handle_send_keys(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
+        );
+
+        assert_eq!(app.send_form.party_selector_index, 0);
+        assert_eq!(
+            app.send_form.error_message.as_deref(),
+            Some("Wallet signer metadata is invalid: no parties available")
+        );
     }
 
     #[test]
