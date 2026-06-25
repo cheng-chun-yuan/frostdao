@@ -407,6 +407,11 @@ fn qr_popup_lines(address: &str, network_label: &str) -> (Vec<Line<'static>>, us
 
             lines.push(Line::from(""));
             lines.push(Line::from(Span::styled(
+                "Public receive address only; verify network before funding.",
+                Style::default().fg(Color::Yellow),
+            )));
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
                 "Press q or Esc to close",
                 Style::default().fg(Color::DarkGray),
             )));
@@ -522,6 +527,8 @@ mod tests {
 
         assert!(rendered.contains("Network: Regtest"));
         assert!(rendered.contains("bcrt1qexample"));
+        assert!(rendered.contains("Public receive address only"));
+        assert!(rendered.contains("verify network before funding"));
         assert!(rendered.contains("Press q or Esc to close"));
     }
 
