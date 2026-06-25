@@ -577,6 +577,11 @@ pub enum NostrSignState {
         wallet_name: String,
         session_id: String,
     },
+    /// Announce a signed raw transaction to the room
+    AnnounceBroadcast {
+        wallet_name: String,
+        session_id: String,
+    },
     /// Transaction broadcast
     Complete { txid: String },
 }

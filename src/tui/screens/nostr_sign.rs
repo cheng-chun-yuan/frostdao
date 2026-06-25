@@ -42,6 +42,7 @@ pub fn render_nostr_sign(frame: &mut Frame, app: &App, area: Rect) {
         NostrSignState::WaitingForExecution { .. } => "Waiting",
         NostrSignState::CollectingShares { .. } => "Collecting Shares",
         NostrSignState::Combining { .. } => "Combining",
+        NostrSignState::AnnounceBroadcast { .. } => "Announce Broadcast",
         NostrSignState::Complete { .. } => "Complete",
     };
 
@@ -119,6 +120,9 @@ fn get_progress(state: &NostrSignState, app: &App) -> (u16, String) {
         }
         NostrSignState::Combining { .. } => {
             (95, "Waiting for transaction broadcast...".to_string())
+        }
+        NostrSignState::AnnounceBroadcast { .. } => {
+            (96, "Publishing tx_broadcast announcement...".to_string())
         }
         NostrSignState::Complete { txid } => (100, format!("✓ Broadcast: {}...", &txid[..8])),
     }
@@ -387,6 +391,33 @@ fn nostr_sign_status_lines<'a>(app: &'a App) -> Vec<Line<'a>> {
                 )),
             ]
         }
+        NostrSignState::AnnounceBroadcast {
+            wallet_name,
+            session_id,
+        } => {
+            vec![
+                Line::from(vec![
+                    Span::styled("Wallet: ", Style::default().fg(Color::Gray)),
+                    Span::styled(wallet_name, Style::default().fg(Color::White)),
+                    Span::raw("  "),
+                    Span::styled("Session: ", Style::default().fg(Color::Gray)),
+                    Span::styled(&session_id[..8], Style::default().fg(Color::Cyan)),
+                ]),
+                Line::from(""),
+                Line::from(Span::styled(
+                    "Paste the signed raw transaction from CLI/manual broadcast.",
+                    Style::default().fg(Color::Yellow),
+                )),
+                Line::from(Span::styled(
+                    "The TUI recomputes the txid and publishes tx_broadcast only if it matches the selected wallet, session, and network.",
+                    Style::default().fg(Color::Gray),
+                )),
+                Line::from(Span::styled(
+                    "This announces room progress; it is not an on-chain confirmation.",
+                    Style::default().fg(Color::DarkGray),
+                )),
+            ]
+        }
         NostrSignState::Complete { txid } => {
             vec![
                 Line::from(Span::styled(
@@ -544,6 +575,9 @@ fn render_content(frame: &mut Frame, app: &App, area: Rect) {
         NostrSignState::WaitingForExecution { session_id, .. } => {
             render_waiting_execution_progress(frame, app, session_id, area);
         }
+        NostrSignState::AnnounceBroadcast { .. } => {
+            render_broadcast_announcement(frame, app, area);
+        }
         _ => {
             // Empty or default content
             let placeholder = Paragraph::new("").block(
@@ -554,6 +588,35 @@ fn render_content(frame: &mut Frame, app: &App, area: Rect) {
             frame.render_widget(placeholder, area);
         }
     }
+}
+
+fn render_broadcast_announcement(frame: &mut Frame, app: &App, area: Rect) {
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(4)])
+        .split(area);
+
+    app.nostr_broadcast_raw_tx_input
+        .render(frame, rows[0], true);
+
+    let details = Paragraph::new(vec![
+        Line::from(vec![
+            Span::styled("Network: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                app.network.display_name(),
+                Style::default().fg(Color::White),
+            ),
+        ]),
+        Line::from(""),
+        Line::from("Press Enter to publish the room announcement."),
+        Line::from("Press Esc to return to the combine screen."),
+    ])
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title("Announcement Check"),
+    );
+    frame.render_widget(details, rows[1]);
 }
 
 fn render_configure_tx(frame: &mut Frame, app: &App, wallet_name: &str, area: Rect) {
@@ -1086,7 +1149,12 @@ pub(crate) fn nostr_sign_help_text(state: &NostrSignState) -> String {
             "Enter: Poll room | keep room open for encrypted nonce/share exchange | Esc: Back",
         ),
         NostrSignState::Combining { .. } => {
-            format!("{COPY_KEY_LABEL}: Copy dkg-broadcast command | Enter: Poll | Esc: Back")
+            format!(
+                "{COPY_KEY_LABEL}: Copy dkg-broadcast | a: Announce raw tx | Enter: Poll | Esc: Back"
+            )
+        }
+        NostrSignState::AnnounceBroadcast { .. } => {
+            String::from("Paste/type raw tx | Ctrl+u: Clear | Enter: Publish | Esc: Back")
         }
         NostrSignState::Complete { .. } => {
             format!("Enter: Done | {COPY_KEY_LABEL}: Copy TXID")
@@ -1207,6 +1275,10 @@ mod tests {
                 wallet_name: "treasury".to_string(),
                 session_id: "session-a".to_string(),
             },
+            NostrSignState::AnnounceBroadcast {
+                wallet_name: "treasury".to_string(),
+                session_id: "session-a".to_string(),
+            },
             NostrSignState::Complete {
                 txid: "abc123456789".to_string(),
             },
@@ -1277,8 +1349,27 @@ mod tests {
         assert!(rendered.contains("frostdao dkg-broadcast"));
         assert!(rendered.contains("matching tx_broadcast"));
         assert!(rendered.contains("not an on-chain confirmation"));
-        assert!(help.contains("Copy dkg-broadcast command"));
+        assert!(help.contains("Copy dkg-broadcast"));
+        assert!(help.contains("Announce raw tx"));
         assert!(help.contains("Enter: Poll"));
+    }
+
+    #[test]
+    fn announce_broadcast_status_explains_raw_tx_validation() {
+        let mut app = app_with_room_context();
+        app.nostr_sign_state = NostrSignState::AnnounceBroadcast {
+            wallet_name: "treasury".to_string(),
+            session_id: "session-a".to_string(),
+        };
+
+        let rendered = lines_to_string(nostr_sign_status_lines(&app));
+        let help = nostr_sign_help_text(&app.nostr_sign_state);
+
+        assert!(rendered.contains("Paste the signed raw transaction"));
+        assert!(rendered.contains("recomputes the txid"));
+        assert!(rendered.contains("not an on-chain confirmation"));
+        assert!(help.contains("Paste/type raw tx"));
+        assert!(help.contains("Enter: Publish"));
     }
 
     #[test]

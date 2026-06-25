@@ -2774,6 +2774,15 @@ fn handle_nostr_sign_keys(app: &mut App, key: KeyEvent) {
                         wallet_name: wallet_name.clone(),
                     };
                 }
+                NostrSignState::AnnounceBroadcast {
+                    wallet_name,
+                    session_id,
+                } => {
+                    app.nostr_sign_state = NostrSignState::Combining {
+                        wallet_name: wallet_name.clone(),
+                        session_id: session_id.clone(),
+                    };
+                }
                 NostrSignState::Complete { .. } => {
                     app.nostr_sign_state = NostrSignState::SelectWallet;
                     app.state = AppState::NostrRoom;
@@ -2808,6 +2817,20 @@ fn handle_nostr_sign_keys(app: &mut App, key: KeyEvent) {
                     app.nostr_amount_input.handle_key(key);
                 }
             }
+        }
+        KeyCode::Char(_)
+        | KeyCode::Backspace
+        | KeyCode::Delete
+        | KeyCode::Left
+        | KeyCode::Right
+        | KeyCode::Home
+        | KeyCode::End
+            if matches!(
+                app.nostr_sign_state,
+                NostrSignState::AnnounceBroadcast { .. }
+            ) =>
+        {
+            app.nostr_broadcast_raw_tx_input.handle_key(key);
         }
         KeyCode::Enter => {
             if matches!(
@@ -2958,6 +2981,28 @@ fn handle_nostr_sign_keys(app: &mut App, key: KeyEvent) {
                         "Waiting for tx_broadcast; press c to copy the CLI broadcast handoff",
                     );
                 }
+                NostrSignState::AnnounceBroadcast {
+                    wallet_name,
+                    session_id,
+                } => {
+                    let wallet_name = wallet_name.clone();
+                    let session_id = session_id.clone();
+                    let raw_tx = app.nostr_broadcast_raw_tx_input.value().to_string();
+                    match app.publish_nostr_tx_broadcast_from_raw_tx(
+                        &wallet_name,
+                        &session_id,
+                        &raw_tx,
+                    ) {
+                        Ok(txid) => {
+                            app.nostr_sign_state = NostrSignState::Complete { txid };
+                            app.nostr_broadcast_raw_tx_input.clear();
+                            app.set_message("tx_broadcast announcement published to the room");
+                        }
+                        Err(e) => {
+                            app.message = Some(format!("Cannot publish tx_broadcast: {}", e));
+                        }
+                    }
+                }
                 NostrSignState::Complete { .. } => {
                     // Done, go back to room
                     app.nostr_sign_state = NostrSignState::SelectWallet;
@@ -3008,6 +3053,20 @@ fn handle_nostr_sign_keys(app: &mut App, key: KeyEvent) {
                     );
                 }
                 _ => {}
+            }
+        }
+        code if is_shortcut_key(&code, 'a') => {
+            if let NostrSignState::Combining {
+                wallet_name,
+                session_id,
+            } = &app.nostr_sign_state
+            {
+                app.nostr_broadcast_raw_tx_input.clear();
+                app.nostr_sign_state = NostrSignState::AnnounceBroadcast {
+                    wallet_name: wallet_name.clone(),
+                    session_id: session_id.clone(),
+                };
+                app.set_message("Paste signed raw tx, then press Enter to announce tx_broadcast");
             }
         }
         code if is_shortcut_key(&code, 'r') => {
@@ -3546,6 +3605,24 @@ mod tests {
             description: "test proposal".to_string(),
             timestamp: 1_700_000_000,
         }
+    }
+
+    fn valid_raw_tx_hex(value_sats: u64) -> String {
+        let tx = bitcoin::Transaction {
+            version: bitcoin::transaction::Version::TWO,
+            lock_time: bitcoin::absolute::LockTime::ZERO,
+            input: vec![bitcoin::TxIn {
+                previous_output: bitcoin::OutPoint::null(),
+                script_sig: bitcoin::ScriptBuf::new(),
+                sequence: bitcoin::Sequence::ENABLE_RBF_NO_LOCKTIME,
+                witness: bitcoin::Witness::new(),
+            }],
+            output: vec![bitcoin::TxOut {
+                value: bitcoin::Amount::from_sat(value_sats),
+                script_pubkey: bitcoin::ScriptBuf::new(),
+            }],
+        };
+        bitcoin::consensus::encode::serialize_hex(&tx)
     }
 
     fn wallet_summary_no_address(name: &str) -> WalletSummary {
@@ -4675,6 +4752,56 @@ mod tests {
             app.message.as_deref(),
             Some("No transaction proposal cached for this signing session")
         );
+    }
+
+    #[test]
+    fn nostr_combining_can_announce_signed_raw_tx() {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Testnet3;
+        app.nostr_room_id = format!("tui-announce-broadcast-test-{}", std::process::id());
+        app.nostr_my_index = 1;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 2;
+        let cache_path = app.nostr_replay_cache_path();
+        let _ = std::fs::remove_file(&cache_path);
+
+        app.join_nostr_room_runtime_with_relays(Vec::new()).unwrap();
+        app.state = AppState::NostrSign;
+        app.nostr_sign_state = NostrSignState::Combining {
+            wallet_name: "wallet-test".to_string(),
+            session_id: "session-broadcast".to_string(),
+        };
+
+        handle_nostr_sign_keys(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
+        );
+        assert!(matches!(
+            app.nostr_sign_state,
+            NostrSignState::AnnounceBroadcast { .. }
+        ));
+
+        app.nostr_broadcast_raw_tx_input
+            .set_value(&valid_raw_tx_hex(2_000));
+        handle_nostr_sign_keys(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+        assert!(matches!(
+            app.nostr_sign_state,
+            NostrSignState::Complete { .. }
+        ));
+        assert_eq!(app.audit_events[0].event, "nostr_tx_broadcast");
+        assert_eq!(app.audit_events[0].wallet, "wallet-test");
+        assert_eq!(
+            app.audit_events[0].fields["session_id"],
+            "session-broadcast"
+        );
+        assert!(app.audit_events[0].fields.get("raw_tx").is_none());
+        assert_eq!(
+            app.message.as_deref(),
+            Some("tx_broadcast announcement published to the room")
+        );
+
+        let _ = std::fs::remove_file(&cache_path);
     }
 
     #[test]

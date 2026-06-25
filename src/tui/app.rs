@@ -259,6 +259,8 @@ pub struct App {
     pub nostr_to_address_input: TextInput,
     /// Editable amount in satoshis for transaction proposals
     pub nostr_amount_input: TextInput,
+    /// Signed raw transaction hex for room broadcast announcements
+    pub nostr_broadcast_raw_tx_input: TextInput,
     /// Recipient address for transaction
     pub nostr_to_address: String,
     /// Amount in satoshis
@@ -317,6 +319,8 @@ impl App {
             nostr_amount_input: TextInput::new("Amount (sats)")
                 .with_placeholder("50000")
                 .numeric(),
+            nostr_broadcast_raw_tx_input: TextInput::new("Signed Raw Transaction")
+                .with_placeholder("0200..."),
             nostr_to_address: String::new(),
             nostr_amount_sats: 0,
             #[cfg(test)]
@@ -1449,6 +1453,26 @@ impl App {
         Ok(())
     }
 
+    pub fn publish_nostr_tx_broadcast_from_raw_tx(
+        &mut self,
+        wallet_name: &str,
+        session_id: &str,
+        raw_tx: &str,
+    ) -> Result<String> {
+        let tx_bytes = hex::decode(raw_tx.trim()).map_err(|err| anyhow::anyhow!("{err}"))?;
+        let tx = bitcoin::consensus::deserialize::<bitcoin::Transaction>(&tx_bytes)
+            .map_err(|err| anyhow::anyhow!("{err}"))?;
+        let txid = tx.compute_txid().to_string();
+        self.publish_nostr_tx_broadcast(
+            wallet_name,
+            session_id,
+            txid.clone(),
+            raw_tx.trim().to_string(),
+            self.network.display_name().to_string(),
+        )?;
+        Ok(txid)
+    }
+
     /// Publish a local-simulation participant join into the active room transport.
     pub fn simulate_nostr_participant_join(&mut self, party_index: u32) -> Result<()> {
         let Some(runtime) = self.nostr_runtime.as_mut() else {
@@ -1712,6 +1736,7 @@ impl App {
         self.nostr_received_shares.clear();
         self.nostr_broadcasts.clear();
         self.nostr_signing_coordinators.clear();
+        self.nostr_broadcast_raw_tx_input.clear();
         self.nostr_keygen_state = NostrKeygenState::ModeSelect;
         self.nostr_sign_state = NostrSignState::SelectWallet;
     }
@@ -2092,6 +2117,9 @@ impl App {
                 session_id: active_session,
                 ..
             } | NostrSignState::Combining {
+                wallet_name,
+                session_id: active_session,
+            } | NostrSignState::AnnounceBroadcast {
                 wallet_name,
                 session_id: active_session,
             } if wallet_name == message_wallet && active_session == session_id

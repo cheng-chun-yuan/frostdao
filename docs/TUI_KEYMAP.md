@@ -297,9 +297,10 @@ then use the room for distributed signing.
 When the Nostr signing coordinator reaches threshold, the TUI shows a CLI
 handoff: press `c` to copy `frostdao dkg-broadcast` with the wallet, session,
 unsigned transaction, and network filled in; replace `<shares-json>` with the
-collected threshold shares. The room then waits for a matching `tx_broadcast`
-announcement. A matching `tx_broadcast` is a room announcement, not an
-on-chain confirmation.
+collected threshold shares. After CLI or manual broadcast, press `a`, paste the
+signed raw transaction, and press `Enter` to publish `tx_broadcast` to the
+room. A matching `tx_broadcast` is a room announcement, not an on-chain
+confirmation.
 
 ## Nostr Keygen
 
