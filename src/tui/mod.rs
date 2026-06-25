@@ -1921,6 +1921,14 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 }
             }
             KeyCode::Enter => {
+                if app.send_form.script_config.script_type != crate::tui::screens::ScriptType::None
+                {
+                    app.send_form.error_message = Some(
+                        "Only Standard (Key Path) send is executable in the TUI; use Policy Preview or CLI for miniscript/timelock drafts"
+                            .to_string(),
+                    );
+                    return;
+                }
                 app.send_form.error_message = None;
                 app.state = AppState::Send(SendState::EnterDetails { wallet_name });
             }
@@ -4562,6 +4570,42 @@ mod tests {
         let complete_help = help_bar_text(&app);
         assert!(complete_help.contains("Enter/Esc:Return to home"));
         assert!(complete_help.contains("c/C:Copy raw tx"));
+    }
+
+    #[test]
+    fn send_configure_script_allows_standard_key_path() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::Send(SendState::ConfigureScript {
+            wallet_name: "wallet-test".to_string(),
+        });
+        app.send_form.script_config.script_type = crate::tui::screens::ScriptType::None;
+
+        handle_send_keys(&mut app, enter_key());
+
+        assert!(matches!(
+            app.state,
+            AppState::Send(SendState::EnterDetails { .. })
+        ));
+        assert!(app.send_form.error_message.is_none());
+    }
+
+    #[test]
+    fn send_configure_script_blocks_preview_only_scripts() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::Send(SendState::ConfigureScript {
+            wallet_name: "wallet-test".to_string(),
+        });
+        app.send_form.script_config.script_type = crate::tui::screens::ScriptType::TimelockAbsolute;
+
+        handle_send_keys(&mut app, enter_key());
+
+        assert!(matches!(
+            app.state,
+            AppState::Send(SendState::ConfigureScript { .. })
+        ));
+        let message = app.send_form.error_message.as_deref().unwrap_or("");
+        assert!(message.contains("Only Standard (Key Path) send is executable"));
+        assert!(message.contains("Policy Preview or CLI"));
     }
 
     #[test]
