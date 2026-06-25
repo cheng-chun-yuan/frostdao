@@ -1067,6 +1067,45 @@ fn handle_keygen_keys(app: &mut App, key: KeyEvent) {
     }
 }
 
+fn move_reshare_source_wallet(app: &mut App, forward: bool) {
+    let wallet_count = app.wallets.len();
+    if wallet_count == 0 {
+        app.reshare_form.source_wallet_index = 0;
+        app.reshare_form.error_message = Some("No wallets available".to_string());
+        return;
+    }
+
+    if app.reshare_form.source_wallet_index >= wallet_count {
+        app.reshare_form.source_wallet_index = 0;
+    }
+
+    if forward {
+        app.reshare_form.source_wallet_index =
+            (app.reshare_form.source_wallet_index + 1) % wallet_count;
+    } else if app.reshare_form.source_wallet_index == 0 {
+        app.reshare_form.source_wallet_index = wallet_count - 1;
+    } else {
+        app.reshare_form.source_wallet_index -= 1;
+    }
+
+    app.reshare_form.error_message = None;
+}
+
+fn selected_reshare_source_wallet_name(app: &mut App) -> Option<String> {
+    if app.wallets.is_empty() {
+        app.reshare_form.source_wallet_index = 0;
+        return None;
+    }
+
+    if app.reshare_form.source_wallet_index >= app.wallets.len() {
+        app.reshare_form.source_wallet_index = 0;
+    }
+
+    app.wallets
+        .get(app.reshare_form.source_wallet_index)
+        .map(|wallet| wallet.name.clone())
+}
+
 fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
     use screens::ReshareFormData;
     use state::{ReshareFinalizeField, ReshareFormField, ReshareLocalField, ReshareMode};
@@ -1118,30 +1157,19 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
             code if (code == KeyCode::Up || is_shortcut_key(&code, 'k'))
                 && app.reshare_form.local_field == ReshareLocalField::SourceWallet =>
             {
-                if app.reshare_form.source_wallet_index > 0 {
-                    app.reshare_form.source_wallet_index -= 1;
-                } else if !app.wallets.is_empty() {
-                    app.reshare_form.source_wallet_index = app.wallets.len() - 1;
-                }
+                move_reshare_source_wallet(app, false);
             }
             code if (code == KeyCode::Down || is_shortcut_key(&code, 'j'))
                 && app.reshare_form.local_field == ReshareLocalField::SourceWallet =>
             {
-                if !app.wallets.is_empty() {
-                    app.reshare_form.source_wallet_index =
-                        (app.reshare_form.source_wallet_index + 1) % app.wallets.len();
-                }
+                move_reshare_source_wallet(app, true);
             }
             KeyCode::Enter => {
                 // Run local reshare
-                if app.wallets.is_empty() {
+                let Some(source_wallet) = selected_reshare_source_wallet_name(app) else {
                     app.reshare_form.error_message = Some("No wallets available".to_string());
                     return;
-                }
-
-                let source_wallet = app.wallets[app.reshare_form.source_wallet_index]
-                    .name
-                    .clone();
+                };
                 let target_wallet = app.reshare_form.local_target_name.value().to_string();
 
                 if target_wallet.is_empty() {
@@ -1214,48 +1242,28 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
                 app.reshare_form = ReshareFormData::new();
                 app.state = AppState::Home;
             }
-            KeyCode::Tab | KeyCode::Down => {
-                app.reshare_form.focused_field = app.reshare_form.focused_field.next();
-            }
-            KeyCode::BackTab | KeyCode::Up => {
-                // For SourceWallet, up/down changes the selection
-                if app.reshare_form.focused_field == ReshareFormField::SourceWallet {
-                    if app.reshare_form.source_wallet_index > 0 {
-                        app.reshare_form.source_wallet_index -= 1;
-                    } else if !app.wallets.is_empty() {
-                        app.reshare_form.source_wallet_index = app.wallets.len() - 1;
-                    }
-                } else {
-                    app.reshare_form.focused_field = app.reshare_form.focused_field.prev();
-                }
-            }
             code if (code == KeyCode::Down || is_shortcut_key(&code, 'j'))
                 && app.reshare_form.focused_field == ReshareFormField::SourceWallet =>
             {
-                if !app.wallets.is_empty() {
-                    app.reshare_form.source_wallet_index =
-                        (app.reshare_form.source_wallet_index + 1) % app.wallets.len();
-                }
+                move_reshare_source_wallet(app, true);
             }
             code if (code == KeyCode::Up || is_shortcut_key(&code, 'k'))
                 && app.reshare_form.focused_field == ReshareFormField::SourceWallet =>
             {
-                if app.reshare_form.source_wallet_index > 0 {
-                    app.reshare_form.source_wallet_index -= 1;
-                } else if !app.wallets.is_empty() {
-                    app.reshare_form.source_wallet_index = app.wallets.len() - 1;
-                }
+                move_reshare_source_wallet(app, false);
+            }
+            KeyCode::Tab | KeyCode::Down => {
+                app.reshare_form.focused_field = app.reshare_form.focused_field.next();
+            }
+            KeyCode::BackTab | KeyCode::Up => {
+                app.reshare_form.focused_field = app.reshare_form.focused_field.prev();
             }
             KeyCode::Enter => {
                 // Validate and run reshare round 1
-                if app.wallets.is_empty() {
+                let Some(wallet_name) = selected_reshare_source_wallet_name(app) else {
                     app.reshare_form.error_message = Some("No wallets available".to_string());
                     return;
-                }
-
-                let wallet_name = app.wallets[app.reshare_form.source_wallet_index]
-                    .name
-                    .clone();
+                };
                 let new_threshold: u32 =
                     app.reshare_form.new_threshold.value().parse().unwrap_or(0);
                 let new_n_parties: u32 =
@@ -1409,13 +1417,8 @@ fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
             }
             KeyCode::Enter => {
                 // Run reshare finalize
-                let source_wallet = if !app.wallets.is_empty() {
-                    app.wallets[app.reshare_form.source_wallet_index]
-                        .name
-                        .clone()
-                } else {
-                    String::new()
-                };
+                let source_wallet =
+                    selected_reshare_source_wallet_name(app).unwrap_or_else(String::new);
                 let target_name = app.reshare_form.target_name.value().to_string();
                 let my_new_index: u32 = app.reshare_form.my_new_index.value().parse().unwrap_or(0);
                 let my_rank: u32 = app.reshare_form.my_rank.value().parse().unwrap_or(0);
@@ -4189,6 +4192,60 @@ mod tests {
         let output_help = help_bar_text(&app);
         assert!(output_help.contains("Enter:Go to Finalize"));
         assert!(output_help.contains("Esc:Done"));
+    }
+
+    #[test]
+    fn reshare_source_wallet_navigation_reports_empty_wallets() {
+        let mut app = App::new().unwrap();
+        app.wallets.clear();
+        app.state = AppState::Reshare(ReshareState::LocalSetup);
+        app.reshare_form.local_field = state::ReshareLocalField::SourceWallet;
+
+        handle_reshare_keys(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
+        );
+
+        assert_eq!(app.reshare_form.source_wallet_index, 0);
+        assert_eq!(
+            app.reshare_form.error_message.as_deref(),
+            Some("No wallets available")
+        );
+    }
+
+    #[test]
+    fn reshare_source_wallet_selection_clamps_stale_index() {
+        let mut app = App::new().unwrap();
+        app.wallets = vec![wallet_summary_no_address("wallet-a")];
+        app.state = AppState::Reshare(ReshareState::Round1Setup);
+        app.reshare_form.source_wallet_index = 7;
+
+        handle_reshare_keys(&mut app, enter_key());
+
+        assert_eq!(app.reshare_form.source_wallet_index, 0);
+        assert_eq!(
+            app.reshare_form.error_message.as_deref(),
+            Some("No party shares found in wallet")
+        );
+    }
+
+    #[test]
+    fn distributed_reshare_down_arrow_changes_source_wallet_when_focused() {
+        let mut app = App::new().unwrap();
+        app.wallets = vec![
+            wallet_summary_no_address("wallet-a"),
+            wallet_summary_no_address("wallet-b"),
+        ];
+        app.state = AppState::Reshare(ReshareState::Round1Setup);
+        app.reshare_form.focused_field = state::ReshareFormField::SourceWallet;
+
+        handle_reshare_keys(&mut app, KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+
+        assert_eq!(app.reshare_form.source_wallet_index, 1);
+        assert!(matches!(
+            app.reshare_form.focused_field,
+            state::ReshareFormField::SourceWallet
+        ));
     }
 
     #[test]
