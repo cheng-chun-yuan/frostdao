@@ -17,6 +17,10 @@ use crate::tui::app::{wallet_address_for_network, App};
 use crate::tui::state::{NostrSignState, NostrTxField};
 use crate::tui::COPY_KEY_LABEL;
 
+fn preview_id(value: &str) -> String {
+    value.chars().take(8).collect()
+}
+
 /// Render the Nostr signing screen
 pub fn render_nostr_sign(frame: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::default()
@@ -124,7 +128,7 @@ fn get_progress(state: &NostrSignState, app: &App) -> (u16, String) {
         NostrSignState::AnnounceBroadcast { .. } => {
             (96, "Publishing tx_broadcast announcement...".to_string())
         }
-        NostrSignState::Complete { txid } => (100, format!("✓ Broadcast: {}...", &txid[..8])),
+        NostrSignState::Complete { txid } => (100, format!("✓ Broadcast: {}...", preview_id(txid))),
     }
 }
 
@@ -215,7 +219,7 @@ fn nostr_sign_status_lines<'a>(app: &'a App) -> Vec<Line<'a>> {
                     Span::styled(wallet_name, Style::default().fg(Color::White)),
                     Span::raw("  "),
                     Span::styled("Session: ", Style::default().fg(Color::Gray)),
-                    Span::styled(&session_id[..8], Style::default().fg(Color::Cyan)),
+                    Span::styled(preview_id(session_id), Style::default().fg(Color::Cyan)),
                 ]),
                 Line::from(vec![
                     Span::styled("To: ", Style::default().fg(Color::Gray)),
@@ -261,7 +265,10 @@ fn nostr_sign_status_lines<'a>(app: &'a App) -> Vec<Line<'a>> {
                     ),
                     Span::raw("  "),
                     Span::styled("Session: ", Style::default().fg(Color::Gray)),
-                    Span::styled(&proposal.session_id[..8], Style::default().fg(Color::Cyan)),
+                    Span::styled(
+                        preview_id(&proposal.session_id),
+                        Style::default().fg(Color::Cyan),
+                    ),
                 ]),
                 Line::from(vec![
                     Span::styled("Network: ", Style::default().fg(Color::Gray)),
@@ -325,7 +332,7 @@ fn nostr_sign_status_lines<'a>(app: &'a App) -> Vec<Line<'a>> {
                     Span::styled(wallet_name, Style::default().fg(Color::White)),
                     Span::raw("  "),
                     Span::styled("Session: ", Style::default().fg(Color::Gray)),
-                    Span::styled(&session_id[..8], Style::default().fg(Color::Cyan)),
+                    Span::styled(preview_id(session_id), Style::default().fg(Color::Cyan)),
                 ]),
                 Line::from(vec![
                     Span::styled("Nonce threshold: ", Style::default().fg(Color::Gray)),
@@ -374,7 +381,7 @@ fn nostr_sign_status_lines<'a>(app: &'a App) -> Vec<Line<'a>> {
                     Span::styled(wallet_name, Style::default().fg(Color::White)),
                     Span::raw("  "),
                     Span::styled("Session: ", Style::default().fg(Color::Gray)),
-                    Span::styled(&session_id[..8], Style::default().fg(Color::Cyan)),
+                    Span::styled(preview_id(session_id), Style::default().fg(Color::Cyan)),
                 ]),
                 Line::from(""),
                 Line::from(Span::styled(
@@ -401,7 +408,7 @@ fn nostr_sign_status_lines<'a>(app: &'a App) -> Vec<Line<'a>> {
                     Span::styled(wallet_name, Style::default().fg(Color::White)),
                     Span::raw("  "),
                     Span::styled("Session: ", Style::default().fg(Color::Gray)),
-                    Span::styled(&session_id[..8], Style::default().fg(Color::Cyan)),
+                    Span::styled(preview_id(session_id), Style::default().fg(Color::Cyan)),
                 ]),
                 Line::from(""),
                 Line::from(Span::styled(
@@ -459,7 +466,7 @@ fn nostr_sign_status_lines<'a>(app: &'a App) -> Vec<Line<'a>> {
                     Span::styled(wallet_name, Style::default().fg(Color::White)),
                     Span::raw("  "),
                     Span::styled("Session: ", Style::default().fg(Color::Gray)),
-                    Span::styled(&session_id[..8], Style::default().fg(Color::Cyan)),
+                    Span::styled(preview_id(session_id), Style::default().fg(Color::Cyan)),
                 ]),
                 Line::from(Span::styled(
                     "Consent sent; keep this room open for proposer execution.",
@@ -1370,6 +1377,31 @@ mod tests {
         assert!(rendered.contains("not an on-chain confirmation"));
         assert!(help.contains("Paste/type raw tx"));
         assert!(help.contains("Enter: Publish"));
+    }
+
+    #[test]
+    fn status_lines_tolerate_short_session_ids() {
+        let mut app = app_with_room_context();
+        app.nostr_sign_state = NostrSignState::AnnounceBroadcast {
+            wallet_name: "treasury".to_string(),
+            session_id: "s".to_string(),
+        };
+
+        let rendered = lines_to_string(nostr_sign_status_lines(&app));
+
+        assert!(rendered.contains("Session: s"));
+    }
+
+    #[test]
+    fn complete_progress_tolerates_short_txids() {
+        let state = NostrSignState::Complete {
+            txid: "abc".to_string(),
+        };
+
+        let (progress, label) = get_progress(&state, &app_with_room_context());
+
+        assert_eq!(progress, 100);
+        assert!(label.contains("abc"));
     }
 
     #[test]
