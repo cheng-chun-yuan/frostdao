@@ -250,15 +250,16 @@ fn handle_home_keys(app: &mut App, code: KeyCode) {
         }
         code if is_copy_key(&code) => {
             // Copy wallet address
-            let addr = app
-                .selected_wallet()
-                .and_then(|w| app::wallet_address_for_network(w, app.network))
-                .map(str::to_string);
-            if let Some(addr) = addr {
-                app.copy_to_clipboard_with_message(
-                    &addr,
-                    root_address_copy_message(app.network, &addr),
-                );
+            if let Some(wallet) = app.selected_wallet() {
+                if let Some(addr) = app::wallet_address_for_network(wallet, app.network) {
+                    let addr = addr.to_string();
+                    app.copy_to_clipboard_with_message(
+                        &addr,
+                        root_address_copy_message(app.network, &addr),
+                    );
+                } else {
+                    app.set_message(&app::missing_network_address_message(app.network));
+                }
             } else {
                 app.set_message("Select a wallet first to copy address");
             }
@@ -752,19 +753,19 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
         }
         code if is_copy_key(&code) => {
             // Copy wallet address to clipboard
-            let addr_to_copy = app
-                .wallets
-                .iter()
-                .find(|w| w.name == state.wallet_name)
-                .and_then(|w| app::wallet_address_for_network(w, app.network))
-                .map(str::to_string);
-            if let Some(addr) = addr_to_copy {
-                app.copy_to_clipboard_with_message(
-                    &addr,
-                    root_address_copy_message(app.network, &addr),
-                );
+            let selected_wallet = app.wallets.iter().find(|w| w.name == state.wallet_name);
+            if let Some(wallet) = selected_wallet {
+                if let Some(addr) = app::wallet_address_for_network(wallet, app.network) {
+                    let addr = addr.to_string();
+                    app.copy_to_clipboard_with_message(
+                        &addr,
+                        root_address_copy_message(app.network, &addr),
+                    );
+                } else {
+                    app.set_message(&app::missing_network_address_message(app.network));
+                }
             } else {
-                app.set_message("No address available to copy for this wallet");
+                app.set_message("Selected wallet is not loaded");
             }
         }
         code if is_refresh_key(&code) => {
@@ -3971,6 +3972,21 @@ mod tests {
     }
 
     #[test]
+    fn home_copy_reports_missing_selected_network_address() {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Mainnet;
+        app.wallets = vec![wallet_summary_testnet_only("treasury")];
+        app.wallet_list_state.select(Some(0));
+
+        handle_home_keys(&mut app, KeyCode::Char('c'));
+
+        assert_eq!(
+            app.message.as_deref(),
+            Some(app::missing_network_address_message(NetworkSelection::Mainnet).as_str())
+        );
+    }
+
+    #[test]
     fn home_and_detail_shortcuts_are_case_insensitive() {
         assert!(is_copy_key(&KeyCode::Char('c')));
         assert!(is_copy_key(&KeyCode::Char('C')));
@@ -4073,6 +4089,46 @@ mod tests {
     }
 
     #[test]
+    fn wallet_details_copy_reports_missing_selected_network_address() {
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Mainnet;
+        app.wallets = vec![wallet_summary_testnet_only("treasury")];
+        app.state = AppState::WalletDetails(WalletDetailsState {
+            wallet_name: "treasury".to_string(),
+            selected_action: 0,
+            confirm_delete: false,
+            delete_confirmation_input: String::new(),
+            show_qr: false,
+        });
+
+        handle_wallet_details_keys(&mut app, KeyCode::Char('c'));
+
+        assert_eq!(
+            app.message.as_deref(),
+            Some(app::missing_network_address_message(NetworkSelection::Mainnet).as_str())
+        );
+    }
+
+    #[test]
+    fn wallet_details_copy_reports_stale_wallet() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::WalletDetails(WalletDetailsState {
+            wallet_name: "missing-wallet".to_string(),
+            selected_action: 0,
+            confirm_delete: false,
+            delete_confirmation_input: String::new(),
+            show_qr: false,
+        });
+
+        handle_wallet_details_keys(&mut app, KeyCode::Char('c'));
+
+        assert_eq!(
+            app.message.as_deref(),
+            Some("Selected wallet is not loaded")
+        );
+    }
+
+    #[test]
     fn wallet_details_copy_reports_missing_address() {
         let mut app = App::new().unwrap();
         app.wallets = vec![wallet_summary_no_address("treasury")];
@@ -4088,7 +4144,7 @@ mod tests {
 
         assert_eq!(
             app.message.as_deref(),
-            Some("No address available to copy for this wallet")
+            Some(app::missing_network_address_message(NetworkSelection::Testnet4).as_str())
         );
     }
 
