@@ -1036,7 +1036,7 @@ pub(crate) fn nostr_sign_help_text(state: &NostrSignState) -> String {
             "y: Consent only after every signer matches review | r: Reject | Esc: Back",
         ),
         NostrSignState::WaitingForExecution { .. } => String::from(
-            "Consent sent: keep room open for encrypted nonce/share exchange | Esc: Back",
+            "Enter: Poll room | keep room open for encrypted nonce/share exchange | Esc: Back",
         ),
         NostrSignState::Combining { .. } => {
             String::from("CLI handoff: combine + broadcast | Esc: Back")
@@ -1209,6 +1209,7 @@ mod tests {
         assert!(rendered.contains("after threshold consent"));
         assert!(rendered.contains("encrypted nonces and signature shares"));
         assert!(rendered.contains("Session: session-"));
+        assert!(help.contains("Poll room"));
         assert!(help.contains("keep room open"));
         assert!(help.contains("encrypted nonce/share exchange"));
         assert!(!help.contains("Continue"));

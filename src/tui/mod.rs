@@ -2669,6 +2669,10 @@ fn nostr_relay_keygen_blocked_message() -> &'static str {
     "Relay keygen is unavailable in this TUI flow; use local rehearsal or CLI keygen"
 }
 
+fn nostr_waiting_for_execution_message() -> &'static str {
+    "Consent sent; keep room open until threshold consent starts encrypted nonce/share exchange"
+}
+
 /// Check if all participants have joined, transition to Ready if so
 fn check_participants_ready(app: &mut App) {
     if app.nostr_participants.len() >= app.nostr_n_parties as usize {
@@ -2925,31 +2929,8 @@ fn handle_nostr_sign_keys(app: &mut App, key: KeyEvent) {
                         proposal.review.sighash_fingerprint
                     ));
                 }
-                NostrSignState::WaitingForExecution {
-                    wallet_name,
-                    session_id,
-                } => {
-                    // Transition to collecting shares when proposer initiates
-                    let Some(proposal) = app.nostr_pending_proposals.get(session_id) else {
-                        app.set_message("Cannot execute: proposal context is missing");
-                        return;
-                    };
-                    let wallet_name = wallet_name.clone();
-                    let session_id = session_id.clone();
-                    let sighash_fingerprint = proposal.review.sighash_fingerprint.clone();
-                    if let Err(e) = app.start_nostr_signing_attempt(
-                        &wallet_name,
-                        &session_id,
-                        &sighash_fingerprint,
-                    ) {
-                        app.message = Some(format!("Cannot start signing attempt: {}", e));
-                        return;
-                    }
-                    app.nostr_sign_state = NostrSignState::CollectingShares {
-                        wallet_name,
-                        session_id,
-                        received_shares: std::collections::HashMap::new(),
-                    };
+                NostrSignState::WaitingForExecution { .. } => {
+                    app.set_message(nostr_waiting_for_execution_message());
                 }
                 NostrSignState::CollectingShares {
                     wallet_name,
@@ -4636,6 +4617,32 @@ mod tests {
         assert!(message.contains("Review fingerprint abc12345"));
         assert!(message.contains("only after every signer matches review"));
         assert!(!message.contains("press y to consent"));
+    }
+
+    #[test]
+    fn nostr_waiting_for_execution_enter_keeps_signer_waiting() {
+        let mut app = App::new().unwrap();
+        let proposal = reviewable_proposal();
+        let session_id = proposal.session_id.clone();
+        app.nostr_pending_proposals
+            .insert(session_id.clone(), proposal);
+        app.state = AppState::NostrSign;
+        app.nostr_sign_state = NostrSignState::WaitingForExecution {
+            wallet_name: "wallet-test".to_string(),
+            session_id,
+        };
+
+        handle_nostr_sign_keys(&mut app, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+        assert!(matches!(
+            app.nostr_sign_state,
+            NostrSignState::WaitingForExecution { .. }
+        ));
+        assert_eq!(
+            app.message.as_deref(),
+            Some(nostr_waiting_for_execution_message())
+        );
+        assert!(app.nostr_signing_coordinators.is_empty());
     }
 
     #[test]

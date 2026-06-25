@@ -886,6 +886,8 @@ def check_nostr_transaction_review():
         ("src/tui/mod.rs", tui, "Rejection sent for proposal fingerprint"),
         ("src/tui/mod.rs", tui, "nostr_sign_help_text(&app.nostr_sign_state)"),
         ("src/tui/mod.rs", tui, "y:Consent after review match"),
+        ("src/tui/mod.rs", tui, "nostr_waiting_for_execution_enter_keeps_signer_waiting"),
+        ("src/tui/mod.rs", tui, "nostr_waiting_for_execution_message"),
         ("src/tui/mod.rs", tui, "nostr_review_reject_key_publishes_rejection"),
         ("src/tui/screens/nostr_sign.rs", screen, "Blocked:"),
         ("src/tui/screens/nostr_sign.rs", screen, "✗ Rejected"),
@@ -936,6 +938,7 @@ def check_nostr_transaction_review():
         ("docs/RUN_GUIDE.md", run_guide, "source path, source address, BIP341 sighash"),
         ("docs/RUN_GUIDE.md", run_guide, "approved, rejected, and pending parties"),
         ("docs/RUN_GUIDE.md", run_guide, "approvals and rejections tracked separately"),
+        ("docs/RUN_GUIDE.md", run_guide, "does not start signing before threshold consent"),
         ("docs/RUN_GUIDE.md", run_guide, "NIP-44 signing plaintext helpers encrypt typed nonce/share payloads"),
         ("docs/RUN_GUIDE.md", run_guide, "`tx_broadcast` announcements are also published and ingested through the runtime"),
         ("src/protocol/dkg_tx.rs", read(Path("src/protocol/dkg_tx.rs")), "build_unsigned_tx_core_with_source_path"),
@@ -970,6 +973,7 @@ def check_nostr_transaction_review():
         ("docs/TUI_KEYMAP.md", keymap, "Clear focused recipient or amount field"),
         ("docs/TUI_KEYMAP.md", keymap, "HD-derived source"),
         ("docs/TUI_KEYMAP.md", keymap, "Regtest Nostr proposals require `FROSTDAO_REGTEST_MEMPOOL_API`"),
+        ("docs/TUI_KEYMAP.md", keymap, "does not start signing before threshold consent"),
         ("docs/TUI_KEYMAP.md", keymap, "Publish a proposal rejection"),
     ]
     missing = [f"{path}: {marker}" for path, content, marker in required if marker not in content]
