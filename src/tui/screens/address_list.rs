@@ -293,6 +293,8 @@ fn render_qr_code(frame: &mut Frame, address: &str, area: Rect) {
                     Style::default().fg(Color::White),
                 )));
             }
+            lines.push(Line::from(""));
+            lines.extend(hd_qr_boundary_lines());
             lines
         }
         Err(_) => {
@@ -305,6 +307,19 @@ fn render_qr_code(frame: &mut Frame, address: &str, area: Rect) {
 
     let qr_para = Paragraph::new(qr_lines).alignment(Alignment::Center);
     frame.render_widget(qr_para, area);
+}
+
+fn hd_qr_boundary_lines() -> Vec<Line<'static>> {
+    vec![
+        Line::from(Span::styled(
+            "Public derived receive address only.",
+            Style::default().fg(Color::Yellow),
+        )),
+        Line::from(Span::styled(
+            "Verify network and BIP-86 path before funding.",
+            Style::default().fg(Color::Yellow),
+        )),
+    ]
 }
 
 fn format_sats(sats: u64) -> String {
@@ -354,6 +369,14 @@ mod tests {
         assert!(rendered.contains("sign this derived path"));
         assert!(rendered.contains("No new root key"));
         assert!(rendered.contains("single-device private key"));
+    }
+
+    #[test]
+    fn hd_qr_boundary_reminds_network_and_path_check_before_funding() {
+        let rendered = lines_to_string(hd_qr_boundary_lines());
+
+        assert!(rendered.contains("Public derived receive address only"));
+        assert!(rendered.contains("Verify network and BIP-86 path before funding"));
     }
 
     #[test]

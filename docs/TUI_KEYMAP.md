@@ -221,7 +221,9 @@ HD-derived address balances.
 
 The details panel shows the selected network, BIP-86 path, derived address,
 child x-only pubkey fingerprint, and MPC-threshold control note. Compare those
-fields across devices before funding or selecting an HD source for signing.
+fields across devices before funding or selecting an HD source for signing. The
+HD QR area labels the QR as a public derived receive address and reminds the
+operator to verify the network and BIP-86 path before funding.
 
 ## Mnemonic Backup
 
