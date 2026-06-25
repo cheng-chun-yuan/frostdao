@@ -250,6 +250,7 @@ After writing the words down, verify them with `frostdao dkg-verify-mnemonic --n
 | Send complete | `c` / `C` copies TXID |
 | Address list | `c` / `C` copies selected address |
 | Nostr room configure/waiting/ready | `c` / `C` copies room config |
+| Nostr room configure | `p` / `P` pastes room config (from clipboard text) |
 | Miniscript agent payment draft | `c` / `C` copies initialized JSON draft |
 
 Send artifact boundaries:
@@ -282,6 +283,7 @@ The policy input remains editable. Use the templates as starting points, then ty
 |-------|-----|--------|
 | Configure | `Tab` | Next field |
 | Configure | `Enter` | Join room |
+| Configure | `p` / `P` | Paste room config |
 | Configure | `c` / `C` | Copy room config |
 | Configure | `Esc` | Back |
 | Waiting | `Space` | Add a local test participant in local simulation mode |

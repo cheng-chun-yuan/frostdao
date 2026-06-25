@@ -375,6 +375,81 @@ impl App {
         )
     }
 
+    pub(crate) fn apply_nostr_room_config_text(&mut self, text: &str) -> Result<(), String> {
+        let mut room_id: Option<String> = None;
+        let mut network: Option<String> = None;
+        let mut my_index: Option<u32> = None;
+        let mut threshold: Option<u32> = None;
+        let mut n_parties: Option<u32> = None;
+
+        for line in text.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            let Some((raw_key, raw_value)) = line.split_once(':') else {
+                continue;
+            };
+            let key = raw_key.trim().to_ascii_lowercase();
+            let value = raw_value.trim();
+            if value.is_empty() {
+                continue;
+            }
+
+            match key.as_str() {
+                "room id" | "room" => {
+                    room_id = Some(value.to_string());
+                }
+                "network" => {
+                    network = Some(value.to_string());
+                }
+                "my index" => {
+                    my_index = value.parse::<u32>().ok();
+                }
+                "threshold" => {
+                    threshold = value.parse::<u32>().ok();
+                }
+                "parties" => {
+                    n_parties = value.parse::<u32>().ok();
+                }
+                _ => {}
+            }
+        }
+
+        let room_id = room_id.ok_or_else(|| "Clipboard text missing Room ID".to_string())?;
+        if room_id.trim().is_empty() {
+            return Err("Room ID cannot be empty".to_string());
+        }
+
+        if let Some(network_value) = network {
+            let Some(parsed_network) =
+                crate::tui::state::NetworkSelection::from_display_name(&network_value)
+            else {
+                return Err(format!("Unsupported network '{}'", network_value));
+            };
+            self.network = parsed_network;
+            self.chain_selector_index = parsed_network.index();
+        }
+
+        if let Some(value) = my_index {
+            self.nostr_my_index = value;
+        }
+        if let Some(value) = threshold {
+            self.nostr_threshold = value;
+        }
+        if let Some(value) = n_parties {
+            self.nostr_n_parties = value;
+        }
+
+        self.nostr_room_id = room_id;
+
+        match self.nostr_room_config_error() {
+            Some(error) => Err(error.to_string()),
+            None => Ok(()),
+        }
+    }
+
     /// Build a locally proposed TUI Nostr transaction after validating the draft fields.
     pub fn build_nostr_tx_proposal(&self, wallet_name: &str, timestamp: u64) -> Result<TxProposal> {
         let amount_sats = self.nostr_amount_sats()?;
@@ -4803,5 +4878,48 @@ mod tests {
         assert!(config.contains("Transport: local simulation"));
         assert!(config.contains("Scheme: TSS"));
         assert!(config.contains("Rank: n/a"));
+    }
+
+    #[test]
+    fn apply_nostr_room_config_text_parses_text_for_multi_device_join() {
+        let mut app = App::new().unwrap();
+        app.nostr_room_id = "old-room".to_string();
+        app.nostr_my_index = 1;
+        app.nostr_threshold = 2;
+        app.nostr_n_parties = 3;
+
+        let pasted = [
+            "Room ID: joined-room",
+            "Network: Signet",
+            "My Index: 2",
+            "Threshold: 2",
+            "Parties: 4",
+        ]
+        .join("\n");
+
+        app.apply_nostr_room_config_text(&pasted).unwrap();
+
+        assert_eq!(app.nostr_room_id, "joined-room");
+        assert_eq!(app.network, NetworkSelection::Signet);
+        assert_eq!(app.nostr_my_index, 2);
+        assert_eq!(app.nostr_threshold, 2);
+        assert_eq!(app.nostr_n_parties, 4);
+    }
+
+    #[test]
+    fn apply_nostr_room_config_text_rejects_invalid_network() {
+        let mut app = App::new().unwrap();
+        let pasted = "Room ID: joined-room\nNetwork: UnknownNet\nThreshold: 1\nParties: 2\n";
+        let err = app.apply_nostr_room_config_text(pasted).unwrap_err();
+        assert!(err.contains("Unsupported network"));
+    }
+
+    #[test]
+    fn apply_nostr_room_config_text_rejects_invalid_shape() {
+        let mut app = App::new().unwrap();
+        let pasted =
+            "Room ID: joined-room\nNetwork: Testnet4\nMy Index: 0\nThreshold: 2\nParties: 1\n";
+        let err = app.apply_nostr_room_config_text(pasted).unwrap_err();
+        assert_eq!(err, "Parties must be at least 2");
     }
 }

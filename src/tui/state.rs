@@ -40,6 +40,17 @@ impl NetworkSelection {
         }
     }
 
+    pub fn from_display_name(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "testnet4" | "test4" | "tnet4" | "testnet-4" => Some(Self::Testnet4),
+            "testnet3" | "testnet" | "tnet3" | "testnet-3" => Some(Self::Testnet3),
+            "signet" => Some(Self::Signet),
+            "regtest" | "local" => Some(Self::Regtest),
+            "mainnet" | "bitcoin" => Some(Self::Mainnet),
+            _ => None,
+        }
+    }
+
     pub fn policy_hint(&self) -> &'static str {
         match self {
             Self::Testnet4 => "testnet4 remote UTXOs via mempool.space",

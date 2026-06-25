@@ -2915,6 +2915,9 @@ fn handle_nostr_room_configure(app: &mut App, key: KeyEvent) {
         KeyCode::Esc => {
             app.state = AppState::Home;
         }
+        code if is_shortcut_key(&code, 'p') => {
+            paste_nostr_room_config(app);
+        }
         code if is_copy_key(&code) => {
             copy_nostr_room_config(app);
         }
@@ -3093,6 +3096,30 @@ fn copy_nostr_room_config(app: &mut App) {
         &summary,
         format!("Copied room config for '{}'", app.nostr_room_id),
     );
+}
+
+fn paste_nostr_room_config(app: &mut App) {
+    let mut clipboard = match arboard::Clipboard::new() {
+        Ok(clipboard) => clipboard,
+        Err(e) => {
+            app.set_message(&format!("Clipboard unavailable: {}", e));
+            return;
+        }
+    };
+
+    match clipboard.get_text() {
+        Ok(text) => match app.apply_nostr_room_config_text(&text) {
+            Ok(()) => {
+                app.set_message("Pasted room config from clipboard");
+            }
+            Err(err) => {
+                app.set_message(&err);
+            }
+        },
+        Err(e) => {
+            app.set_message(&format!("Failed to read clipboard: {}", e));
+        }
+    }
 }
 
 fn nostr_relay_keygen_blocked_message() -> &'static str {
@@ -3854,7 +3881,7 @@ fn help_bar_text(app: &App) -> String {
         }
         AppState::NostrRoom => match app.nostr_room_phase {
             NostrRoomPhase::Configure => {
-                format!("Tab:Next | Enter:Join | c:Copy room config | Esc:Back")
+                format!("Tab:Next | Enter:Join | p:Paste room config | c:Copy room config | Esc:Back")
                     .to_string()
             }
             NostrRoomPhase::WaitingForParticipants => {
@@ -5726,6 +5753,7 @@ mod tests {
         app.nostr_room_id = "shared-room".to_string();
         app.nostr_room_phase = NostrRoomPhase::Configure;
         assert!(help_bar_text(&app).contains("c:Copy room config"));
+        assert!(help_bar_text(&app).contains("p:Paste room config"));
 
         app.nostr_room_phase = NostrRoomPhase::WaitingForParticipants;
         assert!(help_bar_text(&app).contains("c:Copy room config"));
