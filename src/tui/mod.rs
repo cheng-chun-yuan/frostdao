@@ -1106,6 +1106,42 @@ fn selected_reshare_source_wallet_name(app: &mut App) -> Option<String> {
         .map(|wallet| wallet.name.clone())
 }
 
+fn move_send_wallet(app: &mut App, forward: bool) {
+    let wallet_count = app.wallets.len();
+    if wallet_count == 0 {
+        app.send_form.wallet_index = 0;
+        app.send_form.error_message = Some("No wallets available".to_string());
+        return;
+    }
+
+    if app.send_form.wallet_index >= wallet_count {
+        app.send_form.wallet_index = 0;
+    }
+
+    if forward {
+        app.send_form.wallet_index = (app.send_form.wallet_index + 1) % wallet_count;
+    } else if app.send_form.wallet_index == 0 {
+        app.send_form.wallet_index = wallet_count - 1;
+    } else {
+        app.send_form.wallet_index -= 1;
+    }
+
+    app.send_form.error_message = None;
+}
+
+fn selected_send_wallet(app: &mut App) -> Option<keygen::WalletSummary> {
+    if app.wallets.is_empty() {
+        app.send_form.wallet_index = 0;
+        return None;
+    }
+
+    if app.send_form.wallet_index >= app.wallets.len() {
+        app.send_form.wallet_index = 0;
+    }
+
+    app.wallets.get(app.send_form.wallet_index).cloned()
+}
+
 fn handle_reshare_keys(app: &mut App, key: KeyEvent) {
     use screens::ReshareFormData;
     use state::{ReshareFinalizeField, ReshareFormField, ReshareLocalField, ReshareMode};
@@ -1504,24 +1540,16 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 app.state = AppState::Home;
             }
             code if code == KeyCode::Up || is_shortcut_key(&code, 'k') => {
-                if app.send_form.wallet_index > 0 {
-                    app.send_form.wallet_index -= 1;
-                } else if !app.wallets.is_empty() {
-                    app.send_form.wallet_index = app.wallets.len() - 1;
-                }
+                move_send_wallet(app, false);
             }
-            code if (code == KeyCode::Down || is_shortcut_key(&code, 'j'))
-                && !app.wallets.is_empty() =>
-            {
-                app.send_form.wallet_index = (app.send_form.wallet_index + 1) % app.wallets.len();
+            code if code == KeyCode::Down || is_shortcut_key(&code, 'j') => {
+                move_send_wallet(app, true);
             }
-            code if code == KeyCode::Down || is_shortcut_key(&code, 'j') => {}
             KeyCode::Enter => {
-                if app.wallets.is_empty() {
+                let Some(wallet) = selected_send_wallet(app) else {
                     app.send_form.error_message = Some("No wallets available".to_string());
                     return;
-                }
-                let wallet = &app.wallets[app.send_form.wallet_index];
+                };
                 let wallet_name = wallet.name.clone();
 
                 // Load wallet info for party selection
@@ -4112,6 +4140,40 @@ mod tests {
             KeyEvent::new(KeyCode::Char('K'), KeyModifiers::NONE),
         );
         assert_eq!(app.send_form.wallet_index, 0);
+    }
+
+    #[test]
+    fn send_select_wallet_navigation_reports_empty_wallets() {
+        let mut app = App::new().unwrap();
+        app.wallets.clear();
+        app.state = AppState::Send(SendState::SelectWallet);
+
+        handle_send_keys(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE),
+        );
+
+        assert_eq!(app.send_form.wallet_index, 0);
+        assert_eq!(
+            app.send_form.error_message.as_deref(),
+            Some("No wallets available")
+        );
+    }
+
+    #[test]
+    fn send_select_wallet_enter_clamps_stale_index() {
+        let mut app = App::new().unwrap();
+        app.wallets = vec![wallet_summary_no_address("wallet-a")];
+        app.state = AppState::Send(SendState::SelectWallet);
+        app.send_form.wallet_index = 9;
+
+        handle_send_keys(&mut app, enter_key());
+
+        assert_eq!(app.send_form.wallet_index, 0);
+        assert!(matches!(
+            app.state,
+            AppState::Send(SendState::SelectSigners { ref wallet_name }) if wallet_name == "wallet-a"
+        ));
     }
 
     #[test]
