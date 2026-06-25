@@ -2673,7 +2673,11 @@ fn nostr_relay_keygen_blocked_message() -> &'static str {
 fn check_participants_ready(app: &mut App) {
     if app.nostr_participants.len() >= app.nostr_n_parties as usize {
         app.nostr_room_phase = NostrRoomPhase::Ready;
-        app.set_message("All participants ready!");
+        if app.nostr_local_simulation_transport_active() {
+            app.set_message("All participants ready for local rehearsal");
+        } else {
+            app.set_message("All participants ready for signing");
+        }
     }
 }
 
@@ -4467,6 +4471,44 @@ mod tests {
         assert!(help.contains("Esc:Leave"));
         assert!(!help.contains("Simulate join"));
         assert!(!help.contains("demo"));
+    }
+
+    #[test]
+    fn nostr_room_ready_transition_message_names_signing_or_rehearsal() {
+        let mut local_app = App::new().unwrap();
+        local_app.nostr_n_parties = 2;
+        local_app
+            .nostr_participants
+            .insert(1, "party-1".to_string());
+        local_app
+            .nostr_participants
+            .insert(2, "party-2".to_string());
+
+        check_participants_ready(&mut local_app);
+
+        assert!(matches!(local_app.nostr_room_phase, NostrRoomPhase::Ready));
+        assert_eq!(
+            local_app.message.as_deref(),
+            Some("All participants ready for local rehearsal")
+        );
+
+        let mut relay_app = App::new().unwrap();
+        relay_app.force_relay_transport_for_tests = true;
+        relay_app.nostr_n_parties = 2;
+        relay_app
+            .nostr_participants
+            .insert(1, "party-1".to_string());
+        relay_app
+            .nostr_participants
+            .insert(2, "party-2".to_string());
+
+        check_participants_ready(&mut relay_app);
+
+        assert!(matches!(relay_app.nostr_room_phase, NostrRoomPhase::Ready));
+        assert_eq!(
+            relay_app.message.as_deref(),
+            Some("All participants ready for signing")
+        );
     }
 
     #[test]

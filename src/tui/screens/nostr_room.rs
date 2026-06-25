@@ -270,7 +270,7 @@ fn render_ready(frame: &mut Frame, app: &App, area: Rect) {
     let title = Paragraph::new(Line::from(vec![
         Span::styled("🌐 ", Style::default()),
         Span::styled(
-            "Nostr Room - Ready!",
+            ready_title_text(app),
             Style::default()
                 .fg(Color::Green)
                 .add_modifier(Modifier::BOLD),
@@ -287,7 +287,7 @@ fn render_ready(frame: &mut Frame, app: &App, area: Rect) {
         .block(Block::default())
         .gauge_style(Style::default().fg(Color::Green).bg(Color::DarkGray))
         .percent(100)
-        .label(format!("All {} participants ready!", total.max(joined)));
+        .label(ready_progress_label(app, total.max(joined)));
     frame.render_widget(gauge, chunks[1]);
 
     // Room info
@@ -305,6 +305,22 @@ fn render_ready(frame: &mut Frame, app: &App, area: Rect) {
             .border_style(Style::default().fg(Color::DarkGray)),
     );
     frame.render_widget(help, chunks[4]);
+}
+
+fn ready_title_text(app: &App) -> &'static str {
+    if app.nostr_local_simulation_transport_active() {
+        "Nostr Room - Ready for Local Rehearsal"
+    } else {
+        "Nostr Room - Ready for Signing"
+    }
+}
+
+fn ready_progress_label(app: &App, participant_count: usize) -> String {
+    if app.nostr_local_simulation_transport_active() {
+        format!("All {participant_count} participants ready to rehearse")
+    } else {
+        format!("All {participant_count} participants ready to sign")
+    }
 }
 
 fn ready_help_lines(app: &App) -> Vec<Line<'static>> {
@@ -558,6 +574,20 @@ mod tests {
     }
 
     #[test]
+    fn ready_labels_local_room_as_rehearsal() {
+        let app = App::new().unwrap();
+
+        assert_eq!(
+            ready_title_text(&app),
+            "Nostr Room - Ready for Local Rehearsal"
+        );
+        assert_eq!(
+            ready_progress_label(&app, 3),
+            "All 3 participants ready to rehearse"
+        );
+    }
+
+    #[test]
     fn ready_help_explains_relay_keygen_unavailable() {
         let mut app = App::new().unwrap();
         app.force_relay_transport_for_tests = true;
@@ -570,5 +600,17 @@ mod tests {
         assert!(rendered.contains("k: Relay keygen unavailable"));
         assert!(!rendered.contains("not wired"));
         assert!(rendered.contains("CLI keygen"));
+    }
+
+    #[test]
+    fn ready_labels_relay_room_as_signing_ready() {
+        let mut app = App::new().unwrap();
+        app.force_relay_transport_for_tests = true;
+
+        assert_eq!(ready_title_text(&app), "Nostr Room - Ready for Signing");
+        assert_eq!(
+            ready_progress_label(&app, 3),
+            "All 3 participants ready to sign"
+        );
     }
 }

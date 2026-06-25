@@ -410,6 +410,8 @@ def check_replay_cache_persistence():
         missing.append("RUN_GUIDE TUI Nostr keygen ceremony context documentation")
     if "TUI relay keygen is intentionally unavailable" not in run_guide:
         missing.append("RUN_GUIDE TUI relay keygen guard documentation")
+    if "ready for local rehearsal, while relay transport labels it as ready for signing only" not in run_guide:
+        missing.append("RUN_GUIDE TUI room ready-state boundary documentation")
     if "Nostr signing status keeps room, party, threshold, scheme, rank, and transport visible" not in run_guide:
         missing.append("RUN_GUIDE TUI Nostr signing ceremony context documentation")
     if "Every Nostr keygen phase keeps room ID, party index, threshold, scheme, rank, and transport visible" not in keymap:
@@ -426,6 +428,8 @@ def check_replay_cache_persistence():
         missing.append("TUI_KEYMAP Nostr room signing boundary documentation")
     if "The configure status line shows `Blocked` until the room ID, party index" not in keymap:
         missing.append("TUI_KEYMAP Nostr room configure validation documentation")
+    if "Relay transport labels the room as ready for signing only" not in keymap:
+        missing.append("TUI_KEYMAP Nostr room ready-state boundary documentation")
     if "Room joins are accepted only when the payload party, threshold, party count, scheme, and rank shape match the active room" not in run_guide:
         missing.append("RUN_GUIDE validated room join documentation")
     if "payload `party_index` must match the envelope `from` party" not in docs:

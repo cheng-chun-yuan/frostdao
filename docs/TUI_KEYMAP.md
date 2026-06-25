@@ -289,6 +289,8 @@ The policy input remains editable. Use the templates as starting points, then ty
 | Ready | `Esc` | Leave room |
 
 The configure screen labels this as a multi-device signing room. The room info line shows room ID, party index, threshold, scheme, rank, and transport. Current TUI room joins are guarded as `Scheme: TSS` with `Rank: n/a`; the configure screen also labels the current room join shape as TSS-only, so HTSS operators know rank-aware room setup is not exposed in the TUI yet. Room join metadata is public, while signing nonce/share payloads are encrypted. The configure status line shows `Blocked` until the room ID, party index, threshold, and party count form a valid room.
+When all parties have joined, local simulation labels the room as ready for a
+local rehearsal. Relay transport labels the room as ready for signing only.
 In local simulation, `k` starts a local keygen rehearsal. In relay transport,
 keygen is intentionally unavailable in the TUI; create keys with CLI keygen,
 then use the room for distributed signing.
