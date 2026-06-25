@@ -1947,65 +1947,8 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 app.send_form.focused_field = app.send_form.focused_field.prev();
             }
             KeyCode::Enter => {
-                let to_addr = app.send_form.to_address.value().to_string();
-                let amount: u64 = app.send_form.amount.value().parse().unwrap_or(0);
-
-                if let Some(error) = send_recipient_network_error(&to_addr, app.network) {
+                if let Some(error) = send_preflight_error(&mut app.send_form, app.network) {
                     app.send_form.error_message = Some(error);
-                    return;
-                }
-                if amount == 0 {
-                    app.send_form.error_message = Some(send_invalid_amount_message());
-                    return;
-                }
-                if let Some(fetch_error) = app.send_form.utxo_fetch_error.clone() {
-                    app.send_form.error_message =
-                        Some(format!("Cannot prepare transaction: {}", fetch_error));
-                    return;
-                }
-
-                // Collect selected party indices (1-based)
-                let selected_parties: Vec<u32> = app
-                    .send_form
-                    .selected_parties
-                    .iter()
-                    .enumerate()
-                    .filter_map(
-                        |(i, &selected)| {
-                            if selected {
-                                Some((i + 1) as u32)
-                            } else {
-                                None
-                            }
-                        },
-                    )
-                    .collect();
-
-                if selected_parties.is_empty() {
-                    app.send_form.error_message = Some(app.send_form.no_signers_selected_message());
-                    return;
-                }
-
-                app.send_form.estimate_fee();
-                let confirmed_balance: u64 = app
-                    .send_form
-                    .utxos
-                    .iter()
-                    .filter(|utxo| utxo.confirmed)
-                    .map(|utxo| utxo.value)
-                    .sum();
-                if confirmed_balance == 0 {
-                    app.send_form.error_message = Some(
-                        "No confirmed UTXOs available for the selected source address".to_string(),
-                    );
-                    return;
-                }
-                let total_needed = amount.saturating_add(app.send_form.estimated_fee);
-                if total_needed > confirmed_balance {
-                    app.send_form.error_message = Some(format!(
-                        "Insufficient confirmed balance: need {} sats, have {} sats",
-                        total_needed, confirmed_balance
-                    ));
                     return;
                 }
                 app.send_form.error_message = None;
@@ -2034,6 +1977,13 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                         "Mainnet send is blocked in the TUI; use CLI with explicit mainnet opt-in after offline review"
                             .to_string(),
                     );
+                    return;
+                }
+
+                if let Some(error) = send_preflight_error(&mut app.send_form, app.network) {
+                    app.send_form.error_message = Some(format!(
+                        "Review is stale: {error}. Go back to edit and review again"
+                    ));
                     return;
                 }
 
@@ -2511,6 +2461,50 @@ fn send_missing_destination_message(network: state::NetworkSelection) -> String 
 
 fn send_invalid_amount_message() -> String {
     "Enter an amount in sats greater than 0 before preparing review".to_string()
+}
+
+fn send_preflight_error(
+    form: &mut crate::tui::screens::SendFormData,
+    network: state::NetworkSelection,
+) -> Option<String> {
+    let to_addr = form.to_address.value().to_string();
+    let amount: u64 = form.amount.value().parse().unwrap_or(0);
+
+    if let Some(error) = send_recipient_network_error(&to_addr, network) {
+        return Some(error);
+    }
+    if amount == 0 {
+        return Some(send_invalid_amount_message());
+    }
+    if let Some(fetch_error) = form.utxo_fetch_error.clone() {
+        return Some(format!("Cannot prepare transaction: {}", fetch_error));
+    }
+    if form.selected_count() == 0 {
+        return Some(form.no_signers_selected_message());
+    }
+    if let Some(error) = form.signer_selection_error() {
+        return Some(error);
+    }
+
+    form.estimate_fee();
+    let confirmed_balance: u64 = form
+        .utxos
+        .iter()
+        .filter(|utxo| utxo.confirmed)
+        .map(|utxo| utxo.value)
+        .sum();
+    if confirmed_balance == 0 {
+        return Some("No confirmed UTXOs available for the selected source address".to_string());
+    }
+    let total_needed = amount.saturating_add(form.estimated_fee);
+    if total_needed > confirmed_balance {
+        return Some(format!(
+            "Insufficient confirmed balance: need {} sats, have {} sats",
+            total_needed, confirmed_balance
+        ));
+    }
+
+    None
 }
 
 fn send_recipient_network_error(
@@ -5625,6 +5619,56 @@ mod tests {
             .as_deref()
             .unwrap_or("")
             .contains("Mainnet send is blocked in the TUI"));
+    }
+
+    #[test]
+    fn send_review_revalidates_stale_recipient_before_signing() {
+        let mut app = app_ready_to_prepare_send();
+        app.send_form.utxos = vec![screens::UtxoDisplay {
+            txid: "00".repeat(32),
+            vout: 0,
+            value: 2_000,
+            confirmed: true,
+        }];
+        app.state = AppState::Send(SendState::ReviewTransaction {
+            wallet_name: "wallet-test".to_string(),
+        });
+        app.send_form.to_address.set_value("");
+
+        handle_send_keys(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE),
+        );
+
+        assert!(matches!(
+            app.state,
+            AppState::Send(SendState::ReviewTransaction { .. })
+        ));
+        let message = app.send_form.error_message.as_deref().unwrap_or("");
+        assert!(message.contains("Review is stale"));
+        assert!(message.contains("recipient address valid for Testnet4"));
+        assert!(message.contains("Go back to edit and review again"));
+    }
+
+    #[test]
+    fn send_review_revalidates_stale_balance_before_signing() {
+        let mut app = app_ready_to_prepare_send();
+        app.state = AppState::Send(SendState::ReviewTransaction {
+            wallet_name: "wallet-test".to_string(),
+        });
+
+        handle_send_keys(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE),
+        );
+
+        assert!(matches!(
+            app.state,
+            AppState::Send(SendState::ReviewTransaction { .. })
+        ));
+        let message = app.send_form.error_message.as_deref().unwrap_or("");
+        assert!(message.contains("Review is stale"));
+        assert!(message.contains("No confirmed UTXOs"));
     }
 
     #[test]
