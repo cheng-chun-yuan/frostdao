@@ -468,11 +468,29 @@ fn selected_hd_pubkey(form: &SendFormData) -> Option<&str> {
 }
 
 fn short_fingerprint(value: &str) -> String {
-    if value.len() <= 24 {
+    middle_preview(value, 16, 8, 24)
+}
+
+fn middle_preview(value: &str, head: usize, tail: usize, max_chars: usize) -> String {
+    if value.chars().count() <= max_chars {
         value.to_string()
     } else {
-        format!("{}...{}", &value[..16], &value[value.len() - 8..])
+        let start: String = value.chars().take(head).collect();
+        let end_len = tail.min(value.chars().count());
+        let end: String = value
+            .chars()
+            .rev()
+            .take(end_len)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        format!("{start}...{end}")
     }
+}
+
+fn prefix_preview(value: &str, chars: usize) -> String {
+    value.chars().take(chars).collect()
 }
 
 fn review_control_proof(form: &SendFormData) -> Option<String> {
@@ -1223,11 +1241,7 @@ fn render_select_address(frame: &mut Frame, app: &App, form: &SendFormData, area
             };
 
             let path_str = format!("0/{}", idx);
-            let short_addr = if addr.len() > 20 {
-                format!("{}...{}", &addr[..10], &addr[addr.len() - 8..])
-            } else {
-                addr.clone()
-            };
+            let short_addr = middle_preview(addr, 10, 8, 20);
 
             addr_lines.push(Line::from(vec![
                 Span::styled(prefix, style),
@@ -1513,8 +1527,8 @@ fn render_configure_script(frame: &mut Frame, form: &SendFormData, area: Rect) {
                             "(enter x-only pubkey)".to_string()
                         } else {
                             let v = form.script_config.recovery_pubkey.value();
-                            if v.len() > 20 {
-                                format!("{}...", &v[..20])
+                            if v.chars().count() > 20 {
+                                format!("{}...", prefix_preview(v, 20))
                             } else {
                                 v.to_string()
                             }
@@ -1549,8 +1563,8 @@ fn render_configure_script(frame: &mut Frame, form: &SendFormData, area: Rect) {
                             "(64 char hex)".to_string()
                         } else {
                             let v = form.script_config.htlc_hash.value();
-                            if v.len() > 20 {
-                                format!("{}...", &v[..20])
+                            if v.chars().count() > 20 {
+                                format!("{}...", prefix_preview(v, 20))
                             } else {
                                 v.to_string()
                             }
@@ -1588,8 +1602,8 @@ fn render_configure_script(frame: &mut Frame, form: &SendFormData, area: Rect) {
                             "(x-only pubkey)".to_string()
                         } else {
                             let v = form.script_config.htlc_refund_pubkey.value();
-                            if v.len() > 20 {
-                                format!("{}...", &v[..20])
+                            if v.chars().count() > 20 {
+                                format!("{}...", prefix_preview(v, 20))
                             } else {
                                 v.to_string()
                             }
@@ -2021,7 +2035,7 @@ fn render_utxos_panel(frame: &mut Frame, form: &SendFormData, area: Rect) {
                     Style::default().fg(Color::White),
                 ),
                 Span::styled(
-                    format!("{}:{}", &utxo.txid[..8], utxo.vout),
+                    format!("{}:{}", prefix_preview(&utxo.txid, 8), utxo.vout),
                     Style::default().fg(Color::DarkGray),
                 ),
             ]));
@@ -2089,7 +2103,7 @@ fn render_recent_txs_panel(frame: &mut Frame, form: &SendFormData, area: Rect) {
                     Style::default().fg(amount_color),
                 ),
                 Span::styled(
-                    format!("{}...", &tx.txid[..8]),
+                    format!("{}...", prefix_preview(&tx.txid, 8)),
                     Style::default().fg(Color::DarkGray),
                 ),
                 Span::styled(
@@ -2654,6 +2668,17 @@ mod tests {
         assert_eq!(
             short_fingerprint("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
             "0123456789abcdef...89abcdef"
+        );
+    }
+
+    #[test]
+    fn send_previews_tolerate_short_and_multibyte_values() {
+        assert_eq!(middle_preview("abc", 10, 8, 20), "abc");
+        assert_eq!(prefix_preview("abc", 8), "abc");
+        assert_eq!(prefix_preview("交易txid", 4), "交易tx");
+        assert_eq!(
+            middle_preview("交易0123456789abcdef交易fedcba9876543210", 6, 6, 12),
+            "交易0123...543210"
         );
     }
 
