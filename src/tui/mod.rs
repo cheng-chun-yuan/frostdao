@@ -5787,6 +5787,29 @@ mod tests {
     }
 
     #[test]
+    fn nostr_room_configure_cycle_skips_rank_for_tss_scheme() {
+        let mut app = App::new().unwrap();
+        app.state = AppState::NostrRoom;
+        app.nostr_room_phase = NostrRoomPhase::Configure;
+        app.nostr_room_scheme = frostdao::nostr::ThresholdScheme::Tss;
+        app.nostr_room_id = "room".to_string();
+
+        app.nostr_room_focus = NostrRoomField::NParties;
+        handle_nostr_room_configure(&mut app, KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        assert_eq!(app.nostr_room_focus, NostrRoomField::RoomId);
+
+        app.nostr_room_focus = NostrRoomField::Scheme;
+        handle_nostr_room_configure(&mut app, KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        assert_eq!(app.nostr_room_focus, NostrRoomField::RoomId);
+
+        handle_nostr_room_configure(
+            &mut app,
+            KeyEvent::new(KeyCode::BackTab, KeyModifiers::NONE),
+        );
+        assert_eq!(app.nostr_room_focus, NostrRoomField::Scheme);
+    }
+
+    #[test]
     fn nostr_room_scheme_toggle_controls_rank_field() {
         let mut app = App::new().unwrap();
         app.state = AppState::NostrRoom;
