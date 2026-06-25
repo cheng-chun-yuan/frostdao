@@ -124,7 +124,7 @@ fn render_details_panel(
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(11), // Info section
+            Constraint::Length(14), // Info section
             Constraint::Min(12),    // QR code
             Constraint::Length(1),  // Help
         ])
@@ -178,8 +178,22 @@ fn address_review_lines(
             Span::styled(
                 state.network.display_name(),
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(network_policy_color(state.network))
                     .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  Policy: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                state.network.policy_hint(),
+                Style::default().fg(network_policy_color(state.network)),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  UTXO API: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                state.network.utxo_api_hint(),
+                Style::default().fg(network_policy_color(state.network)),
             ),
         ]),
         Line::from(vec![
@@ -215,6 +229,14 @@ fn address_review_lines(
     ];
     info_lines.extend(hd_control_lines());
     info_lines
+}
+
+fn network_policy_color(network: crate::tui::state::NetworkSelection) -> Color {
+    match network {
+        crate::tui::state::NetworkSelection::Regtest => Color::Cyan,
+        crate::tui::state::NetworkSelection::Mainnet => Color::Red,
+        _ => Color::Yellow,
+    }
 }
 
 fn address_list_help_line() -> Line<'static> {
@@ -346,6 +368,7 @@ fn truncate_address(addr: &str, max_len: usize) -> String {
 mod tests {
     use super::*;
     use crate::tui::state::NetworkSelection;
+    use serial_test::serial;
     use std::collections::HashMap;
 
     fn lines_to_string(lines: Vec<Line<'_>>) -> String {
@@ -416,10 +439,38 @@ mod tests {
         let rendered = lines_to_string(address_review_lines(&state, "tb1pderived", &pubkey, 7));
 
         assert!(rendered.contains("Network: Signet"));
+        assert!(rendered.contains("Policy: signet remote UTXOs via mempool.space"));
+        assert!(rendered.contains("UTXO API: https://mempool.space/signet/api"));
         assert!(rendered.contains("m/86'/1'/0'/0/7"));
         assert!(rendered.contains("tb1pderived"));
         assert!(rendered.contains("Child x-only fingerprint"));
         assert!(rendered.contains("MPC threshold shares"));
+    }
+
+    #[test]
+    #[serial]
+    fn address_review_lines_show_regtest_api_requirement() {
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
+
+        let state = AddressListState {
+            wallet_name: "treasury".to_string(),
+            network: NetworkSelection::Regtest,
+            addresses: vec![],
+            selected: 0,
+            error: None,
+            hd_enabled: true,
+            balance_cache: HashMap::new(),
+        };
+        let pubkey = "11".repeat(32);
+
+        let rendered = lines_to_string(address_review_lines(&state, "bcrt1pderived", &pubkey, 2));
+
+        assert!(rendered.contains("Policy: regtest uses local Esplora/mempool API"));
+        assert!(rendered.contains("UTXO API: regtest needs a local Esplora/mempool API endpoint"));
+        assert!(rendered.contains("m/86'/1'/0'/0/2"));
+        assert!(rendered.contains("bcrt1pderived"));
+
+        std::env::remove_var(frostdao::btc::transaction::REGTEST_MEMPOOL_API_ENV);
     }
 
     #[test]
