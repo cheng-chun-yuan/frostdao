@@ -646,16 +646,23 @@ fn handle_wallet_details_keys(app: &mut App, code: KeyCode) {
                     if let Some(message) = send_entry_unavailable_message(app, selected_wallet) {
                         app.set_message(&message);
                     } else {
+                        let (threshold, total_parties) =
+                            match send_wallet_signer_params(selected_wallet) {
+                                Ok(params) => params,
+                                Err(error) => {
+                                    app.set_message(&error);
+                                    return;
+                                }
+                            };
                         app.send_form = screens::SendFormData::new();
                         // Find wallet index
                         if let Some(idx) = app.wallets.iter().position(|w| w.name == wallet_name) {
                             app.send_form.wallet_index = idx;
                             // Load party info
                             if let Some(wallet) = app.wallets.get(idx) {
-                                app.send_form.threshold = wallet.threshold.unwrap_or(2);
-                                app.send_form.total_parties = wallet.total_parties.unwrap_or(3);
-                                app.send_form.selected_parties =
-                                    vec![true; wallet.total_parties.unwrap_or(3) as usize];
+                                app.send_form.threshold = threshold;
+                                app.send_form.total_parties = total_parties;
+                                app.send_form.selected_parties = vec![true; total_parties as usize];
                                 // Load HTSS info
                                 app.send_form.hierarchical = wallet.hierarchical.unwrap_or(false);
                                 app.send_form.signing_requirement =
@@ -1184,6 +1191,23 @@ fn send_signer_params_error(threshold: u32, total_parties: u32) -> Option<String
     None
 }
 
+fn send_wallet_signer_params(
+    wallet: &frostdao::protocol::keygen::WalletSummary,
+) -> Result<(u32, u32), String> {
+    let threshold = wallet
+        .threshold
+        .ok_or_else(|| "Wallet signer metadata is invalid: missing threshold".to_string())?;
+    let total_parties = wallet
+        .total_parties
+        .ok_or_else(|| "Wallet signer metadata is invalid: missing total parties".to_string())?;
+
+    if let Some(error) = send_signer_params_error(threshold, total_parties) {
+        Err(error)
+    } else {
+        Ok((threshold, total_parties))
+    }
+}
+
 fn move_send_party_selector(app: &mut App, forward: bool) {
     let party_count = app.send_form.total_parties as usize;
     if party_count == 0 || app.send_form.selected_parties.is_empty() {
@@ -1624,12 +1648,13 @@ fn handle_send_keys(app: &mut App, key: KeyEvent) {
                 let wallet_name = wallet.name.clone();
 
                 // Load wallet info for party selection
-                let threshold = wallet.threshold.unwrap_or(2);
-                let total_parties = wallet.total_parties.unwrap_or(3);
-                if let Some(error) = send_signer_params_error(threshold, total_parties) {
-                    app.send_form.error_message = Some(error);
-                    return;
-                }
+                let (threshold, total_parties) = match send_wallet_signer_params(&wallet) {
+                    Ok(params) => params,
+                    Err(error) => {
+                        app.send_form.error_message = Some(error);
+                        return;
+                    }
+                };
 
                 // Load my party index from htss_metadata
                 let state_dir = keygen::get_state_dir(&wallet_name);
@@ -4089,6 +4114,32 @@ mod tests {
     }
 
     #[test]
+    fn wallet_details_send_action_blocks_invalid_signer_metadata() {
+        let mut wallet = wallet_summary_testnet_only("treasury");
+        wallet.threshold = Some(4);
+        wallet.total_parties = Some(3);
+
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Testnet3;
+        app.wallets = vec![wallet];
+        app.state = AppState::WalletDetails(WalletDetailsState {
+            wallet_name: "treasury".to_string(),
+            selected_action: 0,
+            confirm_delete: false,
+            delete_confirmation_input: String::new(),
+            show_qr: false,
+        });
+
+        handle_wallet_details_keys(&mut app, KeyCode::Enter);
+
+        assert!(matches!(app.state, AppState::WalletDetails(_)));
+        assert_eq!(
+            app.message.as_deref(),
+            Some("Wallet signer metadata is invalid: threshold must be between 1 and 3")
+        );
+    }
+
+    #[test]
     fn wallet_details_copy_reports_missing_selected_network_address() {
         let mut app = App::new().unwrap();
         app.network = NetworkSelection::Mainnet;
@@ -4549,6 +4600,25 @@ mod tests {
         assert_eq!(
             app.send_form.error_message.as_deref(),
             Some("Wallet signer metadata is invalid: total parties must be at least 1")
+        );
+    }
+
+    #[test]
+    fn send_select_wallet_blocks_missing_signer_metadata() {
+        let mut wallet = wallet_summary_testnet_only("wallet-a");
+        wallet.threshold = None;
+
+        let mut app = App::new().unwrap();
+        app.network = NetworkSelection::Testnet3;
+        app.wallets = vec![wallet];
+        app.state = AppState::Send(SendState::SelectWallet);
+
+        handle_send_keys(&mut app, enter_key());
+
+        assert!(matches!(app.state, AppState::Send(SendState::SelectWallet)));
+        assert_eq!(
+            app.send_form.error_message.as_deref(),
+            Some("Wallet signer metadata is invalid: missing threshold")
         );
     }
 
